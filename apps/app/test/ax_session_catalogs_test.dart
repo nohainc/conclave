@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
-import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/sync/ax_session_catalogs.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_realtime_cache_router.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'ax_fixture_data.dart';
 
 class CatalogSource extends AxFixtureDataSource {

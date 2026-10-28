@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/features/common/dictation/speech_dictation.dart';
+import 'package:syntila_app/src/features/common/dictation/speech_dictation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

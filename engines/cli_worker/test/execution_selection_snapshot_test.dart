@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:test/test.dart';
-import 'package:conclave_cli_worker_engine/src/execution_selection_snapshot.dart';
+import 'package:syntila_cli_worker_engine/src/execution_selection_snapshot.dart';
 
 void main() {
   test(

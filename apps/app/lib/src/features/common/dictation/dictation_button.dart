@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 
 import 'speech_dictation.dart';
@@ -152,13 +152,13 @@ class _DictationButtonState extends State<DictationButton> {
     final code = _activeLanguage.split('-').first.toUpperCase();
     Widget item(String? tag, String label) => MenuItemButton(
           key: ValueKey('dictation-language-${tag ?? 'browser'}'),
-          style: ConclaveMenuStyle.item(dark),
+          style: SyntilaMenuStyle.item(dark),
           leadingIcon: Icon(_language == tag ? Icons.check : null, size: 16),
           onPressed: () => _selectLanguage(tag),
-          child: Text(label, style: ConclaveMenuStyle.textStyle),
+          child: Text(label, style: SyntilaMenuStyle.textStyle),
         );
     return MenuAnchor(
-      style: ConclaveMenuStyle.surface(dark, composer: true),
+      style: SyntilaMenuStyle.surface(dark, composer: true),
       menuChildren: [
         item(null,
             'Browser default (${_languageName(_dictation.browserLanguage)})'),

@@ -1,4 +1,4 @@
-import 'package:conclave_protocol/worker_descriptor.dart';
+import 'package:syntila_protocol/worker_descriptor.dart';
 
 import 'local_worker_registry.dart';
 import 'tool_profile_release_verifier.dart';

@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_path.dart';
-import 'package:conclave_workspace/thread_repository_observability.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_path.dart';
+import 'package:syntila_workspace/thread_repository_observability.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -10,7 +10,7 @@ void main() {
   late Directory thread;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('conclave-repository-root-');
+    root = await Directory.systemTemp.createTemp('syntila-repository-root-');
     final lifecycle = ThreadDirectoryLifecycle(
       pathResolver: ThreadPathResolver(root),
     );
@@ -69,7 +69,7 @@ void main() {
       'remote',
       'add',
       'origin',
-      'https://user:secret@example.com/nohainc/conclave.git?token=private',
+      'https://user:secret@example.com/nohainc/syntila.git?token=private',
     ]);
     await File('${repository.path}${Platform.pathSeparator}README.md')
         .writeAsString('initial\n');
@@ -88,7 +88,7 @@ void main() {
     expect(info.dirty, isTrue);
     expect(info.changedFileCount, 1);
     expect(info.remotes.single.name, 'origin');
-    expect(info.remotes.single.location, 'example.com/nohainc/conclave.git');
+    expect(info.remotes.single.location, 'example.com/nohainc/syntila.git');
     expect(info.toJson().toString(), isNot(contains('secret')));
     expect(info.toJson().toString(), isNot(contains('token=private')));
   });
@@ -107,7 +107,7 @@ void main() {
       'remote',
       'add',
       'origin',
-      'git@example.com:nohainc/conclave.git',
+      'git@example.com:nohainc/syntila.git',
     ]);
     final beforeHead = (await Process.run(
       'git',
@@ -139,7 +139,7 @@ void main() {
   });
 
   test('does not inspect a symlinked directory outside the Thread', () async {
-    final outside = await Directory.systemTemp.createTemp('conclave-outside-');
+    final outside = await Directory.systemTemp.createTemp('syntila-outside-');
     addTearDown(() => outside.delete(recursive: true));
     final repository =
         Directory('${outside.path}${Platform.pathSeparator}repo');

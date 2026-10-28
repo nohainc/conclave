@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="debug"
 VERSION=""
-TARGET_ENV="${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}"
+TARGET_ENV="${SYNTILA_WORKSPACE_ENVIRONMENT:-production}"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --debug) MODE=debug; shift ;;
@@ -45,11 +45,11 @@ flutter pub get
 bash "$ROOT/scripts/build-cli-worker-engine.sh"
 if [[ "$MODE" == debug ]]; then
   flutter build "$target" --debug \
-    --dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT="$TARGET_ENV" \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
+    --dart-define=SYNTILA_WORKSPACE_ENVIRONMENT="$TARGET_ENV" \
+    --dart-define=SYNTILA_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
 else
   flutter build "$target" --release \
-    --dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT="$TARGET_ENV" \
-    --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
+    --dart-define=SYNTILA_WORKSPACE_ENVIRONMENT="$TARGET_ENV" \
+    --dart-define=SYNTILA_RELEASE_TRUST_KEYS_JSON="$PUBLIC_RELEASE_ROOTS"
 fi
 echo "Workspace $MODE build finished for $target."

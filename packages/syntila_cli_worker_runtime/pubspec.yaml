@@ -1,0 +1,16 @@
+name: syntila_cli_worker_runtime
+description: Shared isolated CLI process primitives for the Syntila CLI Worker Engine.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.11.0 <4.0.0"
+
+dependencies:
+  syntila_worker_protocol:
+    path: ../syntila_worker_protocol
+  syntila_tool_profile_v1:
+    path: ../tool_profile_v1
+
+dev_dependencies:
+  test: ^1.25.0

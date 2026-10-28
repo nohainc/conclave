@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'worker_check_progress.dart';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show SafeProviderDiagnostics;
 
 import 'cli_worker_engine_supervisor.dart';

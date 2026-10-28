@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_execution_phase.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
-import 'package:conclave_app/src/ax/ax_work_progress.dart';
+import 'package:syntila_app/src/ax/ax_execution_phase.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/ax/ax_work_progress.dart';
 
 AxWorkRequestStep step(Map<String, dynamic> json) =>
     AxWorkRequestStep.fromJson({

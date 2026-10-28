@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE_LAB_DIR="$ROOT/apps/profile_lab"
-DIST_DIR="$ROOT/dist/conclave-profile-lab/macos"
+DIST_DIR="$ROOT/dist/syntila-profile-lab/macos"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Syntila Profile Lab macOS builds must run on macOS." >&2
@@ -20,7 +20,7 @@ command -v ditto >/dev/null 2>&1 || {
 }
 
 MODE="release"
-TARGET_ENV="${CONCLAVE_PROFILE_LAB_ENVIRONMENT:-production}"
+TARGET_ENV="${SYNTILA_PROFILE_LAB_ENVIRONMENT:-production}"
 OPEN_APP="0"
 PREPARED="0"
 SIGN_APP="0"
@@ -48,7 +48,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --version|-v)
-      CONCLAVE_PROFILE_LAB_VERSION="$2"
+      SYNTILA_PROFILE_LAB_VERSION="$2"
       shift 2
       ;;
     --unsigned)
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --sign)
       SIGN_APP="1"
-      CONCLAVE_MACOS_SIGN_IDENTITY="$2"
+      SYNTILA_MACOS_SIGN_IDENTITY="$2"
       shift 2
       ;;
     --open|-o)
@@ -84,10 +84,10 @@ while [[ $# -gt 0 ]]; do
       echo "  --help, -h         Show this help message"
       echo ""
       echo "Environment variables:"
-      echo "  CONCLAVE_PROFILE_LAB_ENVIRONMENT     local | production (default production)"
-      echo "  CONCLAVE_PROFILE_LAB_VERSION         Profile Lab version override"
-      echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity"
-      echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
+      echo "  SYNTILA_PROFILE_LAB_ENVIRONMENT     local | production (default production)"
+      echo "  SYNTILA_PROFILE_LAB_VERSION         Profile Lab version override"
+      echo "  SYNTILA_MACOS_SIGN_IDENTITY         Signing identity"
+      echo "  SYNTILA_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
       exit 0
       ;;
     *)
@@ -102,10 +102,10 @@ case "$TARGET_ENV" in
   *) echo "Unknown environment '$TARGET_ENV' (expected local or production)." >&2; exit 1 ;;
 esac
 if [[ "$TARGET_ENV" == "local" ]]; then
-  DIST_DIR="$ROOT/dist/conclave-profile-lab/macos-local"
+  DIST_DIR="$ROOT/dist/syntila-profile-lab/macos-local"
 fi
 
-VERSION="${CONCLAVE_PROFILE_LAB_VERSION:-$(awk '/^version:/ {print $2; exit}' "$PROFILE_LAB_DIR/pubspec.yaml")}"
+VERSION="${SYNTILA_PROFILE_LAB_VERSION:-$(awk '/^version:/ {print $2; exit}' "$PROFILE_LAB_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
   echo "Could not determine Syntila Profile Lab version." >&2
   exit 1
@@ -114,7 +114,7 @@ fi
 echo "Building Syntila Profile Lab $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$PROFILE_LAB_DIR"
 if [[ "$PREPARED" == "1" ]]; then
-  [[ -f .dart_tool/package_config.json && -x assets/engines/conclave_cli_worker_engine ]] || {
+  [[ -f .dart_tool/package_config.json && -x assets/engines/syntila_cli_worker_engine ]] || {
     echo "Prepared build requires resolved app dependencies and a freshly built Engine." >&2
     exit 1
   }
@@ -126,13 +126,13 @@ fi
 
 if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
-    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
-    --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
+    --dart-define=SYNTILA_PROFILE_LAB_VERSION="$VERSION" \
+    --dart-define=SYNTILA_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Debug/Syntila Profile Lab.app"
 else
   flutter build macos --release \
-    --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
-    --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
+    --dart-define=SYNTILA_PROFILE_LAB_VERSION="$VERSION" \
+    --dart-define=SYNTILA_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
   APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Release/Syntila Profile Lab.app"
 fi
 
@@ -141,13 +141,13 @@ if [[ ! -d "$APP" ]]; then
   exit 1
 fi
 
-if [[ "$SIGN_APP" == "1" && -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
+if [[ "$SIGN_APP" == "1" && -n "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
   echo "Signing with configured Developer ID identity"
   codesign --force --deep --options runtime --timestamp \
-    --sign "$CONCLAVE_MACOS_SIGN_IDENTITY" "$APP"
+    --sign "$SYNTILA_MACOS_SIGN_IDENTITY" "$APP"
   codesign --verify --deep --strict --verbose=2 "$APP"
 else
-  echo "CONCLAVE_MACOS_SIGN_IDENTITY is not set; producing an unsigned development artifact."
+  echo "SYNTILA_MACOS_SIGN_IDENTITY is not set; producing an unsigned development artifact."
 fi
 
 rm -rf "$DIST_DIR"
@@ -157,14 +157,14 @@ ZIP_SUFFIX=""
 ZIP="$DIST_DIR/Syntila-Profile-Lab-$VERSION-macos$ZIP_SUFFIX.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
-if [[ "$SIGN_APP" == "1" && -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then
-  if [[ -z "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
-    echo "Notarization requires CONCLAVE_MACOS_SIGN_IDENTITY." >&2
+if [[ "$SIGN_APP" == "1" && -n "${SYNTILA_MACOS_NOTARY_PROFILE:-}" ]]; then
+  if [[ -z "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
+    echo "Notarization requires SYNTILA_MACOS_SIGN_IDENTITY." >&2
     exit 1
   fi
   echo "Submitting to Apple notarization"
   xcrun notarytool submit "$ZIP" \
-    --keychain-profile "$CONCLAVE_MACOS_NOTARY_PROFILE" \
+    --keychain-profile "$SYNTILA_MACOS_NOTARY_PROFILE" \
     --wait
   xcrun stapler staple "$APP"
   rm -f "$ZIP"

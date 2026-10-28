@@ -24,7 +24,7 @@ it("reads threads and configuration with distinct update timestamps", async () =
       CREATE TABLE conversation_history_entries (conversation_id TEXT, text TEXT, occurred_at TEXT, actor_type TEXT, actor_id TEXT, kind TEXT, metadata_json TEXT NOT NULL DEFAULT '{}');
       CREATE TABLE space_memberships (id TEXT, space_id TEXT, user_id TEXT, role TEXT, created_at TEXT, updated_at TEXT);
       INSERT INTO spaces VALUES ('space-test', 'user-owner', '{}');
-      INSERT INTO users VALUES ('user-owner', 'owner@conclave.test', 'Owner');
+      INSERT INTO users VALUES ('user-owner', 'owner@syntila.test', 'Owner');
       INSERT INTO threads VALUES ('stream-test', 'space-test', 'Test stream', 'active', 0, '{}', '{}', 'user-owner', 'created', 'stream-updated');
       INSERT INTO thread_work_configs VALUES ('stream-test', '{"defaultWorkflowId":"full_cycle","bindings":{}}', 'config-updated');
       INSERT INTO space_memberships VALUES ('membership', 'space-test', 'user-owner', 'owner', 'created', 'updated');
@@ -47,8 +47,8 @@ it("reads threads and configuration with distinct update timestamps", async () =
       },
     };
     const response = await handleListSpaceThreads(
-      new Request("https://conclave.test/api/spaces/space-test/threads"),
-      { CONCLAVE_DB: db } as unknown as Parameters<
+      new Request("https://syntila.test/api/spaces/space-test/threads"),
+      { SYNTILA_DB: db } as unknown as Parameters<
         typeof handleListSpaceThreads
       >[1],
       "space-test",
@@ -74,8 +74,8 @@ it("reads threads and configuration with distinct update timestamps", async () =
     );
     const read = async () => {
       const result = await handleListSpaceThreads(
-        new Request("https://conclave.test/api/spaces/space-test/threads"),
-        { CONCLAVE_DB: db } as unknown as Parameters<
+        new Request("https://syntila.test/api/spaces/space-test/threads"),
+        { SYNTILA_DB: db } as unknown as Parameters<
           typeof handleListSpaceThreads
         >[1],
         "space-test",

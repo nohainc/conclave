@@ -1,4 +1,4 @@
-import type { ExecutionErrorCode } from "@conclave/protocol";
+import type { ExecutionErrorCode } from "@syntila/protocol";
 
 export * from "./workspace-runtime.js";
 export * from "./desktop-auth-transport.js";

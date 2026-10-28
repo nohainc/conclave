@@ -5,7 +5,7 @@ import {
 import { isTrustedOrigin } from "../observability.js";
 import {
   identityService,
-  provisionConclaveUser,
+  provisionSyntilaUser,
   hasRecentStepUp,
   recordAuthAuditEvent,
   type SensitiveOperation,
@@ -20,7 +20,7 @@ import {
   authorizeSpaceOwner,
   type Permission,
   type SecurityContext,
-} from "@conclave/security";
+} from "@syntila/security";
 
 export function parseJson<T = Record<string, unknown>>(
   value: unknown,
@@ -59,7 +59,7 @@ export async function recordAudit(
     const spaceId =
       typeof details.spaceId === "string" ? details.spaceId : null;
     if (!spaceId) return;
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT INTO space_audit_log
          (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
@@ -87,7 +87,7 @@ export async function recordAudit(
     JSON.stringify(details),
     new Date().toISOString(),
   ] as const;
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_audit_log
        (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
      VALUES (?1, ?2, 'user', ?3, ?4, ?5, ?6, ?7, ?8)`,
@@ -116,7 +116,7 @@ export async function resolveWorkflowInstanceId(
   runId: string,
   idempotencyKey?: string,
 ): Promise<string> {
-  const run = await env.CONCLAVE_DB.prepare(
+  const run = await env.SYNTILA_DB.prepare(
     "SELECT workflow_instance_id FROM runs WHERE id = ?1",
   )
     .bind(runId)
@@ -125,12 +125,12 @@ export async function resolveWorkflowInstanceId(
   if (!idempotencyKey) return workflowInstanceId(runId);
   const candidate = workflowInstanceId(idempotencyKey);
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE runs SET workflow_instance_id = COALESCE(workflow_instance_id, ?1), updated_at = ?2 WHERE id = ?3",
   )
     .bind(candidate, now, runId)
     .run();
-  const stored = await env.CONCLAVE_DB.prepare(
+  const stored = await env.SYNTILA_DB.prepare(
     "SELECT workflow_instance_id FROM runs WHERE id = ?1",
   )
     .bind(runId)
@@ -149,32 +149,32 @@ export class HttpError extends Error {
 
 export type SecurityEnv = Env & {
   /** Comma-separated user IDs permitted to administer catalog entries and drafts. */
-  readonly CONCLAVE_PROFILE_ADMIN_USER_IDS?: string;
-  readonly CONCLAVE_PROFILE_LAB_OWNER_EMAIL?: string;
-  readonly CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS?: string;
-  readonly CONCLAVE_ISSUE_SUPPORT_USER_IDS?: string;
+  readonly SYNTILA_PROFILE_ADMIN_USER_IDS?: string;
+  readonly SYNTILA_PROFILE_LAB_OWNER_EMAIL?: string;
+  readonly SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS?: string;
+  readonly SYNTILA_ISSUE_SUPPORT_USER_IDS?: string;
   readonly BETTER_AUTH_SECRET?: string;
   readonly BETTER_AUTH_URL?: string;
-  readonly CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
-  readonly CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
-  readonly CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
-  readonly CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
+  readonly SYNTILA_AUTH_GITHUB_CLIENT_ID?: string;
+  readonly SYNTILA_AUTH_GITHUB_CLIENT_SECRET?: string;
+  readonly SYNTILA_AUTH_GOOGLE_CLIENT_ID?: string;
+  readonly SYNTILA_AUTH_GOOGLE_CLIENT_SECRET?: string;
   readonly TEST_AUTHENTICATION?: (
     request: Request,
     env: Env,
   ) => Promise<SecurityContext>;
-  readonly CONCLAVE_APP_URL?: string;
-  readonly CONCLAVE_EMAIL_FROM?: string;
-  readonly CONCLAVE_EMAIL_FALLBACK_FROM?: string;
-  readonly CONCLAVE_EMAIL_FROM_NAME?: string;
-  readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
-  readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
-  readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
+  readonly SYNTILA_APP_URL?: string;
+  readonly SYNTILA_EMAIL_FROM?: string;
+  readonly SYNTILA_EMAIL_FALLBACK_FROM?: string;
+  readonly SYNTILA_EMAIL_FROM_NAME?: string;
+  readonly SYNTILA_WORKSPACE_GATEWAY?: DurableObjectNamespace;
+  readonly SYNTILA_REALTIME_GATEWAY?: DurableObjectNamespace;
+  readonly SYNTILA_THREAD_COORDINATOR?: DurableObjectNamespace;
 };
 
 export function testAuthenticationEnabled(env: Env): boolean {
   return (
-    env.CONCLAVE_ENVIRONMENT === "development" &&
+    env.SYNTILA_ENVIRONMENT === "development" &&
     typeof (env as SecurityEnv).TEST_AUTHENTICATION === "function"
   );
 }
@@ -221,7 +221,7 @@ export async function securityContext(
   void accessContext;
   const testAuthentication = env.TEST_AUTHENTICATION;
   if (
-    env.CONCLAVE_ENVIRONMENT === "development" &&
+    env.SYNTILA_ENVIRONMENT === "development" &&
     typeof testAuthentication === "function"
   ) {
     return testAuthentication(request, env);
@@ -231,7 +231,7 @@ export async function securityContext(
   if (token && token.startsWith("conclave_dhs_")) {
     const tokenHash = await hashToken(token);
     const now = new Date().toISOString();
-    const session = await env.CONCLAVE_DB.prepare(
+    const session = await env.SYNTILA_DB.prepare(
       `SELECT s.id AS sessionId, s.user_id AS userId, s.audience, s.created_at AS createdAt,
               s.expires_at AS expiresAt,
               u.email, u.display_name AS displayName, u.status AS userStatus
@@ -258,7 +258,7 @@ export async function securityContext(
     }
     if (
       session.audience === "conclave.profile-lab.management" &&
-      env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+      env.SYNTILA_PROFILE_LAB_OWNER_EMAIL !== undefined &&
       !(await isProfileLabOwner(env, session.userId))
     ) {
       throw new HttpError(
@@ -266,14 +266,14 @@ export async function securityContext(
         "Profile Lab is restricted to its verified owner account",
       );
     }
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "UPDATE desktop_human_sessions SET last_used_at = ?1 WHERE id = ?2",
     )
       .bind(now, session.sessionId)
       .run();
 
     return await resolveSpaceSecurityContextFromIdentity(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       {
         userId: session.userId,
         email: session.email,
@@ -289,9 +289,9 @@ export async function securityContext(
     const identity = await identityService.resolve(request, env);
     if (!identity) throw new HttpError(401, "Authentication required");
     try {
-      await provisionConclaveUser(env.CONCLAVE_DB, identity);
+      await provisionSyntilaUser(env.SYNTILA_DB, identity);
       return await resolveSpaceSecurityContextFromIdentity(
-        env.CONCLAVE_DB,
+        env.SYNTILA_DB,
         identity,
       );
     } catch (err: unknown) {
@@ -338,7 +338,7 @@ export async function authorizeRequest(
   if (spaceId && !testAuthenticationEnabled(env)) {
     try {
       await authorizeSpaceMembership(
-        env.CONCLAVE_DB,
+        env.SYNTILA_DB,
         context,
         spaceId,
         permission,
@@ -358,7 +358,7 @@ export async function authorizeRequest(
       authorize(context, permission, spaceId);
     }
   } catch (error) {
-    await recordAuthAuditEvent(env.CONCLAVE_DB, {
+    await recordAuthAuditEvent(env.SYNTILA_DB, {
       action: "auth.authorization.denied",
       outcome: "denied",
       userId: context.userId,
@@ -381,7 +381,7 @@ export async function requireWorkspaceContext(
   workspaceId: string,
 ): Promise<void> {
   try {
-    await authorizeWorkspaceOwner(env.CONCLAVE_DB, context, workspaceId);
+    await authorizeWorkspaceOwner(env.SYNTILA_DB, context, workspaceId);
   } catch {
     if (!testAuthenticationEnabled(env))
       throw new HttpError(404, "Resource not found");
@@ -394,7 +394,7 @@ export async function requireRecentStepUp(
   operation: SensitiveOperation,
 ): Promise<void> {
   const satisfied = await hasRecentStepUp(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context.userId,
     context.sessionId,
     operation,
@@ -447,7 +447,7 @@ export async function workspaceOwnerContext(
   const context = await securityContext(request, env, accessContext);
   try {
     await authorizeWorkspaceOwner(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       context,
       workspaceId,
       permission,
@@ -477,7 +477,7 @@ export async function authorizeSpaceOwnerOrThrow(
     accessContext,
   );
   try {
-    await authorizeSpaceOwner(env.CONCLAVE_DB, context, spaceId);
+    await authorizeSpaceOwner(env.SYNTILA_DB, context, spaceId);
   } catch {
     throw new HttpError(403, "Only the Space owner can manage collaboration");
   }

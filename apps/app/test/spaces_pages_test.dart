@@ -1,20 +1,20 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/features/common/attachment_cards.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/features/common/attachment_cards.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
 
 import 'ax_fixture_data.dart';
 import 'conversation_turn_fixture.dart';
-import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
-import 'package:conclave_app/src/features/common/markdown_composer.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
+import 'package:syntila_app/src/features/common/markdown_composer.dart';
 
 void main() {
   tearDown(ThreadPage.resetWorkQueues);
@@ -220,8 +220,8 @@ void main() {
           findsWidgets);
       expect(
           tester
-              .widgetList<ConclaveMarkdownBody>(
-                  find.byType(ConclaveMarkdownBody))
+              .widgetList<SyntilaMarkdownBody>(
+                  find.byType(SyntilaMarkdownBody))
               .map((body) => body.data),
           contains('**Recorded answer**'));
       for (final label in [
@@ -809,7 +809,7 @@ void main() {
     expect(find.byKey(const ValueKey('work-toggle-direct')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    final menu = find.byType(ConclaveMenuEntry<String>);
+    final menu = find.byType(SyntilaMenuEntry<String>);
     final chat = find.descendant(of: menu, matching: find.text('Chat'));
     expect(chat, findsOneWidget);
     expect(
@@ -862,7 +862,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     final markdown = tester
-        .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
+        .widgetList<SyntilaMarkdownBody>(find.byType(SyntilaMarkdownBody))
         .map((body) => body.data)
         .toList();
     expect(markdown, containsAll(['**Chat answer**', '**Work answer**']));
@@ -871,7 +871,7 @@ void main() {
     expect(find.byKey(const ValueKey('work-toggle-direct')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('work-choose-workflow')));
     await tester.pumpAndSettle();
-    final menu = find.byType(ConclaveMenuEntry<String>);
+    final menu = find.byType(SyntilaMenuEntry<String>);
     expect(
         find.descendant(of: menu, matching: find.text('Chat')), findsNothing);
     expect(
@@ -912,7 +912,7 @@ void main() {
     expect(
         tester
             .widgetList<Text>(find.descendant(
-                of: find.byType(ConclaveMenuEntry<String>),
+                of: find.byType(SyntilaMenuEntry<String>),
                 matching: find.byType(Text)))
             .map((text) => text.data)
             .toList(),
@@ -1058,7 +1058,7 @@ void main() {
               Colors.transparent);
           if (mode == activeMode) {
             expect((button.icon as Icon).color,
-                ConclaveColors.primaryForegroundLight);
+                SyntilaColors.primaryForegroundLight);
           }
         }
       }
@@ -1111,10 +1111,10 @@ void main() {
           .style!
           .textStyle!
           .resolve({})!.fontWeight;
-      expect(tabColor(conversationTab), ConclaveColors.textPrimaryLight);
+      expect(tabColor(conversationTab), SyntilaColors.textPrimaryLight);
       expect(tabWeight(conversationTab), FontWeight.bold);
       expect(tabWeight(historyTab), FontWeight.normal);
-      expect(tabColor(historyTab), ConclaveColors.textPrimaryLight);
+      expect(tabColor(historyTab), SyntilaColors.textPrimaryLight);
       expect(find.descendant(of: conversationTab, matching: find.byType(Icon)),
           findsNothing);
       expect(tester.getRect(conversationTab).right,
@@ -1136,9 +1136,9 @@ void main() {
       expect(workPosition.pixels, settledOffset);
       expect(work, findsOneWidget);
       expect(tabColor(find.byKey(const ValueKey('ai-history-tab'))),
-          ConclaveColors.textPrimaryLight);
+          SyntilaColors.textPrimaryLight);
       expect(tabColor(find.byKey(const ValueKey('ai-history-conversation'))),
-          ConclaveColors.textPrimaryLight);
+          SyntilaColors.textPrimaryLight);
       expect(tabWeight(find.byKey(const ValueKey('ai-history-tab'))),
           FontWeight.bold);
       expect(tabWeight(find.byKey(const ValueKey('ai-history-conversation'))),
@@ -1292,15 +1292,15 @@ void main() {
       await tester.pumpAndSettle();
       await _askAi(tester);
       final previousBody = find.byWidgetPredicate((widget) =>
-          widget is ConclaveMarkdownBody &&
+          widget is SyntilaMarkdownBody &&
           widget.data == 'Earlier completed response');
       final previousElement = tester.element(previousBody);
       void expectPreviousUnchanged() {
         expect(tester.element(previousBody), same(previousElement));
-        expect(tester.widget<ConclaveMarkdownBody>(previousBody).data,
+        expect(tester.widget<SyntilaMarkdownBody>(previousBody).data,
             'Earlier completed response');
         expect(
-            tester.widget<ConclaveMarkdownBody>(previousBody).key,
+            tester.widget<SyntilaMarkdownBody>(previousBody).key,
             const ValueKey(
                 ('previous-response', 'Earlier completed response')));
       }
@@ -1319,15 +1319,15 @@ void main() {
               .text,
           isEmpty);
       expect(
-          _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().where(
+          _inConversation(find.byType(SyntilaMarkdownBody)).evaluate().where(
               (element) =>
-                  (element.widget as ConclaveMarkdownBody).data ==
+                  (element.widget as SyntilaMarkdownBody).data ==
                   '**Immediate request**'),
           hasLength(1));
       expect(
-          _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().any(
+          _inConversation(find.byType(SyntilaMarkdownBody)).evaluate().any(
               (element) =>
-                  (element.widget as ConclaveMarkdownBody).data ==
+                  (element.widget as SyntilaMarkdownBody).data ==
                   'Checking that everything is ready…'),
           isTrue);
       expectPreviousUnchanged();
@@ -1370,9 +1370,9 @@ void main() {
       await AxWorkHistoryCache.forSource(data).refresh('thread-1');
       await tester.pumpAndSettle();
       expect(
-          _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().where(
+          _inConversation(find.byType(SyntilaMarkdownBody)).evaluate().where(
               (element) =>
-                  (element.widget as ConclaveMarkdownBody).data ==
+                  (element.widget as SyntilaMarkdownBody).data ==
                   '**Immediate request**'),
           hasLength(1));
       data.ready.complete(reject ? ['Space access is required.'] : []);
@@ -1395,9 +1395,9 @@ void main() {
         await tester.enterText(
             find.byType(TextField).first, 'Draft while sending');
         expect(
-            _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().any(
+            _inConversation(find.byType(SyntilaMarkdownBody)).evaluate().any(
                 (element) =>
-                    (element.widget as ConclaveMarkdownBody).data ==
+                    (element.widget as SyntilaMarkdownBody).data ==
                     'Sending your request…'),
             isTrue);
         data.requests = [
@@ -1480,15 +1480,15 @@ void main() {
                 .onPressed,
             isNotNull);
         expect(
-            _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().any(
+            _inConversation(find.byType(SyntilaMarkdownBody)).evaluate().any(
                 (element) =>
-                    (element.widget as ConclaveMarkdownBody).data ==
+                    (element.widget as SyntilaMarkdownBody).data ==
                     'Completed answer'),
             isTrue);
         expect(
-            _inConversation(find.byType(ConclaveMarkdownBody)).evaluate().where(
+            _inConversation(find.byType(SyntilaMarkdownBody)).evaluate().where(
                 (element) =>
-                    (element.widget as ConclaveMarkdownBody).data ==
+                    (element.widget as SyntilaMarkdownBody).data ==
                     '**Immediate request**'),
             hasLength(1));
       }
@@ -1606,7 +1606,7 @@ void main() {
       final queueHeader = tester
           .widget<Container>(find.byKey(const ValueKey('work-queue-header')));
       final isDark = brightness == Brightness.dark;
-      expect(queueHeader.color, ConclaveColors.composerRail(isDark));
+      expect(queueHeader.color, SyntilaColors.composerRail(isDark));
 
       // The queue is an inset back layer of the input, with no gap. Its
       // decorative overlap must not cover the input or hide the queue controls.
@@ -2449,7 +2449,7 @@ void main() {
     expect(copied, message);
     final diagnostic = tester.widget<SelectableText>(find.byWidgetPredicate(
         (widget) => widget is SelectableText && widget.data == message));
-    final body = ConclaveMessageTypography.fromTheme(
+    final body = SyntilaMessageTypography.fromTheme(
         Theme.of(tester.element(find.byType(ThreadPage))));
     expect(diagnostic.style?.fontFamily, body.fontFamily);
     expect(diagnostic.style?.fontSize, body.fontSize);
@@ -2784,7 +2784,7 @@ void main() {
             1));
     expect(
         tester.widget<Material>(menu).color,
-        ConclaveColors.composerBackground(
+        SyntilaColors.composerBackground(
             Theme.of(tester.element(menu)).brightness == Brightness.dark));
     expect(
         (tester.widget<Material>(menu).shape as RoundedRectangleBorder)
@@ -3051,7 +3051,7 @@ void main() {
     expect(find.text('Syntila'), findsOneWidget);
     expect(
       tester
-          .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
+          .widgetList<SyntilaMarkdownBody>(find.byType(SyntilaMarkdownBody))
           .map((body) => body.data),
       contains('The requested change is complete.'),
     );
@@ -3123,7 +3123,7 @@ void main() {
             widget is Container &&
             widget.decoration is BoxDecoration &&
             (widget.decoration! as BoxDecoration).color ==
-                ConclaveColors.ownMessageBackground(false),
+                SyntilaColors.ownMessageBackground(false),
       ),
     );
     expect(ownMessageBubble, findsOneWidget);
@@ -3249,7 +3249,7 @@ void main() {
       final dateX = tester.getTopLeft(date).dx;
       final bubbleFinder = find
           .ancestor(
-              of: find.byType(ConclaveMarkdownBody).first,
+              of: find.byType(SyntilaMarkdownBody).first,
               matching: find.byType(Container))
           .first;
       final bubble = tester.widget<Container>(bubbleFinder);
@@ -3261,7 +3261,7 @@ void main() {
       expect(
           decoration.color,
           own
-              ? ConclaveColors.ownMessageBackground(false)
+              ? SyntilaColors.ownMessageBackground(false)
               : Colors.transparent);
       expect(dateX, lessThan(menuX));
       final trigger = find.byTooltip('Message actions');

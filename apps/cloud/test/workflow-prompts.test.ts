@@ -3,7 +3,7 @@ import {
   BUILTIN_WORKFLOWS,
   BUILTIN_WORKFLOW_CATALOG,
   type StepKind,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   renderWorkStepPrompt,
   workStepPromptInputs,

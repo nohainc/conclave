@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 const root = "apps/cloud/src";
 const forbidden = [
-  /@conclave\/providers/,
+  /@syntila\/providers/,
   /api\.openai\.com/i,
   /api\.anthropic\.com/i,
   /new\s+OpenAI\s*\(/,

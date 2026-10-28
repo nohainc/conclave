@@ -1,13 +1,13 @@
 import 'dart:convert';
 
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_design/conclave_design.dart';
-import 'package:conclave_app/src/features/common/markdown_composer.dart';
+import 'package:syntila_design/syntila_design.dart';
+import 'package:syntila_app/src/features/common/markdown_composer.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -255,7 +255,7 @@ void main() {
       expect(
           (tester.widget<DecoratedBox>(background).decoration as BoxDecoration)
               .color,
-          ConclaveColors.composerBackground(brightness == Brightness.dark));
+          SyntilaColors.composerBackground(brightness == Brightness.dark));
       expect(find.byTooltip('Close usage'), findsNothing);
       expect(tester.takeException(), isNull);
 

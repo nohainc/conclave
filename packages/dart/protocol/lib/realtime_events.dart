@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'conclave_protocol.dart';
+import 'syntila_protocol.dart';
 
 bool isReplayableRealtimeEvent(Map<String, Object?> event) {
   final type = event['type'];

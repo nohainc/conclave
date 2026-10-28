@@ -53,7 +53,7 @@ class WorkspaceManagerService {
     final paths = WorkspacePaths(workspace.config.dataDirectory);
     _server = WorkspaceManagerIpcServer(
       runtimeDirectory: paths.runtimeDirectory,
-      serviceVersion: conclaveWorkspaceAppVersion,
+      serviceVersion: syntilaWorkspaceAppVersion,
       snapshotProvider: snapshot,
       requestHandler: _dispatchAndPublish,
       eventStream: _events.stream,
@@ -157,7 +157,7 @@ class WorkspaceManagerService {
         'processState': state['processState'] ??
             (workspace.isRunning ? 'ready' : 'stopped'),
         'startedAt': state['startedAt'],
-        'version': conclaveWorkspaceAppVersion,
+        'version': syntilaWorkspaceAppVersion,
         'installationId': workspace.installationId,
         'uptimeSeconds': _serviceUptimeSeconds(state),
         'processRunning': processRunning,
@@ -406,7 +406,7 @@ class WorkspaceManagerService {
       throw const WorkspaceManagerProtocolException(
         'login_not_ready',
         'Disconnect Cloud and finish active work before registering: '
-            'conclave-workspace disconnect',
+            'syntila-workspace disconnect',
       );
     }
     return _headlessAuth ??= WorkspaceHeadlessAuth(
@@ -447,7 +447,7 @@ class WorkspaceManagerService {
       case 'service.getStatus':
         return snapshot();
       case 'service.getVersion':
-        return {'version': conclaveWorkspaceAppVersion};
+        return {'version': syntilaWorkspaceAppVersion};
       case 'service.getHealth':
         return {
           'healthy': workspace.isRunning,

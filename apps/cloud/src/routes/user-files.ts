@@ -34,7 +34,7 @@ export async function handleListUserFiles(
     accessContext,
   );
   const before = new URL(request.url).searchParams.get("before");
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT f.id AS fileId, f.name, f.media_type AS mediaType,
         f.size_bytes AS sizeBytes, f.created_at AS createdAt,
         f.thread_id AS threadId, f.space_id AS spaceId,
@@ -89,14 +89,14 @@ export async function handleDeleteUserFile(
     accessContext,
   );
   if (!isWorkRequestFileId(fileId)) throw new HttpError(404, "File not found");
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     `SELECT 1 AS present FROM user_files WHERE id = ?1 AND user_id = ?2`,
   )
     .bind(fileId, context.userId)
     .first();
   if (!owned) throw new HttpError(404, "File not found");
   await deleteFileObjects(env, [fileId]);
-  await env.CONCLAVE_DB.prepare(`DELETE FROM user_files WHERE id = ?1`)
+  await env.SYNTILA_DB.prepare(`DELETE FROM user_files WHERE id = ?1`)
     .bind(fileId)
     .run();
   return json({ usage: await userStorageUsage(env, context.userId) });
@@ -115,7 +115,7 @@ export async function handleSyncUserFiles(
     undefined,
     accessContext,
   );
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "File storage is not configured");
   const params = new URL(request.url).searchParams;
   const phase = params.get("phase") ?? "storage";
@@ -142,12 +142,12 @@ export async function handleSyncUserFiles(
       const meta = object?.customMetadata;
       if (!object || meta?.userId !== context.userId || !meta.threadId)
         continue;
-      const thread = await env.CONCLAVE_DB.prepare(
+      const thread = await env.SYNTILA_DB.prepare(
         "SELECT space_id FROM threads WHERE id = ?1",
       )
         .bind(meta.threadId)
         .first<{ space_id: string }>();
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `INSERT INTO user_files
         (id, user_id, thread_id, space_id, name, media_type, size_bytes, created_at)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
@@ -171,7 +171,7 @@ export async function handleSyncUserFiles(
       ? { phase, cursor: page.cursor }
       : { phase: "records" };
   } else {
-    const page = await env.CONCLAVE_DB.prepare(
+    const page = await env.SYNTILA_DB.prepare(
       `SELECT id FROM user_files
       WHERE user_id = ?1 AND id > ?2 ORDER BY id LIMIT 50`,
     )
@@ -180,13 +180,13 @@ export async function handleSyncUserFiles(
     for (const row of page.results) {
       const object = await bucket.head(workRequestFileKey(row.id));
       if (!object) {
-        await env.CONCLAVE_DB.prepare(
+        await env.SYNTILA_DB.prepare(
           "DELETE FROM user_files WHERE id = ?1 AND user_id = ?2",
         )
           .bind(row.id, context.userId)
           .run();
       } else if (object.customMetadata?.userId === context.userId) {
-        await env.CONCLAVE_DB.prepare(
+        await env.SYNTILA_DB.prepare(
           "UPDATE user_files SET size_bytes = ?1 WHERE id = ?2 AND user_id = ?3",
         )
           .bind(object.size, row.id, context.userId)
@@ -205,7 +205,7 @@ export async function pruneOrphanUserFiles(
   now = new Date(),
 ): Promise<number> {
   const cutoff = new Date(now.getTime() - ORPHAN_AGE_MS).toISOString();
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT f.id FROM user_files f
       WHERE f.created_at < ?1 AND NOT ${FILE_REFERENCED} LIMIT ?2`,
   )
@@ -214,7 +214,7 @@ export async function pruneOrphanUserFiles(
   const ids = (rows.results ?? []).map((row) => row.id);
   if (ids.length === 0) return 0;
   await deleteFileObjects(env, ids);
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `DELETE FROM user_files WHERE id IN (SELECT value FROM json_each(?1))`,
   )
     .bind(JSON.stringify(ids))
@@ -223,7 +223,7 @@ export async function pruneOrphanUserFiles(
 }
 
 async function deleteFileObjects(env: SecurityEnv, ids: string[]) {
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "File storage is not configured");
   await bucket.delete(
     ids.flatMap((id) => [

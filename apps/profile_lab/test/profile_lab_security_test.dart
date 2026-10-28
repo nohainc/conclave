@@ -1,10 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
-import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
-import 'package:conclave_profile_lab/utils/profile_lab_security.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_test_sandbox.dart';
+import 'package:syntila_profile_lab/utils/profile_lab_security.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 
 import 'support/worker_profile_fixture.dart';
 
@@ -41,7 +41,7 @@ void main() {
       const input = '''
 Authorization: Bearer secret_bearer_token_xyz123
 API key detected: sk-12345678901234567890
-Syntila key: conclave_sec_998877665544332211
+Syntila key: syntila_sec_998877665544332211
 PEM Block:
 -----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7
@@ -68,7 +68,7 @@ Environment: API_KEY=super_secret_val; DATABASE_URL=postgres://localhost:5432/db
 
       for (final key in env.keys) {
         final k = key.toUpperCase();
-        expect(k.startsWith('CONCLAVE_SECRET_'), isFalse);
+        expect(k.startsWith('SYNTILA_SECRET_'), isFalse);
         expect(k.contains('WRANGLER_'), isFalse);
         expect(k.contains('BETTER_AUTH'), isFalse);
       }

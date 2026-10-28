@@ -76,8 +76,8 @@ The protocol (versioning, capability-key authentication, frame bounds,
 snapshot then events) is unchanged. Only the transport is per-platform:
 
 - macOS/Linux: Unix-domain socket in a `0700` runtime directory
-  (`$XDG_RUNTIME_DIR/conclave-workspace/` on Linux).
-- Windows: named pipe `\\.\pipe\conclave-workspace-<installation-id>` with a
+  (`$XDG_RUNTIME_DIR/syntila-workspace/` on Linux).
+- Windows: named pipe `\\.\pipe\syntila-workspace-<installation-id>` with a
   DACL granting only the owning user SID; remote clients are rejected
   (`PIPE_REJECT_REMOTE_CLIENTS`).
 
@@ -88,17 +88,17 @@ IPC is never a TCP/localhost listener.
 | Platform | Runtime state root |
 | --- | --- |
 | macOS | `~/Library/Application Support/Conclave/Workspace/` (existing) |
-| Linux | `$XDG_STATE_HOME/conclave/workspace/` (default `~/.local/state/...`) for registry, sessions, logs, runtime; `$XDG_DATA_HOME/conclave/workspace/` for Profiles and Engines; `$XDG_CACHE_HOME` for cache |
+| Linux | `$XDG_STATE_HOME/conclave/workspace/` (default `~/.local/state/...`) for registry, sessions, logs, runtime; `$XDG_DATA_HOME/syntila/workspace/` for Profiles and Engines; `$XDG_CACHE_HOME` for cache |
 | Windows | `%LOCALAPPDATA%\Syntila\Workspace\` |
 
 Work Root remains user-chosen (default `~/Documents/Conclave` or
 `%USERPROFILE%\Documents\Syntila`; headless hosts must set it explicitly).
-`CONCLAVE_WORKSPACE_DATA_DIR` keeps its existing override semantics.
+`SYNTILA_WORKSPACE_DATA_DIR` keeps its existing override semantics.
 
 ### 2.6 Headless management
 
 Hosts are managed through a small
-`conclave-workspace` command-line client that speaks the same authenticated
+`syntila-workspace` command-line client that speaks the same authenticated
 IPC protocol (status, connect/disconnect Cloud, start/stop, Worker list and
 verification, logs). It does not spawn Engines or provider CLIs and does not
 talk to Cloud directly; the Service remains the only owner. Initial Cloud
@@ -126,7 +126,7 @@ platform, implemented with an exclusive OS file lock in the state root
 1. Platform seams: paths, secret store, IPC transport, and lock behind
    injected interfaces; shared runtime has no macOS-only imports; Engine
    Windows supervision.
-2. Linux: systemd user adapter, foreground mode, `conclave-workspace` CLI,
+2. Linux: systemd user adapter, foreground mode, `syntila-workspace` CLI,
    Linux x64/arm64 artifacts, container/Fly template.
 3. Windows: logon-task adapter, named-pipe IPC, DPAPI store, artifacts.
    Installer packaging and code signing are a later, separate phase.

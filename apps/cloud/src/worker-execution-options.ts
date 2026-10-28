@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
-import { WorkspaceWorkerInventoryEntrySchema } from "@conclave/workspace-runtime-protocol";
+import { WorkspaceWorkerInventoryEntrySchema } from "@syntila/workspace-runtime-protocol";
 import {
   modelSelectionVersionMatches,
   type ToolProfileV1,
-} from "@conclave/tool-profile";
+} from "@syntila/tool-profile";
 import type {
   WorkerExecutionOptions,
   WorkerEffortOptions,
-} from "@conclave/core";
+} from "@syntila/core";
 /** Expose selection metadata only, never CLI commands or credential configuration. */
 export function spaceModelOptions(
   payload: unknown,

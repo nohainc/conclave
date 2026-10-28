@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_engine/conclave_cli_worker_engine.dart';
+import 'package:syntila_cli_worker_engine/syntila_cli_worker_engine.dart';
 import 'package:test/test.dart';
 
 Future<void> _assertProvider({
@@ -80,7 +80,7 @@ Future<void> _assertProvider({
 
 void main() {
   final enabled =
-      Platform.environment['CONCLAVE_REAL_PROVIDER_ACCEPTANCE'] == '1';
+      Platform.environment['SYNTILA_REAL_PROVIDER_ACCEPTANCE'] == '1';
   final repository = Directory.current.parent.parent;
 
   test(
@@ -88,7 +88,7 @@ void main() {
     () => _assertProvider(
       repository: repository,
       profileName: 'chatgpt-codex.v1.json',
-      executable: Platform.environment['CONCLAVE_CODEX_EXECUTABLE'] ?? 'codex',
+      executable: Platform.environment['SYNTILA_CODEX_EXECUTABLE'] ?? 'codex',
       arguments: [
         'exec',
         '--json',
@@ -103,7 +103,7 @@ void main() {
       input:
           'Use one available tool to inspect the current directory, then summarize the result briefly.',
     ),
-    skip: enabled ? false : 'set CONCLAVE_REAL_PROVIDER_ACCEPTANCE=1 to run',
+    skip: enabled ? false : 'set SYNTILA_REAL_PROVIDER_ACCEPTANCE=1 to run',
   );
 
   test(
@@ -111,7 +111,7 @@ void main() {
     () => _assertProvider(
       repository: repository,
       profileName: 'gemini-antigravity.v1.json',
-      executable: Platform.environment['CONCLAVE_AGY_EXECUTABLE'] ?? 'agy',
+      executable: Platform.environment['SYNTILA_AGY_EXECUTABLE'] ?? 'agy',
       arguments: [
         '--input-format',
         'stream-json',
@@ -128,6 +128,6 @@ void main() {
         },
       }),
     ),
-    skip: enabled ? false : 'set CONCLAVE_REAL_PROVIDER_ACCEPTANCE=1 to run',
+    skip: enabled ? false : 'set SYNTILA_REAL_PROVIDER_ACCEPTANCE=1 to run',
   );
 }

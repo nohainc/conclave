@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/brand.dart';
+import 'package:syntila_app/src/brand.dart';
 
 double _contrastRatio(Color foreground, Color background) {
   final foregroundLuminance = foreground.computeLuminance();
@@ -17,22 +17,22 @@ double _contrastRatio(Color foreground, Color background) {
 
 void main() {
   test('light and dark text tokens meet normal-text contrast targets', () {
-    expect(_contrastRatio(ConclaveBrand.lightInk, ConclaveBrand.lightSurface),
+    expect(_contrastRatio(SyntilaBrand.lightInk, SyntilaBrand.lightSurface),
         greaterThanOrEqualTo(4.5));
     expect(
-        _contrastRatio(ConclaveBrand.lightInkMuted, ConclaveBrand.lightSurface),
+        _contrastRatio(SyntilaBrand.lightInkMuted, SyntilaBrand.lightSurface),
         greaterThanOrEqualTo(4.5));
-    expect(_contrastRatio(ConclaveBrand.darkInk, ConclaveBrand.darkSurface),
+    expect(_contrastRatio(SyntilaBrand.darkInk, SyntilaBrand.darkSurface),
         greaterThanOrEqualTo(4.5));
     expect(
-        _contrastRatio(ConclaveBrand.darkInkMuted, ConclaveBrand.darkSurface),
+        _contrastRatio(SyntilaBrand.darkInkMuted, SyntilaBrand.darkSurface),
         greaterThanOrEqualTo(4.5));
   });
 
   test('primary action colors meet contrast targets', () {
-    expect(_contrastRatio(Colors.white, ConclaveBrand.accent),
+    expect(_contrastRatio(Colors.white, SyntilaBrand.accent),
         greaterThanOrEqualTo(4.5));
-    expect(_contrastRatio(Colors.white, ConclaveBrand.accentDark),
+    expect(_contrastRatio(Colors.white, SyntilaBrand.accentDark),
         greaterThanOrEqualTo(4.5));
   });
 }

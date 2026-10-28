@@ -14,7 +14,7 @@ import {
   handleWorkspaceInvitations,
 } from "./workspace-invitations.js";
 import { conditionalJson } from "./conditional-read.js";
-import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@syntila/core";
 
 export type RouteHandler = (...args: unknown[]) => Promise<Response>;
 export type WorkerRouteHandlers = Record<string, RouteHandler>;

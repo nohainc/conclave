@@ -8,10 +8,10 @@ import 'package:test/test.dart';
 /// This test deliberately does not run in normal CI: it reaches the public
 /// network, clones a repository, and executes the installed host tools. Run it
 /// on the designated Workspace machine with
-/// `CONCLAVE_TEST_FULL_LOCAL_ACCESS=1`.
+/// `SYNTILA_TEST_FULL_LOCAL_ACCESS=1`.
 void main() {
   final enabled =
-      Platform.environment['CONCLAVE_TEST_FULL_LOCAL_ACCESS'] == '1';
+      Platform.environment['SYNTILA_TEST_FULL_LOCAL_ACCESS'] == '1';
   test(
     'Host network, Git, filesystem and process access',
     () async {
@@ -35,17 +35,17 @@ void main() {
     },
     skip: enabled
         ? false
-        : 'Set CONCLAVE_TEST_FULL_LOCAL_ACCESS=1 on the designated Workspace machine.',
+        : 'Set SYNTILA_TEST_FULL_LOCAL_ACCESS=1 on the designated Workspace machine.',
     timeout: const Timeout(Duration(minutes: 5)),
   );
 }
 
 Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
   final checks = evidence['checks']! as Map<String, Object?>;
-  final repositoryUrl = Platform.environment['CONCLAVE_TEST_HOST_REPOSITORY'] ??
+  final repositoryUrl = Platform.environment['SYNTILA_TEST_HOST_REPOSITORY'] ??
       'https://github.com/nohainc/conclave.git';
   final generalUrl =
-      Platform.environment['CONCLAVE_TEST_HOST_URL'] ?? 'https://github.com';
+      Platform.environment['SYNTILA_TEST_HOST_URL'] ?? 'https://github.com';
 
   final git = await _commandPath('git');
   checks['gitPath'] = git;
@@ -53,7 +53,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
 
   final providerVersions = <String, String>{};
   final configuredProviders =
-      (Platform.environment['CONCLAVE_TEST_HOST_PROVIDER_COMMANDS'] ??
+      (Platform.environment['SYNTILA_TEST_HOST_PROVIDER_COMMANDS'] ??
               'agy,codex')
           .split(',')
           .map((value) => value.trim())
@@ -71,7 +71,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
   if (providerVersions.isEmpty) {
     throw StateError(
       'No configured provider CLI was found. Set '
-      'CONCLAVE_TEST_HOST_PROVIDER_COMMANDS or install agy/codex.',
+      'SYNTILA_TEST_HOST_PROVIDER_COMMANDS or install agy/codex.',
     );
   }
   checks['providerVersions'] = providerVersions;
@@ -111,7 +111,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
   }
   checks['gitLsRemote'] = {'repository': repositoryUrl, 'succeeded': true};
 
-  final root = await Directory.systemTemp.createTemp('conclave-host-host-');
+  final root = await Directory.systemTemp.createTemp('syntila-host-host-');
   try {
     final checkout = Directory('${root.path}/checkout');
     final clone = await _run(
@@ -132,7 +132,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
     if (sourceContents.isEmpty) {
       throw StateError('Cloned repository file was unexpectedly empty.');
     }
-    final marker = File('${checkout.path}/.conclave-host-marker');
+    final marker = File('${checkout.path}/.syntila-host-marker');
     await marker.writeAsString('full-local-access\n');
     await _run(git, ['add', marker.path], workingDirectory: checkout.path);
     final commit = await _run(
@@ -141,7 +141,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
         '-c',
         'user.name=Syntila Host Acceptance',
         '-c',
-        'user.email=host-acceptance@conclave.invalid',
+        'user.email=host-acceptance@syntila.invalid',
         'commit',
         '-qm',
         'Host access verification',
@@ -245,7 +245,7 @@ File _findReadableRepositoryFile(Directory checkout) {
 
 Future<void> _writeEvidenceIfConfigured(Map<String, Object?> evidence) async {
   final path =
-      Platform.environment['CONCLAVE_TEST_FULL_LOCAL_ACCESS_EVIDENCE_DIR'];
+      Platform.environment['SYNTILA_TEST_FULL_LOCAL_ACCESS_EVIDENCE_DIR'];
   if (path == null || path.isEmpty) return;
   final directory = Directory(path);
   await directory.create(recursive: true);

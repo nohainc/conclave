@@ -1,6 +1,6 @@
-import 'package:conclave_app/src/app_shell.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
-import 'package:conclave_app/src/platform/theme_preference.dart';
+import 'package:syntila_app/src/app_shell.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/platform/theme_preference.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -26,7 +26,7 @@ void main() {
     ThemePreference preference() =>
         ThemePreference(read: () => stored, write: (value) => stored = value);
     Future<void> mount() async {
-      await tester.pumpWidget(ConclaveAppShell(
+      await tester.pumpWidget(SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
         realtimeClient: TestRealtime(),

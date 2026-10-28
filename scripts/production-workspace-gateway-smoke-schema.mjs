@@ -421,7 +421,7 @@ function normalizeTableDefinition(definition) {
 
 function hasBothDesktopAuthAudiences(definition) {
   const normalized = normalizeTableDefinition(definition);
-  return /check\s*\(\s*audience\s+in\s*\(\s*'conclave\.desktop\.management'\s*,\s*'conclave\.profile-lab\.management'\s*\)\s*\)/.test(
+  return /check\s*\(\s*audience\s+in\s*\(\s*'syntila\.desktop\.management'\s*,\s*'syntila\.profile-lab\.management'\s*\)\s*\)/.test(
     normalized,
   );
 }

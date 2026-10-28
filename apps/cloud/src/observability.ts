@@ -2,7 +2,7 @@ import {
   createDiagnosticEvent,
   type DiagnosticContext,
   type DiagnosticEvent,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 
 export interface CorrelationContext {
   requestId?: string;

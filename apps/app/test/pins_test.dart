@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 AxThread _thread(String id, {String pinnedAt = '', String status = 'active'}) =>
     AxThread.fromJson({

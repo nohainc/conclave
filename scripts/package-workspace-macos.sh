@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Packages a built macOS Workspace bundle (conclave-workspace, the `workspace`
+# Packages a built macOS Workspace bundle (syntila-workspace, the `workspace`
 # alias and the CLI Worker Engine) into an installer .pkg that installs under
 # /usr/local/lib and links the commands into /usr/local/bin. The installer does
-# not register or start the service; run `conclave-workspace service install`
+# not register or start the service; run `syntila-workspace service install`
 # afterwards. Existing Application Support state (installation ID, credentials,
 # Work Root, sessions) is never touched.
 
@@ -33,8 +33,8 @@ while [[ $# -gt 0 ]]; do
       echo "  --format pkg       Only pkg is supported (the zip comes from the build)"
       echo ""
       echo "Environment variables:"
-      echo "  CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY  'Developer ID Installer: ...' for the .pkg"
-      echo "  CONCLAVE_MACOS_NOTARY_PROFILE           notarytool keychain profile"
+      echo "  SYNTILA_MACOS_INSTALLER_SIGN_IDENTITY  'Developer ID Installer: ...' for the .pkg"
+      echo "  SYNTILA_MACOS_NOTARY_PROFILE           notarytool keychain profile"
       exit 0
       ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -50,14 +50,14 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-DIST_DIR="$ROOT/dist/conclave-workspace/macos"
-BUNDLE_NAME="conclave-workspace"
-PKG_ID="com.conclaveax.workspace.pkg"
+DIST_DIR="$ROOT/dist/syntila-workspace/macos"
+BUNDLE_NAME="syntila-workspace"
+PKG_ID="com.syntila.workspace.pkg"
 SUFFIX=""
 if [[ "$TARGET_ENV" == "local" ]]; then
-  DIST_DIR="$ROOT/dist/conclave-workspace/macos-local"
-  BUNDLE_NAME="conclave-workspace-local"
-  PKG_ID="com.conclaveax.workspace.local.pkg"
+  DIST_DIR="$ROOT/dist/syntila-workspace/macos-local"
+  BUNDLE_NAME="syntila-workspace-local"
+  PKG_ID="com.syntila.workspace.local.pkg"
   SUFFIX="-local"
 fi
 
@@ -75,7 +75,7 @@ fi
 # Refuse to ship a bundle without the service binary, alias and Engine.
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$BUNDLE"
 
-VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$ROOT/apps/workspace/pubspec.yaml")}"
+VERSION="${SYNTILA_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$ROOT/apps/workspace/pubspec.yaml")}"
 PKG="$DIST_DIR/Syntila-Workspace-$VERSION-macos$SUFFIX.pkg"
 
 STAGING="$(mktemp -d)"
@@ -85,9 +85,9 @@ BIN="$STAGING/root/usr/local/bin"
 mkdir -p "$LIB" "$BIN"
 ditto "$BUNDLE" "$LIB"
 if [[ "$TARGET_ENV" == "local" ]]; then
-  ln -s "../lib/$BUNDLE_NAME/conclave-workspace" "$BIN/conclave-workspace-local"
+  ln -s "../lib/$BUNDLE_NAME/syntila-workspace" "$BIN/syntila-workspace-local"
 else
-  ln -s "../lib/$BUNDLE_NAME/conclave-workspace" "$BIN/conclave-workspace"
+  ln -s "../lib/$BUNDLE_NAME/syntila-workspace" "$BIN/syntila-workspace"
 fi
 xattr -crs "$STAGING/root"
 
@@ -98,18 +98,18 @@ COPYFILE_DISABLE=1 pkgbuild --root "$STAGING/root" \
   --install-location / \
   "$COMPONENT" >/dev/null
 SIGN_ARGS=()
-if [[ -n "${CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY:-}" ]]; then
-  SIGN_ARGS=(--sign "$CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY" --timestamp)
+if [[ -n "${SYNTILA_MACOS_INSTALLER_SIGN_IDENTITY:-}" ]]; then
+  SIGN_ARGS=(--sign "$SYNTILA_MACOS_INSTALLER_SIGN_IDENTITY" --timestamp)
 else
-  echo "CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY is not set; the .pkg is unsigned."
+  echo "SYNTILA_MACOS_INSTALLER_SIGN_IDENTITY is not set; the .pkg is unsigned."
 fi
 rm -f "$PKG"
 productbuild --package "$COMPONENT" ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} "$PKG" >/dev/null
 
-if [[ -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then
+if [[ -n "${SYNTILA_MACOS_NOTARY_PROFILE:-}" ]]; then
   echo "Notarizing $(basename "$PKG")"
   xcrun notarytool submit "$PKG" \
-    --keychain-profile "$CONCLAVE_MACOS_NOTARY_PROFILE" --wait
+    --keychain-profile "$SYNTILA_MACOS_NOTARY_PROFILE" --wait
   xcrun stapler staple "$PKG"
 fi
 echo "Built installer package: $PKG"

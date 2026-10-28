@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 import 'package:test/test.dart';
 
 import 'tool_profile_release_test.dart';
@@ -11,7 +11,7 @@ void main() {
     late DraftProfileStore store;
 
     setUp(() async {
-      tempDir = await Directory.systemTemp.createTemp('conclave_lab_drafts_');
+      tempDir = await Directory.systemTemp.createTemp('syntila_lab_drafts_');
       store = DraftProfileStore(draftsRoot: tempDir);
     });
 

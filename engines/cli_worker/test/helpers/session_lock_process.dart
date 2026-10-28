@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
+import 'package:syntila_cli_worker_engine/src/engine_session_store.dart';
 
 Future<void> main(List<String> args) async {
   try {

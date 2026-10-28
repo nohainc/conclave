@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Builds the pure-Dart Syntila Workspace for macOS: the unified
-# `conclave-workspace` binary (CLI + service, also reachable as `workspace`)
-# and the generic CLI Worker Engine (`conclave-agent`). There is no .app: the
+# `syntila-workspace` binary (CLI + service, also reachable as `workspace`)
+# and the generic CLI Worker Engine (`syntila-agent`). There is no .app: the
 # service is a user LaunchAgent that the binary itself registers with
-# `conclave-workspace service install` (see macos_service_manager.dart).
+# `syntila-workspace service install` (see macos_service_manager.dart).
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 ENTITLEMENTS="$ROOT/packaging/macos/workspace-helper.entitlements"
-DIST_DIR="$ROOT/dist/conclave-workspace/macos"  # suffixed with -local for local builds below
+DIST_DIR="$ROOT/dist/syntila-workspace/macos"  # suffixed with -local for local builds below
 
 # --all builds the production bundle and then the local one with the remaining
 # options, so both end up in their own dist folders (and are installed with
@@ -45,12 +45,12 @@ command -v ditto >/dev/null 2>&1 || {
 }
 
 MODE="release"
-TARGET_ENV="${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}"
+TARGET_ENV="${SYNTILA_WORKSPACE_ENVIRONMENT:-production}"
 INSTALL_BUNDLE="0"
 PREPARED="0"
 SIGN_EXPLICIT="0"
-[[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]] && SIGN_EXPLICIT="1"
-DEFAULT_CONCLAVE_MACOS_SIGN_IDENTITY='Apple Development: vitalii@nohainc.com (7X62W6499P)'
+[[ -n "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]] && SIGN_EXPLICIT="1"
+DEFAULT_SYNTILA_MACOS_SIGN_IDENTITY='Apple Development: vitalii@nohainc.com (7X62W6499P)'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -59,8 +59,8 @@ while [[ $# -gt 0 ]]; do
     --release) MODE="release"; shift ;;
     --local) TARGET_ENV="local"; shift ;;
     --prod|--production) TARGET_ENV="production"; shift ;;
-    --version|-v) CONCLAVE_WORKSPACE_VERSION="$2"; shift 2 ;;
-    --sign) CONCLAVE_MACOS_SIGN_IDENTITY="$2"; SIGN_EXPLICIT="1"; shift 2 ;;
+    --version|-v) SYNTILA_WORKSPACE_VERSION="$2"; shift 2 ;;
+    --sign) SYNTILA_MACOS_SIGN_IDENTITY="$2"; SIGN_EXPLICIT="1"; shift 2 ;;
     --all) shift ;;
     --install) INSTALL_BUNDLE="1"; shift ;;
     --help|-h)
@@ -83,10 +83,10 @@ while [[ $# -gt 0 ]]; do
       echo "  --help, -h         Show this help message"
       echo ""
       echo "Environment variables:"
-      echo "  CONCLAVE_WORKSPACE_ENVIRONMENT       local | production (default production)"
-      echo "  CONCLAVE_WORKSPACE_VERSION           Workspace version override"
-      echo "  CONCLAVE_MACOS_SIGN_IDENTITY         Signing identity override"
-      echo "  CONCLAVE_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
+      echo "  SYNTILA_WORKSPACE_ENVIRONMENT       local | production (default production)"
+      echo "  SYNTILA_WORKSPACE_VERSION           Workspace version override"
+      echo "  SYNTILA_MACOS_SIGN_IDENTITY         Signing identity override"
+      echo "  SYNTILA_MACOS_NOTARY_PROFILE        Keychain profile for notarization"
       exit 0
       ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -102,32 +102,32 @@ esac
 # the keychain; otherwise (and for --debug) the binaries are ad-hoc signed.
 # The service is a plain user LaunchAgent, so no Apple identity is required to
 # run it; the hardened-runtime entitlements are applied either way.
-if [[ "$MODE" == "release" && -z "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
-  CONCLAVE_MACOS_SIGN_IDENTITY="$DEFAULT_CONCLAVE_MACOS_SIGN_IDENTITY"
+if [[ "$MODE" == "release" && -z "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
+  SYNTILA_MACOS_SIGN_IDENTITY="$DEFAULT_SYNTILA_MACOS_SIGN_IDENTITY"
 fi
 if [[ "$MODE" == "debug" && "$SIGN_EXPLICIT" != "1" ]]; then
-  CONCLAVE_MACOS_SIGN_IDENTITY=""
+  SYNTILA_MACOS_SIGN_IDENTITY=""
 fi
-if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
-  if ! security find-identity -v -p codesigning | /usr/bin/grep -F -- "$CONCLAVE_MACOS_SIGN_IDENTITY" >/dev/null; then
+if [[ -n "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
+  if ! security find-identity -v -p codesigning | /usr/bin/grep -F -- "$SYNTILA_MACOS_SIGN_IDENTITY" >/dev/null; then
     if [[ "$SIGN_EXPLICIT" == "1" ]]; then
       echo "The requested signing identity is not available as a valid code-signing identity in Keychain." >&2
       exit 1
     fi
     echo "Default signing identity not found in Keychain; using ad-hoc signatures."
-    CONCLAVE_MACOS_SIGN_IDENTITY=""
+    SYNTILA_MACOS_SIGN_IDENTITY=""
   fi
 fi
 
-BUNDLE_NAME="conclave-workspace"
+BUNDLE_NAME="syntila-workspace"
 ZIP_SUFFIX=""
 if [[ "$TARGET_ENV" == "local" ]]; then
-  DIST_DIR="$ROOT/dist/conclave-workspace/macos-local"
-  BUNDLE_NAME="conclave-workspace-local"
+  DIST_DIR="$ROOT/dist/syntila-workspace/macos-local"
+  BUNDLE_NAME="syntila-workspace-local"
   ZIP_SUFFIX="-local"
 fi
 
-VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")}"
+VERSION="${SYNTILA_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
   echo "Could not determine Syntila Workspace version." >&2
   exit 1
@@ -137,7 +137,7 @@ PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
 echo "Building Syntila Workspace $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$WORKSPACE_DIR"
 if [[ "$PREPARED" == "1" ]]; then
-  [[ -f .dart_tool/package_config.json && ( -x assets/engines/conclave-agent || -x assets/engines/conclave_cli_worker_engine ) ]] || {
+  [[ -f .dart_tool/package_config.json && ( -x assets/engines/syntila-agent || -x assets/engines/syntila_cli_worker_engine ) ]] || {
     echo "Prepared build requires resolved app dependencies and a freshly built Engine." >&2
     exit 1
   }
@@ -145,8 +145,8 @@ else
   dart pub get
   bash "$ROOT/scripts/build-cli-worker-engine.sh"
 fi
-ENGINE="$WORKSPACE_DIR/assets/engines/conclave-agent"
-[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine"
+ENGINE="$WORKSPACE_DIR/assets/engines/syntila-agent"
+[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/syntila_cli_worker_engine"
 if [[ ! -x "$ENGINE" ]]; then
   echo "The generic CLI Worker Engine is missing: $ENGINE" >&2
   exit 1
@@ -156,42 +156,42 @@ BUNDLE="$DIST_DIR/$BUNDLE_NAME"
 rm -rf "$DIST_DIR"
 mkdir -p "$BUNDLE/assets/engines"
 dart compile exe \
-  --define="CONCLAVE_WORKSPACE_VERSION=$VERSION" \
-  --define="CONCLAVE_WORKSPACE_ENVIRONMENT=$TARGET_ENV" \
-  --define="CONCLAVE_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
+  --define="SYNTILA_WORKSPACE_VERSION=$VERSION" \
+  --define="SYNTILA_WORKSPACE_ENVIRONMENT=$TARGET_ENV" \
+  --define="SYNTILA_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
-  "$WORKSPACE_DIR/bin/conclave_workspace.dart" \
-  -o "$BUNDLE/conclave-workspace"
-cp "$ENGINE" "$BUNDLE/assets/engines/conclave-agent"
-chmod 755 "$BUNDLE/conclave-workspace" "$BUNDLE/assets/engines/conclave-agent"
+  "$WORKSPACE_DIR/bin/syntila_workspace.dart" \
+  -o "$BUNDLE/syntila-workspace"
+cp "$ENGINE" "$BUNDLE/assets/engines/syntila-agent"
+chmod 755 "$BUNDLE/syntila-workspace" "$BUNDLE/assets/engines/syntila-agent"
 
 SIGN_ARGS=(--force --options runtime --entitlements "$ENTITLEMENTS")
-if [[ -n "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
+if [[ -n "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
   echo "Signing with configured Apple identity"
-  SIGN_ARGS+=(--timestamp --sign "$CONCLAVE_MACOS_SIGN_IDENTITY")
+  SIGN_ARGS+=(--timestamp --sign "$SYNTILA_MACOS_SIGN_IDENTITY")
 else
   echo "Sealing the bundle with ad-hoc signatures."
   SIGN_ARGS+=(--sign -)
 fi
 # Dart AOT executables map executable memory; the hardened runtime needs the
 # helper entitlements or launchd kills them with OS_REASON_CODESIGNING.
-codesign "${SIGN_ARGS[@]}" --identifier "conclave-agent" "$BUNDLE/assets/engines/conclave-agent"
-codesign "${SIGN_ARGS[@]}" --identifier "conclave-workspace" "$BUNDLE/conclave-workspace"
+codesign "${SIGN_ARGS[@]}" --identifier "syntila-agent" "$BUNDLE/assets/engines/syntila-agent"
+codesign "${SIGN_ARGS[@]}" --identifier "syntila-workspace" "$BUNDLE/syntila-workspace"
 
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$BUNDLE"
 
 ZIP="$DIST_DIR/Syntila-Workspace-$VERSION-macos$ZIP_SUFFIX.zip"
 ditto -c -k --sequesterRsrc --keepParent "$BUNDLE" "$ZIP"
 
-if [[ -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then
-  if [[ -z "${CONCLAVE_MACOS_SIGN_IDENTITY:-}" ]]; then
-    echo "Notarization requires CONCLAVE_MACOS_SIGN_IDENTITY." >&2
+if [[ -n "${SYNTILA_MACOS_NOTARY_PROFILE:-}" ]]; then
+  if [[ -z "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
+    echo "Notarization requires SYNTILA_MACOS_SIGN_IDENTITY." >&2
     exit 1
   fi
   echo "Submitting to Apple notarization"
   # Bare executables cannot be stapled; Gatekeeper checks the ticket online.
   xcrun notarytool submit "$ZIP" \
-    --keychain-profile "$CONCLAVE_MACOS_NOTARY_PROFILE" \
+    --keychain-profile "$SYNTILA_MACOS_NOTARY_PROFILE" \
     --wait
 fi
 
@@ -205,11 +205,11 @@ if [[ "$INSTALL_BUNDLE" == "1" ]]; then
   rm -rf "$INSTALL_ROOT"
   ditto "$BUNDLE" "$INSTALL_ROOT"
   if [[ "$TARGET_ENV" == "local" ]]; then
-    ln -sf "$INSTALL_ROOT/conclave-workspace" "$BIN_DIR/conclave-workspace-local"
+    ln -sf "$INSTALL_ROOT/syntila-workspace" "$BIN_DIR/syntila-workspace-local"
   else
-    ln -sf "$INSTALL_ROOT/conclave-workspace" "$BIN_DIR/conclave-workspace"
+    ln -sf "$INSTALL_ROOT/syntila-workspace" "$BIN_DIR/syntila-workspace"
     rm -f "$BIN_DIR/workspace"
   fi
   echo "Installed: $INSTALL_ROOT (links in $BIN_DIR; make sure it is on PATH)"
-  echo "Restart a running service with: $BIN_DIR/conclave-workspace$([[ "$TARGET_ENV" == "local" ]] && echo -local) service restart"
+  echo "Restart a running service with: $BIN_DIR/syntila-workspace$([[ "$TARGET_ENV" == "local" ]] && echo -local) service restart"
 fi

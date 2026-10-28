@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('writes structured logs to a user-private rotating log file', () async {
     final directory =
-        await Directory.systemTemp.createTemp('conclave-logs-data-');
+        await Directory.systemTemp.createTemp('syntila-logs-data-');
     final workDirectory =
-        await Directory.systemTemp.createTemp('conclave-logs-work-');
+        await Directory.systemTemp.createTemp('syntila-logs-work-');
     addTearDown(() async {
       if (await directory.exists()) await directory.delete(recursive: true);
       if (await workDirectory.exists()) {

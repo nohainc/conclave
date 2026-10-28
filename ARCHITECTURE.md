@@ -89,7 +89,7 @@ USER-OWNED
 └── <Space>/
     └── projects/files
 
-CONCLAVE-OWNED
+SYNTILA-OWNED
 ~/Library/Application Support/Conclave/
 ├── Workspace/
 │   ├── profiles
@@ -176,8 +176,8 @@ Each boundary has its own identity, authorization, transport, versioning, and wi
 See [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md) and the [Tool Profile v1 specification](docs/specifications/TOOL_PROFILE_V1.md).
 
 Workspace is a persistent, headless Dart service (the unified
-`conclave-workspace` binary) that retains the separate CLI Worker Engine
-process. The `conclave-workspace` CLI is an IPC management client and does
+`syntila-workspace` binary) that retains the separate CLI Worker Engine
+process. The `syntila-workspace` CLI is an IPC management client and does
 not compose or start an in-process runtime; there is no Workspace GUI. The canonical ownership, lifecycle,
 filesystem, security, build, and validation contract is
 [Workspace architecture](docs/architecture/WORKSPACE_ARCHITECTURE.md).
@@ -204,7 +204,7 @@ The repository has converged on the v8 assignment path and clean v8 schema. The 
 - [Worker Profile V9](docs/specifications/WORKER_PROFILE_V9.md)
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
-- [ADR-019: Syntila Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
+- [ADR-019: Syntila Profile Lab Architecture Contract](docs/decisions/ADR-019-syntila-profile-lab.md)
 - [Conversation Continuity Phase 0 audit](docs/architecture/CONVERSATION_CONTINUITY_PHASE_0_AUDIT.md)
 - [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md)
 - [First-Party Worker Catalog v1](docs/specifications/FIRST_PARTY_WORKER_CATALOG_V1.md)
@@ -299,11 +299,11 @@ People is a private, automatic directory of established collaborators, separate 
 
 The user owns a private People directory of known collaborators and participates in Spaces through Members, Invitations, and Permissions. First collaboration follows email invitation → acceptance → People relationship; future collaboration follows People selection → Space invitation → acceptance. Both invitation entry points share one permission-aware subsystem, with known recipients persisted by user ID.
 
-Workspace lifecycle: `conclave-workspace service install|start|stop|restart|status`
+Workspace lifecycle: `syntila-workspace service install|start|stop|restart|status`
 manages the per-user background service through the host manager (systemd user
 unit, macOS LaunchAgent, Windows scheduled task), while runtime commands and
 Worker tests use authenticated local IPC. The service process (`workspace`)
-owns Cloud WebSocket/HTTP fallback; `conclave-agent` is its separate generic CLI
+owns Cloud WebSocket/HTTP fallback; `syntila-agent` is its separate generic CLI
 Worker Engine. Service process health and Cloud connectivity are distinct.
 Stopping drains work before exiting; closing a terminal or the CLI preserves
 execution. Clients may cache Worker display snapshots, but configuration and

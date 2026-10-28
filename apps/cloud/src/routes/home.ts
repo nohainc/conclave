@@ -15,7 +15,7 @@ export async function handleGetHomeReadModel(
   const email = context.user.email.trim().toLowerCase();
 
   // 1. Authorized Spaces for this user
-  const spacesRows = await env.CONCLAVE_DB.prepare(
+  const spacesRows = await env.SYNTILA_DB.prepare(
     `SELECT p.id, p.name, p.description, pm.role,
             p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
      FROM spaces p
@@ -39,7 +39,7 @@ export async function handleGetHomeReadModel(
   const authorizedSpaceIds = authorizedSpaces.map((p) => p.id);
 
   // 2. Pending Invitations for this user
-  const invitationsRows = await env.CONCLAVE_DB.prepare(
+  const invitationsRows = await env.SYNTILA_DB.prepare(
     `SELECT 
        pi.id,
        pi.space_id AS spaceId,
@@ -99,7 +99,7 @@ export async function handleGetHomeReadModel(
     const placeholders = authorizedSpaceIds
       .map((_, i) => `?${i + 1}`)
       .join(", ");
-    const attentionWorkRows = await env.CONCLAVE_DB.prepare(
+    const attentionWorkRows = await env.SYNTILA_DB.prepare(
       `SELECT wr.id, wr.space_id AS spaceId, p.name AS spaceName,
               wr.thread_id AS threadId, ws.name AS threadTitle,
               wr.status, wr.workflow_id AS workflowId, wr.input_json AS inputJson,
@@ -155,7 +155,7 @@ export async function handleGetHomeReadModel(
     const placeholders = authorizedSpaceIds
       .map((_, i) => `?${i + 1}`)
       .join(", ");
-    const runningRows = await env.CONCLAVE_DB.prepare(
+    const runningRows = await env.SYNTILA_DB.prepare(
       `SELECT wr.id, wr.space_id AS spaceId, p.name AS spaceName,
               wr.thread_id AS threadId, ws.name AS threadTitle,
               wr.status, wr.workflow_id AS workflowId, wr.input_json AS inputJson,
@@ -217,7 +217,7 @@ export async function handleGetHomeReadModel(
     const placeholders = authorizedSpaceIds
       .map((_, i) => `?${i + 1}`)
       .join(", ");
-    const threadRows = await env.CONCLAVE_DB.prepare(
+    const threadRows = await env.SYNTILA_DB.prepare(
       `SELECT ws.id AS threadId, ws.name AS threadTitle, ws.space_id AS spaceId,
               p.name AS spaceName, ws.lead_user_id AS leadUserId, ws.created_at AS createdAt,
               ws.updated_at AS updatedAt,
@@ -262,8 +262,8 @@ export async function handleGetHomeReadModel(
   // 6. Product Updates (published release announcements)
   const productUpdates = [
     {
-      id: "up-conclave-v8",
-      slug: "conclave-v8-architecture",
+      id: "up-syntila-v8",
+      slug: "syntila-v8-architecture",
       title: "Syntila v8 Architecture",
       summary:
         "Provider-independent CLI Worker Engine with centrally published Worker Profiles.",

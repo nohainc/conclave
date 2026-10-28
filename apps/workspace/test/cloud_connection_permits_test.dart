@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_protocol/workspace_runtime_protocol.dart'
+import 'package:syntila_protocol/workspace_runtime_protocol.dart'
     show workspaceRuntimeProtocolVersion;
-import 'package:conclave_workspace/assignment_journal.dart';
-import 'package:conclave_workspace/assignment_trace.dart';
-import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/assignment_journal.dart';
+import 'package:syntila_workspace/assignment_trace.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
 import 'package:test/test.dart';
 
 import 'support/cloud_connection_test_support.dart';
@@ -17,7 +17,7 @@ void main() {
             String type, String assignmentId, Map<String, Object?> payload,
             {String attemptId = 'attempt-1'}) =>
         {
-          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocol': 'syntila.workspace-runtime-protocol',
           'protocolVersion': workspaceRuntimeProtocolVersion,
           'messageId': 'm-$type-$assignmentId',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -444,7 +444,7 @@ void main() {
         {
           'objective': 'inspect',
           'role': 'research',
-          'workerId': 'conclave.echo',
+          'workerId': 'syntila.echo',
           'engineVersion': '1.0.0',
           'profileDefinitionId': 'chatgpt-codex',
           'profileReleaseVersion': 1,
@@ -509,7 +509,7 @@ void main() {
             socket.controller.add(jsonEncode(envelope('assignment.start', id, {
               'objective': 'inspect',
               'role': 'research',
-              'workerId': 'conclave.echo',
+              'workerId': 'syntila.echo',
               'engineVersion': '1.0.0',
               'profileDefinitionId': 'chatgpt-codex',
               'profileReleaseVersion': 1,

@@ -203,7 +203,7 @@
           "--model",
           "{{model}}",
           "--reasoning-effort",
-          "conclave-effort-probe",
+          "syntila-effort-probe",
           "--output-format",
           "json",
           "-p",

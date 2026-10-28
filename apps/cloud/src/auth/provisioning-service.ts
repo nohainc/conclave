@@ -21,7 +21,7 @@ export interface ProvisioningDatabase {
  * the human. Workspace registration is not created as a side effect of
  * sign-in; Workspace creation is an explicit user action.
  */
-export async function provisionConclaveUser(
+export async function provisionSyntilaUser(
   db: ProvisioningDatabase,
   identity: AuthenticatedIdentity,
   now = new Date().toISOString(),

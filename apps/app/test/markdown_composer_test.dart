@@ -1,8 +1,8 @@
-import 'package:conclave_protocol/conclave_protocol.dart';
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/gestures.dart';
-import 'package:conclave_app/src/features/common/markdown_composer.dart';
-import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
+import 'package:syntila_app/src/features/common/markdown_composer.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -331,7 +331,7 @@ void main() {
     await tester.pump();
     expect(
         tester
-            .widget<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))
+            .widget<SyntilaMarkdownBody>(find.byType(SyntilaMarkdownBody))
             .data,
         '**hello**');
     await tester.tap(find.text('Write'));
@@ -481,7 +481,7 @@ void main() {
                       const ValueKey('composer-leading-rail-background')),
                   matching: find.byType(ColoredBox)))
               .color,
-          ConclaveColors.composerRailLight);
+          SyntilaColors.composerRailLight);
     }
 
     expectAnchoredBottom();

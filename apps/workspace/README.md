@@ -19,12 +19,12 @@ lifecycle contract is the
 
 | Name | Role |
 | --- | --- |
-| `conclave-workspace` | Unified binary (`bin/conclave_workspace.dart`): the management CLI, and the service when run as `conclave-workspace run` |
+| `syntila-workspace` | Unified binary (`bin/syntila_workspace.dart`): the management CLI, and the service when run as `syntila-workspace run` |
 | `workspace` | Alias of the same binary. When invoked under this name it runs the service, which is what systemd, containers and `--once` smoke tests use |
-| `conclave-agent` | The separately supervised generic CLI Worker Engine, bundled under `assets/engines/` |
+| `syntila-agent` | The separately supervised generic CLI Worker Engine, bundled under `assets/engines/` |
 
-`bin/conclave_workspace_service.dart` is the service entry point used by the
-unified binary and by source-mode development; `bin/conclave_workspace_cli.dart`
+`bin/syntila_workspace_service.dart` is the service entry point used by the
+unified binary and by source-mode development; `bin/syntila_workspace_cli.dart`
 is the CLI-only entry point. The runtime is composed in
 `lib/workspace_runtime.dart`.
 
@@ -40,11 +40,11 @@ name, parallel execution slots, and a map of named absolute folders. The service
 reads it once at process start; there is no live reload or settings IPC command.
 
 ~~~text
-conclave-workspace config init|show|validate|path
+syntila-workspace config init|show|validate|path
 ~~~
 
 Edit the file while the service is stopped (or edit and then run
-`conclave-workspace service restart`). Credentials, identities, Cloud
+`syntila-workspace service restart`). Credentials, identities, Cloud
 registration, Worker registry, Profiles and sessions live in dedicated stores,
 never in `workspace.nano`. `connect`, `disconnect`, `setup` and sign-in update
 the relevant keys for you.
@@ -55,23 +55,23 @@ The CLI drives the whole lifecycle; it speaks only the authenticated local IPC
 protocol and never starts Engines or provider CLIs itself.
 
 ~~~text
-conclave-workspace service install|start|stop|restart|status|uninstall
-conclave-workspace setup                 # config, name, login, register, then optionally start the service
-conclave-workspace login                 # Cloud email/password sign-in (stores the session only)
-conclave-workspace register              # register this Workspace with Cloud (after login)
-conclave-workspace logout                # delete the stored sign-in session
-conclave-workspace unregister            # unregister from Cloud and clear identity
-conclave-workspace reset                 # stop, unregister and clear local runtime state
-conclave-workspace work-dir [PATH]       # inspect or update primary Work Root path
-conclave-workspace connect | disconnect  # Cloud connection intent
-conclave-workspace pause | resume        # stop or resume accepting new work
-conclave-workspace status | version | logs | metrics
-conclave-workspace workers               # list configured workers
-conclave-workspace workers catalog       # list available catalog workers
-conclave-workspace workers add TYPE      # add worker from catalog (gemini, chatgpt, etc.)
-conclave-workspace workers remove TYPE   # remove a configured worker
-conclave-workspace workers [check|test|enable|disable]
-conclave-workspace slots | assignments [cancel ID] | folders [add|remove]
+syntila-workspace service install|start|stop|restart|status|uninstall
+syntila-workspace setup                 # config, name, login, register, then optionally start the service
+syntila-workspace login                 # Cloud email/password sign-in (stores the session only)
+syntila-workspace register              # register this Workspace with Cloud (after login)
+syntila-workspace logout                # delete the stored sign-in session
+syntila-workspace unregister            # unregister from Cloud and clear identity
+syntila-workspace reset                 # stop, unregister and clear local runtime state
+syntila-workspace work-dir [PATH]       # inspect or update primary Work Root path
+syntila-workspace connect | disconnect  # Cloud connection intent
+syntila-workspace pause | resume        # stop or resume accepting new work
+syntila-workspace status | version | logs | metrics
+syntila-workspace workers               # list configured workers
+syntila-workspace workers catalog       # list available catalog workers
+syntila-workspace workers add TYPE      # add worker from catalog (gemini, chatgpt, etc.)
+syntila-workspace workers remove TYPE   # remove a configured worker
+syntila-workspace workers [check|test|enable|disable]
+syntila-workspace slots | assignments [cancel ID] | folders [add|remove]
 ~~~
 
 `service install` registers the per-user background service with the host
@@ -107,8 +107,8 @@ the same Workspace installation.
 
 ## Cloud connection
 
-Sign in with `conclave-workspace login` (Cloud email and password), then run
-`conclave-workspace register`. Workspace verifies installation ownership, registers or
+Sign in with `syntila-workspace login` (Cloud email and password), then run
+`syntila-workspace register`. Workspace verifies installation ownership, registers or
 recovers through `POST /api/workspace-runtime/register`, and then connects to the
 Workspace Gateway using its runtime credential. The service journals assignment
 outcomes and classifies interrupted work on startup before accepting new work.
@@ -126,7 +126,7 @@ can execute and does not request or store provider credentials. See
 
 Normal Workspace execution uses the generic Engine and current Worker Profiles.
 If Profile Lab can list a Worker but Workspace reports its Profile as
-unavailable, check `conclave-workspace logs` and the diagnostics report for the
+unavailable, check `syntila-workspace logs` and the diagnostics report for the
 schema, digest, identity, Engine-compatibility or Cloud-connectivity error. Do
 not bypass local Profile validation or delete the cached Profile directories.
 Worker readiness remains a local execution fact; Cloud receives only safe
@@ -139,7 +139,7 @@ helper, and macOS, Linux or Windows for the matching package.
 
 | Task | Command |
 | --- | --- |
-| Compile the unified binary and Engine (host OS) | `bash scripts/build-workspace-service.sh` → `dist/conclave-workspace/` |
+| Compile the unified binary and Engine (host OS) | `bash scripts/build-workspace-service.sh` → `dist/syntila-workspace/` |
 | Run the compiled service | `scripts/run-workspace-service.sh` (`--source` runs from Dart source) |
 | Run from source against local Cloud | `pnpm workspace:run:local` |
 | One-shot compile + start + stop check | `bash scripts/check-workspace-service.sh` |
@@ -147,24 +147,24 @@ helper, and macOS, Linux or Windows for the matching package.
 | macOS bundle (signed, zipped) | `pnpm workspace:build:macos[:local|:prod|:all]`, then `pnpm workspace:package:macos` for a `.pkg` |
 | Linux headless bundle and `.deb` | `scripts/build-workspace-linux-headless.sh <x64\|arm64>` then `scripts/package-workspace-linux.sh <arch>` |
 
-`CONCLAVE_RELEASE_TRUST_KEYS_JSON` supplies the explicit public Ed25519 roots
+`SYNTILA_RELEASE_TRUST_KEYS_JSON` supplies the explicit public Ed25519 roots
 used to verify Workspace application releases; it is not used to admit Worker
-Profiles. Optional macOS environment: `CONCLAVE_MACOS_SIGN_IDENTITY`,
-`CONCLAVE_MACOS_NOTARY_PROFILE`, `CONCLAVE_WORKSPACE_VERSION`.
+Profiles. Optional macOS environment: `SYNTILA_MACOS_SIGN_IDENTITY`,
+`SYNTILA_MACOS_NOTARY_PROFILE`, `SYNTILA_WORKSPACE_VERSION`.
 
 Compiled service and Engine processes set their diagnostic names at startup, so
-process tools show `workspace` and `conclave-agent` rather than the Dart runtime.
+process tools show `workspace` and `syntila-agent` rather than the Dart runtime.
 This changes only the local display name.
 
 ### macOS
 
-`build-workspace-macos.sh` produces `dist/conclave-workspace/macos/conclave-workspace/`
-(`conclave-workspace`, the `workspace` symlink and `assets/engines/conclave-agent`)
+`build-workspace-macos.sh` produces `dist/syntila-workspace/macos/syntila-workspace/`
+(`syntila-workspace`, the `workspace` symlink and `assets/engines/syntila-agent`)
 signed with the hardened-runtime entitlements in
 `packaging/macos/workspace-helper.entitlements`, plus
 `Syntila-Workspace-<version>-macos.zip`. There is no `.app` and no `SMAppService`;
 `--install` copies the bundle to `~/.local/lib` and links the commands into
-`~/.local/bin`, and `conclave-workspace service install` writes the LaunchAgent.
+`~/.local/bin`, and `syntila-workspace service install` writes the LaunchAgent.
 An Apple identity is optional for local use (ad-hoc signatures are used when none
 is available). Update metadata is signed by an independent Ed25519 application
 release key and binds the archive digest, version, channel, supported platform,
@@ -197,10 +197,10 @@ A Workspace build targets exactly one Cloud; there is no runtime switch.
 | `pnpm workspace:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave` |
 | `pnpm workspace:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local` |
 
-Local builds are compiled with `CONCLAVE_WORKSPACE_ENVIRONMENT=local`, ignore
+Local builds are compiled with `SYNTILA_WORKSPACE_ENVIRONMENT=local`, ignore
 `cloud.url` from `workspace.nano`, and write to a separate state directory so they
 never touch a production registration or session. Start the local API/web stack
 first with `pnpm app:run:local`. The local bundle installs as
-`conclave-workspace-local`; the production and local services can run side by
+`syntila-workspace-local`; the production and local services can run side by
 side, each with its own state directory, installation lock, IPC socket and
 LaunchAgent label.

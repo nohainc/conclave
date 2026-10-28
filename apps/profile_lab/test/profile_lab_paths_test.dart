@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -42,7 +42,7 @@ void main() {
       );
       expect(
         ProfileLabPaths.bundleIdentifier,
-        'com.conclaveax.profile-lab',
+        'com.syntila.profile-lab',
       );
     });
 

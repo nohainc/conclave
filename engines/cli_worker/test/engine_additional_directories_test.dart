@@ -3,13 +3,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('passes Workspace-verified folders through the Profile slot', () async {
     final repository = Directory.current.parent.parent.path;
-    final state = await Directory.systemTemp.createTemp('conclave-dirs-');
+    final state = await Directory.systemTemp.createTemp('syntila-dirs-');
     addTearDown(() => state.delete(recursive: true));
     final providerDirectory = Directory('${state.path}/provider-bin')
       ..createSync();
@@ -52,7 +52,7 @@ void main() {
     final process = await Process.start(
       Platform.resolvedExecutable,
       [
-        '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+        '$repository/engines/cli_worker/bin/syntila_cli_worker.dart',
         '--profile',
         profileFile.path,
         '--engine-version',

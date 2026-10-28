@@ -1,4 +1,4 @@
-import type { ConversationTurn } from "@conclave/core";
+import type { ConversationTurn } from "@syntila/core";
 
 /** Call only after authorizing the enclosing Thread/request collection. */
 export async function loadConversationTurns(

@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'dart:math' as math;
 import '../common/quiet_notices.dart';
 import 'package:flutter/material.dart';
@@ -564,15 +564,15 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                   !_changingWorkspace &&
                   selectedWorker != null,
               tooltip: 'Choose model',
-              color: ConclaveColors.composerBackground(
+              color: SyntilaColors.composerBackground(
                   Theme.of(context).brightness == Brightness.dark),
               surfaceTintColor: Colors.transparent,
               elevation: 12,
-              shadowColor: ConclaveMenuStyle.shadow(
+              shadowColor: SyntilaMenuStyle.shadow(
                   Theme.of(context).brightness == Brightness.dark),
-              shape: ConclaveMenuStyle.shape(
+              shape: SyntilaMenuStyle.shape(
                   Theme.of(context).brightness == Brightness.dark),
-              menuPadding: ConclaveMenuStyle.padding,
+              menuPadding: SyntilaMenuStyle.padding,
               itemBuilder: (context) {
                 final choices = <String, String>{
                   '': allowsAutoModel ? 'Auto' : 'Select model...',
@@ -582,10 +582,10 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                 };
                 return [
                   for (final choice in choices.entries)
-                    ConclaveMenuEntry<String>(
+                    SyntilaMenuEntry<String>(
                       value: choice.key,
                       child: MenuItemButton(
-                        style: ConclaveMenuStyle.item(
+                        style: SyntilaMenuStyle.item(
                             Theme.of(context).brightness == Brightness.dark),
                         leadingIcon: Icon(
                           choice.key == (selection.model ?? '')
@@ -595,7 +595,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                         ),
                         onPressed: () => Navigator.pop(context, choice.key),
                         child: Text(choice.value,
-                            style: ConclaveMenuStyle.textStyle),
+                            style: SyntilaMenuStyle.textStyle),
                       ),
                     ),
                 ];
@@ -901,7 +901,7 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
       final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-                  constraints: ConclaveDialogStyle.small,
+                  constraints: SyntilaDialogStyle.small,
                   title: const Text('Use this Workspace?'),
                   content: const Text(
                       'New Work will run on this Workspace using its own workflow settings. Workflow settings of other Workspaces are kept. Workflow overrides of Spaces using the global Workspace are reset, and existing runs keep their recorded settings.'),

@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/work_request_input_staging.dart';
-import 'package:conclave_workspace/worker_executor.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/work_request_input_staging.dart';
+import 'package:syntila_workspace/worker_executor.dart';
 import 'package:crypto/crypto.dart';
-import 'package:conclave_workspace/space_directory.dart';
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_path.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_workspace/space_directory.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_path.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 import 'support/assignment_worker_fixture.dart';

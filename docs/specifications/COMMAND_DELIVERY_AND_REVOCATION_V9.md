@@ -9,7 +9,7 @@ Slice C (separate deadlines) are implemented.
 Cloud used to turn a missed deadline into a terminal `failed`/`timed_out`
 row. That row said "stopped" while the `assignment.start` command could still
 sit in the Service queue or the provider could still be running, so a
-`conclave-agent` process appeared after the Run had already failed. A deadline
+`syntila-agent` process appeared after the Run had already failed. A deadline
 entitles Cloud to want the work stopped; only the Service can say it stopped.
 
 ## Delivery is not execution

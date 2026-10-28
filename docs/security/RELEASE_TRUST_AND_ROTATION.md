@@ -47,14 +47,14 @@ The release workflows use GitHub Environments and repository variables:
 
 | Purpose | Secret | Variable |
 | --- | --- | --- |
-| Workspace app release metadata | `CONCLAVE_WORKSPACE_ED25519_SEED` | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` |
-| Release publication authorization | `CONCLAVE_RELEASE_PUBLISH_TOKEN` | `CLOUD_API_URL` |
-| macOS Developer ID/notarization | `CONCLAVE_MACOS_CERTIFICATE_P12`, password and Apple credentials | — |
-| Workspace client trust anchors | — | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` |
+| Workspace app release metadata | `SYNTILA_WORKSPACE_ED25519_SEED` | `SYNTILA_WORKSPACE_SIGNING_KEY_ID` |
+| Release publication authorization | `SYNTILA_RELEASE_PUBLISH_TOKEN` | `CLOUD_API_URL` |
+| macOS Developer ID/notarization | `SYNTILA_MACOS_CERTIFICATE_P12`, password and Apple credentials | — |
+| Workspace client trust anchors | — | `SYNTILA_RELEASE_TRUST_KEYS_JSON` |
 
 Ed25519 seeds are 32-byte raw keys encoded as base64. Public roots are raw 32-byte
 Ed25519 public keys encoded as base64, keyed by publisher and key ID in
-`CONCLAVE_RELEASE_TRUST_KEYS_JSON`. Never print or upload signing seeds,
+`SYNTILA_RELEASE_TRUST_KEYS_JSON`. Never print or upload signing seeds,
 certificate passwords, Apple credentials, or publication tokens in workflow
 logs or artifacts.
 
@@ -70,7 +70,7 @@ Use an overlap window; do not replace a key in place:
 
 1. Generate an independent new seed/key ID for the relevant release class in
    the protected release environment.
-2. Add the new public key to `CONCLAVE_RELEASE_TRUST_KEYS_JSON` while retaining
+2. Add the new public key to `SYNTILA_RELEASE_TRUST_KEYS_JSON` while retaining
    the old key. Build and distribute a Workspace release containing both keys
    before signing releases with the new key.
 3. Publish a canary release using the new key. Download it back and run the
@@ -141,7 +141,7 @@ its Ed25519 signature against a bundled publisher/key ID trust root. The signing
 message is UTF-8:
 
 ~~~text
-conclave-tool-profile-release-v1\n<canonical envelope JSON>
+syntila-tool-profile-release-v1\n<canonical envelope JSON>
 ~~~
 
 The canonical envelope JSON has these fields: `domain`, `publisher`,

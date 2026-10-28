@@ -414,8 +414,8 @@ tables. Migration history remains append-only.
 
 Cloud, Profile Lab, Workspace, and the CLI Worker Engine MUST use the same
 provider-neutral V9 validation contract. The shared contract is implemented by
-the TypeScript `@conclave/tool-profile` package for Cloud-side validation and
-the Dart `conclave_tool_profile_v1` package for Profile Lab, Workspace, and
+the TypeScript `@syntila/tool-profile` package for Cloud-side validation and
+the Dart `syntila_tool_profile_v1` package for Profile Lab, Workspace, and
 Engine runtime validation. Both implementations MUST remain semantically
 aligned with the versioned Profile schema.
 

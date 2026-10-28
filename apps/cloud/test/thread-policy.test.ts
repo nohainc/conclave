@@ -89,7 +89,7 @@ describe("Thread authored context", () => {
 it("validates selected effort and models against the selected Worker Profile", async () => {
   const { validateWorkflowWorkerEligibility } =
     await import("../src/routes/thread-policy.js");
-  const { BUILTIN_WORKFLOWS } = await import("@conclave/core");
+  const { BUILTIN_WORKFLOWS } = await import("@syntila/core");
   const row = {
     workspaceId: "WS",
     workerTypeId: "generic-worker",
@@ -111,7 +111,7 @@ it("validates selected effort and models against the selected Worker Profile", a
   };
   const db = { prepare: () => ({ bind: () => ({ first: async () => row }) }) };
   const env = {
-    CONCLAVE_DB: db,
+    SYNTILA_DB: db,
   } as unknown as import("../src/routes/http-security.js").SecurityEnv;
   for (const [model, effort, invalid] of [
     ["a", "deep", false],

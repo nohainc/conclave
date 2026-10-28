@@ -104,7 +104,7 @@ function fixture() {
         : null;
     },
   };
-  const env = { CONCLAVE_DB: db, CONCLAVE_ARTIFACTS: bucket } as never;
+  const env = { SYNTILA_DB: db, SYNTILA_ARTIFACTS: bucket } as never;
   async function upload(text = "hello **file**") {
     const response = await handleUploadWorkRequestFile(
       new Request(

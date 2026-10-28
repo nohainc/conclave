@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_marker.dart';
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_marker.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
@@ -13,7 +13,7 @@ void main() {
       () async {
     // Empty local environment and a newly enrolled Workspace runtime.
     final workRoot =
-        await Directory.systemTemp.createTemp('conclave-clean-room-work-');
+        await Directory.systemTemp.createTemp('syntila-clean-room-work-');
     addTearDown(() => workRoot.delete(recursive: true));
     final firstWorkspaceId = 'workspace-first';
     final secondWorkspaceId = 'workspace-reenrolled';
@@ -31,7 +31,7 @@ Future<void> main(List<String> args) async {
     final clone = await Process.run('git', ['clone', '-q', remote, 'conclave']);
     if (clone.exitCode != 0) exit(clone.exitCode);
   }
-  File('conclave/\$phase.txt').writeAsStringSync(phase);
+  File('syntila/\$phase.txt').writeAsStringSync(phase);
 }
 ''');
 
@@ -98,13 +98,13 @@ Future<void> main(List<String> args) async {
         reason: '${continuation.stdout}\n${continuation.stderr}');
     expect(
       await File(
-              '${firstDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}first-worker.txt')
+              '${firstDirectory.path}${Platform.pathSeparator}syntila${Platform.pathSeparator}first-worker.txt')
           .readAsString(),
       'first-worker',
     );
     expect(
       await File(
-              '${firstDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}second-worker.txt')
+              '${firstDirectory.path}${Platform.pathSeparator}syntila${Platform.pathSeparator}second-worker.txt')
           .readAsString(),
       'second-worker',
     );
@@ -129,13 +129,13 @@ Future<void> main(List<String> args) async {
         reason: '${parallel.stdout}\n${parallel.stderr}');
     expect(
       await File(
-              '${secondThreadScope.workingDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}parallel-worker.txt')
+              '${secondThreadScope.workingDirectory.path}${Platform.pathSeparator}syntila${Platform.pathSeparator}parallel-worker.txt')
           .readAsString(),
       'parallel-worker',
     );
     expect(
       await File(
-              '${firstDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}parallel-worker.txt')
+              '${firstDirectory.path}${Platform.pathSeparator}syntila${Platform.pathSeparator}parallel-worker.txt')
           .exists(),
       isFalse,
     );
@@ -166,7 +166,7 @@ Future<void> main(List<String> args) async {
     expect(reentry.exitCode, 0, reason: '${reentry.stdout}\n${reentry.stderr}');
     expect(
       await File(
-              '${firstDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}second-worker.txt')
+              '${firstDirectory.path}${Platform.pathSeparator}syntila${Platform.pathSeparator}second-worker.txt')
           .exists(),
       isTrue,
     );
@@ -178,7 +178,7 @@ Future<void> main(List<String> args) async {
     expect(markerAfterReenrollment.toJson(), markerBeforeRename.toJson());
     expect(
       await File(
-              '${firstDirectory.path}${Platform.pathSeparator}conclave${Platform.pathSeparator}reenrolled-worker.txt')
+              '${firstDirectory.path}${Platform.pathSeparator}syntila${Platform.pathSeparator}reenrolled-worker.txt')
           .readAsString(),
       'reenrolled-worker',
     );

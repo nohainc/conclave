@@ -5,7 +5,7 @@ import {
   realtimeStreamKey,
   RealtimeStreamSchema,
   type RealtimeEventEnvelope,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 import { realtimeEventFromRow } from "./event-publisher.js";
 import {
   identityService,
@@ -37,7 +37,7 @@ export type RealtimeClientMessage =
   | { type: "ping" };
 
 export interface RealtimeGatewayEnv extends BetterAuthRuntimeEnv {
-  readonly CONCLAVE_DB: D1Database;
+  readonly SYNTILA_DB: D1Database;
 }
 
 interface ConnectedClient {
@@ -417,7 +417,7 @@ export class RealtimeGateway implements DurableObject {
         { status: 401 },
       );
     }
-    const user = await this.env.CONCLAVE_DB.prepare(
+    const user = await this.env.SYNTILA_DB.prepare(
       "SELECT status FROM users WHERE id = ?1",
     )
       .bind(identity.userId)
@@ -468,7 +468,7 @@ export class RealtimeGateway implements DurableObject {
     try {
       if (
         !(await isRealtimeIdentityAuthorized(
-          this.env.CONCLAVE_DB,
+          this.env.SYNTILA_DB,
           connected.identity.userId,
           [...connected.subscriptions.values()],
         ))
@@ -511,7 +511,7 @@ export class RealtimeGateway implements DurableObject {
         return;
       }
       const result = await authorizeRealtimeScope(
-        this.env.CONCLAVE_DB,
+        this.env.SYNTILA_DB,
         connected.identity.userId,
         message.scope,
       );
@@ -564,7 +564,7 @@ export class RealtimeGateway implements DurableObject {
               ((scope.kind === "thread" || scope.kind === "run") &&
                 !(
                   await authorizeRealtimeScope(
-                    this.env.CONCLAVE_DB,
+                    this.env.SYNTILA_DB,
                     connected.identity.userId,
                     scope,
                   )
@@ -576,7 +576,7 @@ export class RealtimeGateway implements DurableObject {
         }
         if (
           !(await isRealtimeIdentityAuthorized(
-            this.env.CONCLAVE_DB,
+            this.env.SYNTILA_DB,
             connected.identity.userId,
             [...connected.subscriptions.values()],
           ))
@@ -595,14 +595,14 @@ export class RealtimeGateway implements DurableObject {
           continue;
         if (stream.kind === "space" && event.type !== "space.deleted") {
           const member = await authorizeRealtimeScope(
-            this.env.CONCLAVE_DB,
+            this.env.SYNTILA_DB,
             connected.identity.userId,
             { kind: "space", spaceId: stream.id },
           );
           if (!member.allowed) {
             const owner =
               event.type === "workspace_space_grant.updated"
-                ? await this.env.CONCLAVE_DB.prepare(
+                ? await this.env.SYNTILA_DB.prepare(
                     "SELECT 1 AS owner FROM workspace_space_grants WHERE id = ?1 AND space_id = ?2 AND granted_by_user_id = ?3",
                   )
                     .bind(
@@ -909,7 +909,7 @@ export class RealtimeGateway implements DurableObject {
         AND e.sequence <= cursor.value
     )`);
     bindings.push(JSON.stringify(Object.fromEntries(cursors)));
-    const result = await this.env.CONCLAVE_DB.prepare(
+    const result = await this.env.SYNTILA_DB.prepare(
       `${query}
        WHERE ${conditions.join(" AND ")}
        ORDER BY e.occurred_at ASC, e.sequence ASC, e.event_id ASC

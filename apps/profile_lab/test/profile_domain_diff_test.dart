@@ -1,4 +1,4 @@
-import 'package:conclave_profile_lab/utils/profile_domain_diff.dart';
+import 'package:syntila_profile_lab/utils/profile_domain_diff.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

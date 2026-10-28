@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'package:conclave_app/src/features/common/attachment_cards.dart';
-import 'package:conclave_app/src/features/common/markdown_composer.dart';
+import 'package:syntila_app/src/features/common/attachment_cards.dart';
+import 'package:syntila_app/src/features/common/markdown_composer.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

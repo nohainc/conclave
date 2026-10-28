@@ -1,5 +1,5 @@
 export { handleListConversationHistory } from "./conversation-history.js";
-export { ConclaveRunWorkflow } from "../workflow.js";
+export { SyntilaRunWorkflow } from "../workflow.js";
 export { WorkspaceGateway } from "../workspace-gateway.js";
 export {
   dispatchTaskAssignment,

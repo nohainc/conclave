@@ -3,13 +3,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-SERVICE_DIR="$ROOT/dist/conclave-workspace"
-SERVICE_NAME="conclave-workspace"
-ENGINE_NAME="conclave-agent"
+SERVICE_DIR="$ROOT/dist/syntila-workspace"
+SERVICE_NAME="syntila-workspace"
+ENGINE_NAME="syntila-agent"
 
 if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
-  SERVICE_NAME="conclave-workspace.exe"
-  ENGINE_NAME="conclave-agent.exe"
+  SERVICE_NAME="syntila-workspace.exe"
+  ENGINE_NAME="syntila-agent.exe"
 fi
 
 SOURCE_MODE="0"
@@ -50,8 +50,8 @@ if [[ ! -f "$WORKSPACE_DIR/.dart_tool/package_config.json" ]]; then
   exit 1
 fi
 
-ENGINE="$WORKSPACE_DIR/assets/engines/conclave-agent"
-[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine"
+ENGINE="$WORKSPACE_DIR/assets/engines/syntila-agent"
+[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/syntila_cli_worker_engine"
 if [[ ! -x "$ENGINE" ]]; then
   echo "The bundled CLI Worker Engine is missing. Run scripts/build-cli-worker-engine.sh first." >&2
   exit 1
@@ -71,5 +71,5 @@ DART="${DART:-$(command -v dart || true)}"
 
 cd "$WORKSPACE_DIR"
 exec "$DART" run \
-  "-DCONCLAVE_WORKSPACE_ENVIRONMENT=${CONCLAVE_WORKSPACE_ENVIRONMENT:-production}" \
-  bin/conclave_workspace_service.dart --background-service "$@"
+  "-DSYNTILA_WORKSPACE_ENVIRONMENT=${SYNTILA_WORKSPACE_ENVIRONMENT:-production}" \
+  bin/syntila_workspace_service.dart --background-service "$@"

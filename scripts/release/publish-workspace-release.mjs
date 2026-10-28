@@ -27,7 +27,7 @@ const archivePath = required("WORKSPACE_ARCHIVE");
 const archive = await readFile(archivePath);
 const version = required("WORKSPACE_VERSION");
 const channel = required("RELEASE_CHANNEL");
-const keyId = required("CONCLAVE_WORKSPACE_SIGNING_KEY_ID");
+const keyId = required("SYNTILA_WORKSPACE_SIGNING_KEY_ID");
 const publisher = "conclave";
 const packageDigest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
 const metadata = {
@@ -41,7 +41,7 @@ const metadata = {
   signingKeyId: keyId,
   packageDigest,
 };
-const seed = Buffer.from(required("CONCLAVE_WORKSPACE_SIGNING_SEED"), "base64");
+const seed = Buffer.from(required("SYNTILA_WORKSPACE_SIGNING_SEED"), "base64");
 if (seed.length !== 32)
   throw new Error("Workspace signing seed must contain 32 bytes");
 const privateKey = createPrivateKey({
@@ -52,7 +52,7 @@ const privateKey = createPrivateKey({
   format: "der",
   type: "pkcs8",
 });
-const payload = `conclave-workspace-release-metadata-v1\n${canonical(metadata)}`;
+const payload = `syntila-workspace-release-metadata-v1\n${canonical(metadata)}`;
 const signature = sign(null, Buffer.from(payload), privateKey).toString(
   "base64",
 );
@@ -91,7 +91,7 @@ if (!infoResponse.ok)
     `Workspace release readback failed: HTTP ${infoResponse.status}`,
   );
 const info = await infoResponse.json();
-const roots = JSON.parse(required("CONCLAVE_RELEASE_TRUST_KEYS_JSON"));
+const roots = JSON.parse(required("SYNTILA_RELEASE_TRUST_KEYS_JSON"));
 const rawPublic = Buffer.from(roots[publisher]?.[keyId] ?? "", "base64");
 if (rawPublic.length !== 32)
   throw new Error("Workspace public trust root is missing or invalid");
@@ -118,7 +118,7 @@ if (
   !verify(
     null,
     Buffer.from(
-      `conclave-workspace-release-metadata-v1\n${canonical(readbackMetadata)}`,
+      `syntila-workspace-release-metadata-v1\n${canonical(readbackMetadata)}`,
     ),
     publicKey,
     Buffer.from(info.signature, "base64"),

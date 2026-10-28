@@ -1,8 +1,8 @@
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/navigation/app_sidebar.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -177,7 +177,7 @@ void main() {
       unreadNotifications: unread,
     )));
     final badge = tester.widget<Badge>(find.byType(Badge));
-    expect(badge.backgroundColor, ConclaveColors.primary);
+    expect(badge.backgroundColor, SyntilaColors.primary);
     expect(badge.textColor, Colors.white);
     expect(find.text('5'), findsOneWidget);
     unread.value = 0;

@@ -1,1 +1,1 @@
-export 'package:conclave_design/conclave_design.dart';
+export 'package:syntila_design/syntila_design.dart';

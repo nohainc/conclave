@@ -104,7 +104,7 @@ it("keeps tokens increasing after Work history is cleared", async () => {
       new Request("https://test/api/threads/W/work-history/clear", {
         method: "POST",
       }),
-      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      { SYNTILA_DB: f.db } as unknown as SecurityEnv,
       "W",
     );
     expect(response.status).toBe(200);

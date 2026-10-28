@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 AxSnapshot axFixtureSnapshot() => const AxSnapshot(
       activeRunId: 'run-fixture',

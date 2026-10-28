@@ -3,14 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/windows_credentials.dart';
-import 'package:conclave_workspace/workspace_paths.dart';
-import 'package:conclave_workspace/platform_runtime.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/windows_native.dart';
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
-import 'package:conclave_workspace/local_management_transport.dart';
+import 'package:syntila_workspace/windows_credentials.dart';
+import 'package:syntila_workspace/workspace_paths.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
+import 'package:syntila_workspace/secure_credentials.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/windows_native.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/local_management_transport.dart';
 
 void main() {
   test('IPC bounds unterminated input before JSON decoding', () async {
@@ -38,7 +38,7 @@ void main() {
         throwsStateError);
   });
   test('Work Root aliases cannot enter private application state', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-alias-');
+    final root = await Directory.systemTemp.createTemp('syntila-alias-');
     try {
       final actual = Directory('${root.path}/state');
       final work = Directory('${actual.path}/work');
@@ -55,7 +55,7 @@ void main() {
   }, skip: Platform.isWindows);
   test('Windows legacy state is preserved until its root is selected',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-legacy-');
+    final root = await Directory.systemTemp.createTemp('syntila-legacy-');
     try {
       final legacy = Directory('${root.path}/legacy');
       final target = Directory('${root.path}/new');
@@ -74,7 +74,7 @@ void main() {
   });
   test('Windows cached credentials rotate in the selected private state root',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-store-');
+    final root = await Directory.systemTemp.createTemp('syntila-store-');
     try {
       final store = PlatformSecureCredentialStore(
           service: root.path, credentialDirectory: root);
@@ -100,7 +100,7 @@ void main() {
     WindowsNative.releasePowerRequest(handle);
   }, skip: !Platform.isWindows);
   test('DPAPI persists ciphertext and binds service/account', () async {
-    final dir = await Directory.systemTemp.createTemp('conclave-dpapi-');
+    final dir = await Directory.systemTemp.createTemp('syntila-dpapi-');
     try {
       final store = WindowsCredentials(dir);
       const secret = 'runtime-credential-ž-1234';
@@ -122,7 +122,7 @@ void main() {
     }
   }, skip: !Platform.isWindows);
   test('Windows pipe authenticates, rejects bad keys, and restarts', () async {
-    final dir = await Directory.systemTemp.createTemp('conclave-pipe-');
+    final dir = await Directory.systemTemp.createTemp('syntila-pipe-');
     await InstallationIdentityStore(dir).getOrCreate();
     WorkspaceManagerIpcServer makeServer() => WorkspaceManagerIpcServer(
           runtimeDirectory: Directory('${dir.path}/runtime'),
@@ -164,7 +164,7 @@ void main() {
 
 class _WindowsPathRuntime implements PlatformRuntime {
   @override
-  String get homeDirectory => '${Directory.systemTemp.path}/conclave-path-test';
+  String get homeDirectory => '${Directory.systemTemp.path}/syntila-path-test';
   @override
   String get operatingSystem => 'windows';
   @override

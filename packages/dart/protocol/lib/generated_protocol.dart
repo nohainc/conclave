@@ -37,7 +37,7 @@ const executionErrorMessages = <String, String>{
 };
 
 const workspaceRuntimeProtocolSchemaName =
-    'conclave.workspace-runtime-protocol';
+    'syntila.workspace-runtime-protocol';
 const workspaceRuntimeProtocolSchemaVersion = '5.1';
 const workspaceRuntimeProtocolSchemaMaxMessageSizeBytes = 4194304;
 const workspaceRuntimeProtocolSchemaMessageTypes = <String>{
@@ -89,7 +89,7 @@ const workspaceRuntimeProtocolSchemaAssignmentEnvelopeFields = <String>[
   'assignmentId',
   'idempotencyKey',
 ];
-const realtimeEventsName = 'conclave.realtime-events';
+const realtimeEventsName = 'syntila.realtime-events';
 const realtimeEventsVersion = '1.1';
 const realtimeEventEnvelopeFields = <String>[
   'eventId',

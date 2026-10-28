@@ -6,7 +6,7 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SOURCE = ROOT / 'assets/branding/conclave_source.png'
+SOURCE = ROOT / 'assets/branding/syntila_source.png'
 CHECK = '--check' in sys.argv
 errors = []
 
@@ -31,14 +31,14 @@ def render(size, maskable=False):
 payload = base64.b64encode(SOURCE.read_bytes()).decode()
 image = f'<image href="data:image/png;base64,{payload}" x="64" y="64" width="1152" height="1152" preserveAspectRatio="xMidYMid meet"/>'
 svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1280">{image}</svg>\n'.encode()
-assets = {name: svg for name in ['conclave_logo.svg', 'conclave_mark.svg', 'conclave_mark_dark.svg', 'conclave_mark_monochrome.svg', 'conclave_mark_twotone.svg']}
-for name, color in [('conclave_wordmark.svg', '#20202A'), ('conclave_wordmark_dark.svg', '#F4F4F6')]:
-    assets[name] = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96"><g transform="scale(.075)">{image}</g><text x="106" y="62" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="800" letter-spacing="0.06em" fill="{color}">CONCLAVE</text></svg>\n').encode()
+assets = {name: svg for name in ['syntila_logo.svg', 'syntila_mark.svg', 'syntila_mark_dark.svg', 'syntila_mark_monochrome.svg', 'syntila_mark_twotone.svg']}
+for name, color in [('syntila_wordmark.svg', '#20202A'), ('syntila_wordmark_dark.svg', '#F4F4F6')]:
+    assets[name] = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 96"><g transform="scale(.075)">{image}</g><text x="106" y="62" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="800" letter-spacing="0.06em" fill="{color}">SYNTILA</text></svg>\n').encode()
 icons = {size: render(size) for size in [16, 32, 64, 128, 192, 256, 512, 1024]}
-assets['conclave_logo.png'] = icons[1024]
-assets['conclave_email_logo.png'] = icons[128]
+assets['syntila_logo.png'] = icons[1024]
+assets['syntila_email_logo.png'] = icons[128]
 for size in [32, 64, 128, 192, 512]:
-    assets[f'conclave_logo_{size}.png'] = icons[size]
+    assets[f'syntila_logo_{size}.png'] = icons[size]
 for name, data in assets.items():
     put(f'assets/branding/{name}', data)
     for app in ['app', 'workspace', 'profile_lab']:
@@ -50,7 +50,7 @@ for app in ['workspace', 'profile_lab']:
             put(f'apps/{app}/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_{size}.png', data)
 put('apps/site/public/favicon.svg', svg)
 put('apps/site/public/favicon.png', icons[32])
-put('apps/app/web/conclave_logo.svg', svg)
+put('apps/app/web/syntila_logo.svg', svg)
 put('apps/app/web/favicon.png', icons[32])
 for size in [192, 512]:
     put(f'apps/app/web/icons/Icon-{size}.png', icons[size])

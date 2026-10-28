@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_engine/conclave_cli_worker_engine.dart';
+import 'package:syntila_cli_worker_engine/syntila_cli_worker_engine.dart';
 import 'package:test/test.dart';
 
 void main() {

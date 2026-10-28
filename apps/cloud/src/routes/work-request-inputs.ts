@@ -1,4 +1,4 @@
-import { extractBearerToken } from "@conclave/security";
+import { extractBearerToken } from "@syntila/security";
 import { WorkspaceRuntimeAuthenticator } from "../workspace-gateway/runtime-authenticator.js";
 import { createEventPublisher } from "../event-publisher.js";
 import { HttpError, authorizeThreadAccess, json } from "./handlers.js";
@@ -176,15 +176,15 @@ async function announceInputProgress(
   state: WorkRequestInputState,
 ): Promise<void> {
   try {
-    const run = await env.CONCLAVE_DB.prepare(
+    const run = await env.SYNTILA_DB.prepare(
       `SELECT workflow_instance_id AS instanceId FROM runs
         WHERE work_request_id = ?1 AND workflow_instance_id IS NOT NULL
         ORDER BY created_at DESC LIMIT 1`,
     )
       .bind(row.workRequestId)
       .first<{ instanceId: string }>();
-    if (run?.instanceId && env.CONCLAVE_RUN_WORKFLOW) {
-      const instance = await env.CONCLAVE_RUN_WORKFLOW.get(run.instanceId);
+    if (run?.instanceId && env.SYNTILA_RUN_WORKFLOW) {
+      const instance = await env.SYNTILA_RUN_WORKFLOW.get(run.instanceId);
       await instance.sendEvent({
         type: WORK_INPUTS_EVENT_TYPE,
         payload: { fileId: row.fileId, state },
@@ -194,7 +194,7 @@ async function announceInputProgress(
     // The Workflow's bounded wait re-reads D1.
   }
   try {
-    const thread = await env.CONCLAVE_DB.prepare(
+    const thread = await env.SYNTILA_DB.prepare(
       `SELECT t.space_id AS spaceId, wr.primary_workspace_id AS workspaceId
          FROM threads t JOIN work_requests wr ON wr.thread_id = t.id
         WHERE wr.id = ?1`,
@@ -222,7 +222,7 @@ async function announceInputProgress(
 /** Sends the tiny `input.available` wake-up to the target Service. */
 async function wakeWorkspace(env: SecurityEnv, workspaceId: string) {
   try {
-    await env.CONCLAVE_WORKSPACE_GATEWAY?.getByName(workspaceId).fetch(
+    await env.SYNTILA_WORKSPACE_GATEWAY?.getByName(workspaceId).fetch(
       "https://workspace-gateway/inputs-available",
       { method: "POST" },
     );
@@ -238,7 +238,7 @@ async function requesterRow(
   fileId: string,
   accessContext?: ExecutionContext,
 ) {
-  const row = await inputRow(env.CONCLAVE_DB, fileId);
+  const row = await inputRow(env.SYNTILA_DB, fileId);
   if (!row || row.workRequestId !== workRequestId)
     throw new HttpError(404, "Input not found");
   const { context, spaceId } = await authorizeThreadAccess(
@@ -274,7 +274,7 @@ export async function handleUploadWorkRequestInput(
   );
   if (row.state === "uploaded" || row.state === "delivered")
     return json({ fileId, state: row.state });
-  if (!(await requestIsOpen(env.CONCLAVE_DB, workRequestId)))
+  if (!(await requestIsOpen(env.SYNTILA_DB, workRequestId)))
     throw new HttpError(409, "The request is no longer waiting for files");
   const upload = await readWorkRequestFileUpload(request);
   if (upload.body.byteLength !== row.sizeBytes)
@@ -288,7 +288,7 @@ export async function handleUploadWorkRequestInput(
     upload: { ...upload, mediaType: row.mediaType },
     workRequestId,
   });
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE work_request_inputs
         SET state = 'uploaded', content_digest = ?1, preview_text = ?2,
             preview_image = ?3, error_message = NULL,
@@ -319,7 +319,7 @@ async function failInput(
   row: WorkRequestInputRow,
   message: string,
 ): Promise<void> {
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE work_request_inputs
         SET state = 'failed', error_message = ?1, updated_at = ?2
       WHERE id = ?3 AND state <> 'delivered'`,
@@ -363,7 +363,7 @@ async function requireRuntime(request: Request, env: SecurityEnv) {
   if (!runtimeId || !credential)
     throw new HttpError(401, "Workspace runtime credentials are required");
   const runtime = await new WorkspaceRuntimeAuthenticator(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
   ).authenticateRuntime(runtimeId, credential);
   if (!runtime)
     throw new HttpError(401, "Workspace runtime credential is invalid");
@@ -376,7 +376,7 @@ async function runtimeRow(
   fileId: string,
 ): Promise<WorkRequestInputRow> {
   const workspaceId = await requireRuntime(request, env);
-  const row = await inputRow(env.CONCLAVE_DB, fileId);
+  const row = await inputRow(env.SYNTILA_DB, fileId);
   if (!row || row.workspaceId !== workspaceId)
     throw new HttpError(404, "Input not found");
   return row;
@@ -391,7 +391,7 @@ export async function handleListRuntimeInputs(
   env: SecurityEnv,
 ): Promise<Response> {
   const workspaceId = await requireRuntime(request, env);
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT i.id AS fileId, i.work_request_id AS workRequestId, i.name,
             i.size_bytes AS sizeBytes, i.content_digest AS contentDigest,
             i.delivery_attempts AS deliveryAttempts
@@ -421,7 +421,7 @@ export async function handleDownloadRuntimeInput(
   const row = await runtimeRow(request, env, fileId);
   if (row.state !== "uploaded" && row.state !== "delivered")
     throw new HttpError(409, "Input is not available");
-  const object = await env.CONCLAVE_ARTIFACTS?.get(workRequestFileKey(fileId));
+  const object = await env.SYNTILA_ARTIFACTS?.get(workRequestFileKey(fileId));
   if (
     !object ||
     object.size !== row.sizeBytes ||
@@ -454,7 +454,7 @@ export async function handleConfirmRuntimeInput(
   if (row.state === "delivered") return json({ fileId, state: "delivered" });
   if (row.state !== "uploaded" || body?.contentDigest !== row.contentDigest)
     throw new HttpError(409, "Input does not match the uploaded file");
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE work_request_inputs
         SET state = 'delivered', delivery_attempts = delivery_attempts + 1,
             error_message = NULL, updated_at = ?1
@@ -490,7 +490,7 @@ export async function handleReportRuntimeInputAttempt(
     );
     return json({ fileId, state: "failed" });
   }
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE work_request_inputs
         SET delivery_attempts = delivery_attempts + 1, error_message = ?1,
             updated_at = ?2

@@ -24,7 +24,7 @@ response contains only the public reference, status, diagnostic state, and
 timestamps.
 
 Support routes are protected by the configured
-`CONCLAVE_ISSUE_SUPPORT_USER_IDS` allowlist:
+`SYNTILA_ISSUE_SUPPORT_USER_IDS` allowlist:
 
 - `GET /api/admin/issue-reports`
 - `GET /api/admin/issue-reports/:id`

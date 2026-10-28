@@ -1,8 +1,8 @@
 import 'dart:async';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_realtime_cache_router.dart';
 
 void main() {
   late AxSyncEngine engine;

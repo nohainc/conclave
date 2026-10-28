@@ -28,7 +28,7 @@ export async function handleSetPin(
     );
     userId = context.userId;
     spaceId = targetId;
-    const member = await env.CONCLAVE_DB.prepare(
+    const member = await env.SYNTILA_DB.prepare(
       "SELECT 1 AS ok FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
     )
       .bind(targetId, userId)
@@ -47,14 +47,14 @@ export async function handleSetPin(
   }
   const pinnedAt = new Date().toISOString();
   const mutation = pinned
-    ? env.CONCLAVE_DB.prepare(
+    ? env.SYNTILA_DB.prepare(
         // A new pin goes to the top of the user's pins of that kind.
         `INSERT OR IGNORE INTO user_pins (user_id, kind, target_id, pinned_at, position)
          VALUES (?1, ?2, ?3, ?4,
            COALESCE((SELECT MIN(position) FROM user_pins
                       WHERE user_id = ?1 AND kind = ?2), 0) - 1)`,
       ).bind(userId, kind, targetId, pinnedAt)
-    : env.CONCLAVE_DB.prepare(
+    : env.SYNTILA_DB.prepare(
         `DELETE FROM user_pins WHERE user_id = ?1 AND kind = ?2 AND target_id = ?3`,
       ).bind(userId, kind, targetId);
   await publishCollaborationEvent(
@@ -105,14 +105,14 @@ export async function handleSetPinOrder(
     spaceId,
     accessContext,
   );
-  const member = await env.CONCLAVE_DB.prepare(
+  const member = await env.SYNTILA_DB.prepare(
     "SELECT 1 AS ok FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
     .bind(spaceId, context.userId)
     .first<{ ok: number }>();
   if (!member) throw new HttpError(404, "Space not found");
   const mutations = ids.map((id, index) =>
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE user_pins SET position = ?1
         WHERE user_id = ?2 AND kind = ?3 AND target_id = ?4`,
     ).bind(index, context.userId, kind, id),

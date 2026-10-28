@@ -7,7 +7,7 @@ import 'local_management_transport.dart';
 import 'windows_native.dart';
 export 'local_management_transport.dart' show workspaceManagerEndpoint;
 
-const workspaceManagerProtocolName = 'conclave.workspace-manager-ipc';
+const workspaceManagerProtocolName = 'syntila.workspace-manager-ipc';
 const workspaceManagerProtocolVersion = 1;
 const _maxFrameBytes = 1024 * 1024;
 const _handshakeTimeout = Duration(seconds: 5);

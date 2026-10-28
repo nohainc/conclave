@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import '../../ax/ax_people.dart';
 import '../../ax/ax_data.dart'
     show AxWorkflowWorkspaceDataSource, AxWorkflowWorkspaceSettings;
@@ -149,9 +149,9 @@ class _WorkspacesPageState extends State<WorkspacesPage>
               controller: tabs,
               isScrollable: true,
               tabAlignment: TabAlignment.center,
-              labelColor: ConclaveColors.primaryForeground(isDark),
-              unselectedLabelColor: ConclaveColors.textSecondary(isDark),
-              indicatorColor: ConclaveColors.primaryForeground(isDark),
+              labelColor: SyntilaColors.primaryForeground(isDark),
+              unselectedLabelColor: SyntilaColors.textSecondary(isDark),
+              indicatorColor: SyntilaColors.primaryForeground(isDark),
               dividerHeight: 0,
               tabs: [
                 for (final workspace in widget.workspaces)
@@ -287,10 +287,10 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 final confirmed = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    constraints: ConclaveDialogStyle.small,
+                    constraints: SyntilaDialogStyle.small,
                     title: Text('Unregister ${workspace.name}?'),
                     content: const Text(
-                      'This will disconnect and revoke the Workspace registration in Cloud. You can register it again at any time with conclave-workspace login.',
+                      'This will disconnect and revoke the Workspace registration in Cloud. You can register it again at any time with syntila-workspace login.',
                     ),
                     actions: [
                       TextButton(
@@ -488,7 +488,7 @@ class _WorkerCard extends StatelessWidget {
                             Icon(
                               Icons.check_circle_outline,
                               size: 16,
-                              color: ConclaveColors.successText(isDark),
+                              color: SyntilaColors.successText(isDark),
                             ),
                         ],
                       ),
@@ -558,9 +558,9 @@ class _StatusPill extends StatelessWidget {
       avatar: Icon(Icons.circle,
           size: 9,
           color: online
-              ? ConclaveColors.successText(
+              ? SyntilaColors.successText(
                   Theme.of(context).brightness == Brightness.dark)
-              : ConclaveColors.neutral),
+              : SyntilaColors.neutral),
       label: Text(_display(status)),
     );
   }
@@ -630,7 +630,7 @@ class _DefaultWorkspaceControlState extends State<_DefaultWorkspaceControl> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-              constraints: ConclaveDialogStyle.small,
+              constraints: SyntilaDialogStyle.small,
               title: const Text('Change default Workspace?'),
               content: Text(
                   'Spaces using the default Workspace, including new Spaces, will use ${widget.workspace.name}. Workflow overrides in inheriting Spaces are reset. Saved per-Workspace workflows and existing runs keep their settings.'),

@@ -150,7 +150,7 @@ it("supports fixed-model effort and filters unavailable CLI-version models", asy
 it("uses runtime models only for the exact authorized Profile and CLI version", async () => {
   const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
-  const { validateWorkerExecutionSelection } = await import("@conclave/core");
+  const { validateWorkerExecutionSelection } = await import("@syntila/core");
   const payload = JSON.stringify({
     session: { supported: true },
     model: {
@@ -256,7 +256,7 @@ it("uses runtime models only for the exact authorized Profile and CLI version", 
 it("publishes the same v2 contract for separate and combined Profiles without private fields", async () => {
   const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
-  const { validateWorkerExecutionSelection } = await import("@conclave/core");
+  const { validateWorkerExecutionSelection } = await import("@syntila/core");
   for (const selectionMode of ["separate", "combined"] as const) {
     const digest = "c".repeat(64);
     const payload = JSON.stringify({
@@ -628,7 +628,7 @@ it("publishes the v2 catalog effort matrix without reconstructing provider suppo
 it("allows provider Auto with a matching empty catalog but rejects missing or mismatched discovery", async () => {
   const { spaceWorkerExecutionOptions } =
     await import("../src/worker-execution-options.js");
-  const { validateWorkerExecutionSelection } = await import("@conclave/core");
+  const { validateWorkerExecutionSelection } = await import("@syntila/core");
   const payload = JSON.stringify({
     model: {
       supported: true,

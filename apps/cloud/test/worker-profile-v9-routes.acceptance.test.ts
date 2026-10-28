@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { DESKTOP_PROFILE_LAB_AUDIENCE } from "@conclave/security";
+import { DESKTOP_PROFILE_LAB_AUDIENCE } from "@syntila/security";
 import { routeHandlers } from "../src/index.js";
 import {
   validateWorkerProfileCandidate,
@@ -84,10 +84,10 @@ function setup() {
     );
 
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
-    CONCLAVE_PROFILE_ADMIN_USER_IDS: "profile-lab",
-    CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS: "profile-lab",
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
+    SYNTILA_PROFILE_ADMIN_USER_IDS: "profile-lab",
+    SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS: "profile-lab",
     TEST_AUTHENTICATION: async () => ({
       userId: "profile-lab",
       user: {
@@ -118,7 +118,7 @@ async function send(
   body?: unknown,
 ): Promise<{ response: Response; body: Record<string, unknown> }> {
   const response = await routeWorkerRequest(
-    new Request(`https://conclave.test${path}`, {
+    new Request(`https://syntila.test${path}`, {
       method,
       headers: body === undefined ? {} : { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),

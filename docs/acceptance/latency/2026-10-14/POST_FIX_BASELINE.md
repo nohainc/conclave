@@ -58,7 +58,7 @@ not by the number of decimal places printed.
 node scripts/latency-baseline.mjs \
   --cloud docs/acceptance/latency/2026-10-14/post-fix-cloud.jsonl \
   --service docs/acceptance/latency/2026-10-14/post-fix-service.jsonl \
-  --json /tmp/conclave-post-fix-baseline.json
+  --json /tmp/syntila-post-fix-baseline.json
 ```
 
 - [Request IDs, labels and completed statuses](post-fix-requests.json)

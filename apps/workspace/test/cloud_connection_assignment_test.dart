@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_protocol/workspace_runtime_protocol.dart'
+import 'package:syntila_protocol/workspace_runtime_protocol.dart'
     show workspaceRuntimeProtocolVersion;
-import 'package:conclave_workspace/assignment_journal.dart';
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart'
+import 'package:syntila_workspace/assignment_journal.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart'
     show CliWorkerEngineProbeException;
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/worker_diagnostic_store.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/worker_diagnostic_store.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:test/test.dart';
 
@@ -42,7 +42,7 @@ void main() {
 
     await connection.connect();
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -88,7 +88,7 @@ void main() {
     await completeHandshake(connection, socket);
 
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -104,7 +104,7 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'workerId': 'conclave.echo',
+        'workerId': 'syntila.echo',
         'engineVersion': '1.0.0',
         'profileDefinitionId': 'chatgpt-codex',
         'profileReleaseVersion': 1,
@@ -158,7 +158,7 @@ void main() {
       unawaited(connection.connect());
       async.flushMicrotasks();
       socket.controller.add(jsonEncode({
-        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocol': 'syntila.workspace-runtime-protocol',
         'protocolVersion': workspaceRuntimeProtocolVersion,
         'messageId': 'test-hello-ack',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -167,7 +167,7 @@ void main() {
       }));
       async.flushMicrotasks();
       socket.controller.add(jsonEncode({
-        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocol': 'syntila.workspace-runtime-protocol',
         'protocolVersion': workspaceRuntimeProtocolVersion,
         'messageId': 'test-sync-result',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -178,7 +178,7 @@ void main() {
       expect(connection.connectionStage, WorkspaceConnectionStage.ready);
 
       socket.controller.add(jsonEncode({
-        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocol': 'syntila.workspace-runtime-protocol',
         'protocolVersion': workspaceRuntimeProtocolVersion,
         'messageId': 'server-assignment-timeout',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -243,7 +243,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-normalized-engine-error',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -302,7 +302,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'engine-provider-error',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -376,7 +376,7 @@ void main() {
     await completeHandshake(connection, socket);
     connection.beginDrain();
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-paused',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -431,7 +431,7 @@ void main() {
     await completeHandshake(connection, socket);
 
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-empty-work-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -491,7 +491,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -507,7 +507,7 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'workerId': 'conclave.echo',
+        'workerId': 'syntila.echo',
         'engineVersion': '1.0.0',
         'profileDefinitionId': 'chatgpt-codex',
         'profileReleaseVersion': 1,
@@ -535,7 +535,7 @@ void main() {
     // Until Cloud acknowledges, delivery keeps being retried.
     await waitFor(() => results() >= 2);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'terminal-ack-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -560,7 +560,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 85));
     final settled = results();
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'redelivery-settled-probe',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -613,7 +613,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, first);
     first.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -629,7 +629,7 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'workerId': 'conclave.echo',
+        'workerId': 'syntila.echo',
         'engineVersion': '1.0.0',
         'profileDefinitionId': 'chatgpt-codex',
         'profileReleaseVersion': 1,
@@ -691,7 +691,7 @@ void main() {
     );
     await connection.connect();
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -700,7 +700,7 @@ void main() {
     }));
     await Future<void>.delayed(const Duration(milliseconds: 10));
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-sync-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -728,7 +728,7 @@ void main() {
         ((replay['payload'] as Map<String, dynamic>)['output'] as Map)['text'],
         'saved output');
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'terminal-ack-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -764,7 +764,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-2',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -804,7 +804,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-3',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -817,7 +817,7 @@ void main() {
       'attemptId': 'attempt-1',
       'assignmentId': 'assignment-3',
       'idempotencyKey': 'idem-3',
-      'payload': {'workerId': 'conclave.echo'},
+      'payload': {'workerId': 'syntila.echo'},
     }));
     await Future<void>.delayed(const Duration(milliseconds: 10));
     final error = socket.sent
@@ -850,7 +850,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-3',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -908,7 +908,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-3',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -976,7 +976,7 @@ void main() {
     await completeHandshake(connection, socket);
 
     Map<String, Object?> assignment() => {
-          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocol': 'syntila.workspace-runtime-protocol',
           'protocolVersion': workspaceRuntimeProtocolVersion,
           'messageId': 'server-replay-${executions + 1}',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -992,7 +992,7 @@ void main() {
           'payload': {
             'objective': 'inspect',
             'role': 'research',
-            'workerId': 'conclave.echo',
+            'workerId': 'syntila.echo',
             'engineVersion': '1.0.0',
             'profileDefinitionId': 'chatgpt-codex',
             'profileReleaseVersion': 1,
@@ -1054,7 +1054,7 @@ void main() {
     await completeHandshake(connection, socket);
 
     final assignment = <String, Object?>{
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-running-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1070,7 +1070,7 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'workerId': 'conclave.echo',
+        'workerId': 'syntila.echo',
         'engineVersion': '1.0.0',
         'profileDefinitionId': 'chatgpt-codex',
         'profileReleaseVersion': 1,
@@ -1128,7 +1128,7 @@ void main() {
     await connection.connect();
     await completeHandshake(connection, socket);
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'cancel-1',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1155,7 +1155,7 @@ void main() {
 
   group('assignments received while synchronizing', () {
     Map<String, Object?> startMessage(String assignmentId) => {
-          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocol': 'syntila.workspace-runtime-protocol',
           'protocolVersion': workspaceRuntimeProtocolVersion,
           'messageId': 'start-$assignmentId',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1171,7 +1171,7 @@ void main() {
           'payload': {
             'objective': 'inspect',
             'role': 'research',
-            'workerId': 'conclave.echo',
+            'workerId': 'syntila.echo',
             'engineVersion': '1.0.0',
             'profileDefinitionId': 'chatgpt-codex',
             'profileReleaseVersion': 1,
@@ -1239,7 +1239,7 @@ void main() {
         },
       );
       socket.controller.add(jsonEncode({
-        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocol': 'syntila.workspace-runtime-protocol',
         'protocolVersion': workspaceRuntimeProtocolVersion,
         'messageId': 'buffered-settled-probe',
         'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1272,7 +1272,7 @@ void main() {
           (jsonDecode(m as String) as Map<String, dynamic>)['type'] ==
           'workspace.hello'));
       socket.controller.add(jsonEncode({
-        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocol': 'syntila.workspace-runtime-protocol',
         'protocolVersion': workspaceRuntimeProtocolVersion,
         'messageId': 'hello-ack',
         'correlationId': hello()['messageId'],
@@ -1322,7 +1322,7 @@ void main() {
     await completeHandshake(connection, socket);
 
     socket.controller.add(jsonEncode({
-      'protocol': 'conclave.workspace-runtime-protocol',
+      'protocol': 'syntila.workspace-runtime-protocol',
       'protocolVersion': workspaceRuntimeProtocolVersion,
       'messageId': 'server-assignment-trace',
       'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1338,7 +1338,7 @@ void main() {
       'payload': {
         'objective': 'inspect',
         'role': 'research',
-        'workerId': 'conclave.echo',
+        'workerId': 'syntila.echo',
         'engineVersion': '1.0.0',
         'profileDefinitionId': 'chatgpt-codex',
         'profileReleaseVersion': 1,
@@ -1383,7 +1383,7 @@ void main() {
 
   group('live assignment convergence', () {
     Map<String, dynamic> assignmentStart() => {
-          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocol': 'syntila.workspace-runtime-protocol',
           'protocolVersion': workspaceRuntimeProtocolVersion,
           'messageId': 'server-assignment-live',
           'timestamp': DateTime.now().toUtc().toIso8601String(),
@@ -1399,7 +1399,7 @@ void main() {
           'payload': {
             'objective': 'inspect',
             'role': 'research',
-            'workerId': 'conclave.echo',
+            'workerId': 'syntila.echo',
             'engineVersion': '1.0.0',
             'profileDefinitionId': 'chatgpt-codex',
             'profileReleaseVersion': 1,
@@ -1417,7 +1417,7 @@ void main() {
             .toList();
 
     Map<String, dynamic> syncStates(String syncRequestId, String status) => {
-          'protocol': 'conclave.workspace-runtime-protocol',
+          'protocol': 'syntila.workspace-runtime-protocol',
           'protocolVersion': workspaceRuntimeProtocolVersion,
           'messageId': 'server-sync-$status',
           'correlationId': syncRequestId,
@@ -1538,7 +1538,7 @@ void main() {
       live.socket.controller
           .add(jsonEncode(syncStates(live.syncRequestId, 'running')));
       live.socket.controller.add(jsonEncode({
-        'protocol': 'conclave.workspace-runtime-protocol',
+        'protocol': 'syntila.workspace-runtime-protocol',
         'protocolVersion': workspaceRuntimeProtocolVersion,
         'messageId': 'sync-running-settled-probe',
         'timestamp': DateTime.now().toUtc().toIso8601String(),

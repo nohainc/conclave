@@ -61,8 +61,8 @@ async function seed(status: string, permitRequired = true) {
   const permit = () => grantStartPermit(f.db as never, fence, NOW);
   /** A Gateway whose Workspace is unreachable. */
   const offline = {
-    CONCLAVE_DB: f.db as never,
-    CONCLAVE_WORKSPACE_GATEWAY: {
+    SYNTILA_DB: f.db as never,
+    SYNTILA_WORKSPACE_GATEWAY: {
       idFromName: (name: string) => name,
       get: () => ({
         fetch: async () =>

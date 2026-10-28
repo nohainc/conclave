@@ -10,8 +10,8 @@ Release tagged `workspace-windows-v<version>`.
 Signing is done by [`scripts/sign-workspace-windows.ps1`](../../scripts/sign-workspace-windows.ps1).
 Every signature uses SHA-256 and an RFC 3161 timestamp, and is verified with
 `signtool verify /pa` and `Get-AuthenticodeSignature` before packaging and again
-on the installer. The headless bundle contains `conclave-workspace.exe` and
-`assets/engines/conclave-agent.exe`; both are signed before packaging.
+on the installer. The headless bundle contains `syntila-workspace.exe` and
+`assets/engines/syntila-agent.exe`; both are signed before packaging.
 
 ## One-time setup
 
@@ -32,24 +32,24 @@ on the installer. The headless bundle contains `conclave-workspace.exe` and
 
    | Kind | Name | Value |
    | --- | --- | --- |
-   | variable | `CONCLAVE_WINDOWS_SIGNING` | `azure` or `pfx` |
-   | variable | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | production public trust roots (repository variable, as for macOS) |
-   | variable (azure) | `CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT` | regional endpoint, e.g. `https://eus.codesigning.azure.net` |
-   | variable (azure) | `CONCLAVE_WINDOWS_TRUSTED_SIGNING_ACCOUNT` | Trusted Signing account name |
-   | variable (azure) | `CONCLAVE_WINDOWS_TRUSTED_SIGNING_PROFILE` | certificate profile name |
-   | variable (azure, optional) | `CONCLAVE_WINDOWS_TRUSTED_SIGNING_CLIENT_VERSION` | `Microsoft.Trusted.Signing.Client` NuGet version (default `1.0.53`) |
-   | secret (azure) | `CONCLAVE_WINDOWS_AZURE_TENANT_ID` | Entra tenant ID |
-   | secret (azure) | `CONCLAVE_WINDOWS_AZURE_CLIENT_ID` | app registration client ID |
-   | secret (azure) | `CONCLAVE_WINDOWS_AZURE_CLIENT_SECRET` | app registration secret |
-   | secret (pfx) | `CONCLAVE_WINDOWS_CERTIFICATE_PFX` | base64 of the `.pfx` (`base64 -i cert.pfx`) |
-   | secret (pfx) | `CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD` | PFX password |
-   | variable (pfx, optional) | `CONCLAVE_WINDOWS_TIMESTAMP_URL` | RFC 3161 server (default DigiCert) |
+   | variable | `SYNTILA_WINDOWS_SIGNING` | `azure` or `pfx` |
+   | variable | `SYNTILA_RELEASE_TRUST_KEYS_JSON` | production public trust roots (repository variable, as for macOS) |
+   | variable (azure) | `SYNTILA_WINDOWS_TRUSTED_SIGNING_ENDPOINT` | regional endpoint, e.g. `https://eus.codesigning.azure.net` |
+   | variable (azure) | `SYNTILA_WINDOWS_TRUSTED_SIGNING_ACCOUNT` | Trusted Signing account name |
+   | variable (azure) | `SYNTILA_WINDOWS_TRUSTED_SIGNING_PROFILE` | certificate profile name |
+   | variable (azure, optional) | `SYNTILA_WINDOWS_TRUSTED_SIGNING_CLIENT_VERSION` | `Microsoft.Trusted.Signing.Client` NuGet version (default `1.0.53`) |
+   | secret (azure) | `SYNTILA_WINDOWS_AZURE_TENANT_ID` | Entra tenant ID |
+   | secret (azure) | `SYNTILA_WINDOWS_AZURE_CLIENT_ID` | app registration client ID |
+   | secret (azure) | `SYNTILA_WINDOWS_AZURE_CLIENT_SECRET` | app registration secret |
+   | secret (pfx) | `SYNTILA_WINDOWS_CERTIFICATE_PFX` | base64 of the `.pfx` (`base64 -i cert.pfx`) |
+   | secret (pfx) | `SYNTILA_WINDOWS_CERTIFICATE_PASSWORD` | PFX password |
+   | variable (pfx, optional) | `SYNTILA_WINDOWS_TIMESTAMP_URL` | RFC 3161 server (default DigiCert) |
 
 ## Selected backend: Azure Artifact Signing Basic
 
 Artifact Signing is Microsoft's current name for Trusted Signing. Syntila's
-existing `CONCLAVE_WINDOWS_TRUSTED_SIGNING_*` variable names remain unchanged.
-The GitHub environment selects `CONCLAVE_WINDOWS_SIGNING=azure`.
+existing `SYNTILA_WINDOWS_TRUSTED_SIGNING_*` variable names remain unchanged.
+The GitHub environment selects `SYNTILA_WINDOWS_SIGNING=azure`.
 
 ### First activation
 
@@ -63,8 +63,8 @@ The GitHub environment selects `CONCLAVE_WINDOWS_SIGNING=azure`.
 3. In Azure Portal, open Subscriptions → your subscription → Resource providers
    and register `Microsoft.CodeSigning`.
 4. Create an **Artifact Signing Account**, selecting **Basic** and an available
-   region. Suggested resource group: `conclave-signing`; suggested account name:
-   `conclavesigning` (subject to availability). Record the actual account name
+   region. Suggested resource group: `syntila-signing`; suggested account name:
+   `syntilasigning` (subject to availability). Record the actual account name
    and regional endpoint shown by Azure.
 5. In the account's Access control (IAM), assign your onboarding user the
    **Artifact Signing Identity Verifier** role if needed. Submit an
@@ -114,7 +114,7 @@ and [Basic pricing](https://learn.microsoft.com/en-us/azure/artifact-signing/how
    (`X.Y.Z`; prerelease versions are not packaged) and push to `main`.
 2. Wait for CI on that commit to succeed.
 3. Dry run: dispatch **Release Windows Workspace** from `main` with the version
-   and `publish` unchecked. Download the `conclave-workspace-windows-x64-release`
+   and `publish` unchecked. Download the `syntila-workspace-windows-x64-release`
    artifact and qualify it on a real Windows 10/11 x64 device (see below).
 4. Publish: dispatch again with `publish` checked. The workflow requires the
    CI gate, rebuilds and re-signs, and creates the GitHub Release. Existing tags
@@ -124,12 +124,12 @@ and [Basic pricing](https://learn.microsoft.com/en-us/azure/artifact-signing/how
 
 - Right-click Setup.exe → Properties → Digital Signatures shows the Syntila
   publisher with a timestamp; `Get-AuthenticodeSignature` reports `Valid` for
-  Setup.exe, `conclave-workspace.exe` and the Engine.
+  Setup.exe, `syntila-workspace.exe` and the Engine.
 - The installer UAC/SmartScreen prompt names the publisher (no "Unknown
   publisher").
 - Sign-in, registration, service install/start, a real provider assignment,
   logon/reboot recovery, upgrade over the previous version and uninstall
-  (`conclave-workspace service uninstall` first) all work; see
+  (`syntila-workspace service uninstall` first) all work; see
   [the installer notes](../operations/WORKSPACE_WINDOWS_INSTALLER.md).
 - Run `sha256sum -c SHA256SUMS` against the downloaded release assets.
 
@@ -151,7 +151,7 @@ through GitHub Settings → Environments → workspace-windows-release; never
 commit certificates or secrets. Windows packaging uses the unified Dart CLI
 and `run` service command, without a Flutter UI or a second service executable.
 The installer does not automatically register or start the service. After
-installation, run `conclave-workspace.exe service install` and `setup` from
+installation, run `syntila-workspace.exe service install` and `setup` from
 PowerShell in the installation directory. No runtime-state migration is added.
 
 The pinned Trusted Signing client `1.0.53` was confirmed in the official NuGet

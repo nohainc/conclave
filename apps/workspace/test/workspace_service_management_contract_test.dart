@@ -1,4 +1,4 @@
-import 'package:conclave_workspace/workspace_background_service.dart';
+import 'package:syntila_workspace/workspace_background_service.dart';
 import 'package:test/test.dart';
 
 void main() {

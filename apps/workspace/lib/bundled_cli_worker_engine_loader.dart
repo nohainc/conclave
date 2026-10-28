@@ -15,8 +15,8 @@ Future<File?> loadBundledCliWorkerEngine({
 }) async {
   final runtime = platform ?? currentPlatformRuntime;
   final engineName = Platform.isWindows
-      ? 'assets/engines/conclave-agent.exe'
-      : 'assets/engines/conclave-agent';
+      ? 'assets/engines/syntila-agent.exe'
+      : 'assets/engines/syntila-agent';
   try {
     final bytes = await (assetLoader ?? _loadDefaultEngineAsset)(engineName);
     if (bytes == null) return null;
@@ -30,7 +30,7 @@ Future<File?> loadBundledCliWorkerEngine({
     await runtime.restrictPermissions(versionDirectory.path, directory: true);
     final executable = File(
       '${versionDirectory.path}${Platform.pathSeparator}'
-      '${Platform.isWindows ? 'conclave-agent.exe' : 'conclave-agent'}',
+      '${Platform.isWindows ? 'syntila-agent.exe' : 'syntila-agent'}',
     );
     var cacheMatchesBundle = false;
     if (await executable.exists()) {
@@ -63,7 +63,7 @@ Future<List<int>?> _loadDefaultEngineAsset(String assetName) async {
 }
 
 Directory? _defaultBundleDirectory() {
-  final configured = Platform.environment['CONCLAVE_WORKSPACE_BUNDLE_DIR'];
+  final configured = Platform.environment['SYNTILA_WORKSPACE_BUNDLE_DIR'];
   if (configured != null && configured.trim().isNotEmpty) {
     return Directory(configured);
   }
@@ -80,9 +80,9 @@ Directory? _defaultBundleDirectory() {
   ];
   for (final directory in candidates) {
     final exeSuffix = Platform.isWindows ? '.exe' : '';
-    if (File('${directory.path}/assets/engines/conclave-agent$exeSuffix')
+    if (File('${directory.path}/assets/engines/syntila-agent$exeSuffix')
             .existsSync() ||
-        File('${directory.path}/assets/engines/conclave_cli_worker_engine$exeSuffix')
+        File('${directory.path}/assets/engines/syntila_cli_worker_engine$exeSuffix')
             .existsSync()) {
       return directory;
     }

@@ -22,7 +22,7 @@ export function convertWorkspaceThreadMarkers(root, { apply = false } = {}) {
       if (!thread.isDirectory() || thread.isSymbolicLink()) continue;
       const directory = join(root, space.name, thread.name);
       const entries = readdirSync(directory);
-      const oldName = ".conclave-workstream.json";
+      const oldName = ".syntila-workstream.json";
       if (!entries.includes(oldName)) continue;
       const source = join(directory, oldName);
       if (!lstatSync(source).isFile() || lstatSync(source).isSymbolicLink())

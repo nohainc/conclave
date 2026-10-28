@@ -100,7 +100,7 @@ Workspace translates between runtime messages and Local Worker Protocol 4.1
 frames.
 
 The current implementation is named
-`conclave.workspace-runtime-protocol` and is defined in
+`syntila.workspace-runtime-protocol` and is defined in
 `packages/workspace-runtime-protocol/src/workspace-runtime.ts`. Keep its runtime identity,
 authentication, transport negotiation, and assignment envelopes inside this
 boundary.
@@ -216,13 +216,13 @@ unchanged across a boundary.
   `apps/workspace/lib/cli_worker_engine_supervisor.dart`, assignment handler
   `apps/workspace/lib/worker_executor.dart`, generic Engine
   `engines/cli_worker/lib/src/cli_worker_engine.dart`, and shared schema
-  `packages/conclave_worker_protocol`.
+  `packages/syntila_worker_protocol`.
 - Canonical domain model: domain entities in `packages/core/src` and the
   canonical vocabulary in this document; wire validators remain protocol-owned.
 
 Protocol binding generation covers the product envelope, Cloud Workspace
 message metadata, and realtime event metadata. It does not generate Local
-Worker Protocol bindings: `packages/conclave_worker_protocol` is the single
+Worker Protocol bindings: `packages/syntila_worker_protocol` is the single
 source for Worker Protocol 4.1 models and validation.
 
 Discussion reads use the [versioned paging contract](../specifications/DISCUSSION_PAGING.md). AX retains shared cached history across page disposal,

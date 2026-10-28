@@ -34,8 +34,8 @@ function grantEnv(
 ) {
   const commands: Record<string, unknown>[] = [];
   const env = {
-    CONCLAVE_DB: f.db,
-    CONCLAVE_ENVIRONMENT: "development",
+    SYNTILA_DB: f.db,
+    SYNTILA_ENVIRONMENT: "development",
     TEST_AUTHENTICATION: async () => ({
       userId: "U",
       user: { id: "U", email: "u@test", displayName: "User", status: "active" },
@@ -43,7 +43,7 @@ function grantEnv(
       sessionId: "test",
       clientType: "web",
     }),
-    CONCLAVE_WORKSPACE_GATEWAY: {
+    SYNTILA_WORKSPACE_GATEWAY: {
       idFromName: (name: string) => name,
       get: () => ({
         fetch: async (_url: string, init: RequestInit) => {
@@ -69,7 +69,7 @@ describe("grant revocation ownership", () => {
       const g = grantEnv(f);
       const env = {
         ...g.env,
-        CONCLAVE_WORKSPACE_GATEWAY: {
+        SYNTILA_WORKSPACE_GATEWAY: {
           idFromName: (name: string) => name,
           get: () => ({
             fetch: async () => {

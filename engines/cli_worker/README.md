@@ -9,7 +9,7 @@ canonical Tool Profile v1 schema admission before launch.
 For local development, launch with absolute paths:
 
 ~~~sh
-dart run bin/conclave_cli_worker.dart \
+dart run bin/syntila_cli_worker.dart \
   --profile /absolute/path/to/profile.v1.json \
   --engine-version 1.3.1 \
   --state-directory /absolute/path/to/worker-state

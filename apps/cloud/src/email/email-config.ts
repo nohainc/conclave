@@ -1,4 +1,4 @@
-const DEFAULT_PRIMARY_SENDER = "conclave@conclaveax.com";
+const DEFAULT_PRIMARY_SENDER = "syntila@conclaveax.com";
 const DEFAULT_FALLBACK_SENDER = "vitalii@conclaveax.com";
 const DEFAULT_DISPLAY_NAME = "Syntila";
 const LEGACY_SENDER = "auth@auth.earthuc.com";
@@ -47,10 +47,10 @@ const SERVICE_UNAVAILABLE_CODES = new Set([
 ]);
 
 export interface EmailSenderEnvironment {
-  readonly CONCLAVE_EMAIL?: EmailTransport;
-  readonly CONCLAVE_EMAIL_FROM?: string;
-  readonly CONCLAVE_EMAIL_FALLBACK_FROM?: string;
-  readonly CONCLAVE_EMAIL_FROM_NAME?: string;
+  readonly SYNTILA_EMAIL?: EmailTransport;
+  readonly SYNTILA_EMAIL_FROM?: string;
+  readonly SYNTILA_EMAIL_FALLBACK_FROM?: string;
+  readonly SYNTILA_EMAIL_FROM_NAME?: string;
 }
 
 export interface EmailTransportMessage {
@@ -152,30 +152,30 @@ export function resolveEmailSenderConfig(
 ): EmailSenderConfig {
   const primary = validateSenderAddress(
     configuredValue(
-      env.CONCLAVE_EMAIL_FROM,
+      env.SYNTILA_EMAIL_FROM,
       DEFAULT_PRIMARY_SENDER,
-      "CONCLAVE_EMAIL_FROM",
+      "SYNTILA_EMAIL_FROM",
     ),
-    "CONCLAVE_EMAIL_FROM",
+    "SYNTILA_EMAIL_FROM",
   );
   const fallback = validateSenderAddress(
     configuredValue(
-      env.CONCLAVE_EMAIL_FALLBACK_FROM,
+      env.SYNTILA_EMAIL_FALLBACK_FROM,
       DEFAULT_FALLBACK_SENDER,
-      "CONCLAVE_EMAIL_FALLBACK_FROM",
+      "SYNTILA_EMAIL_FALLBACK_FROM",
     ),
-    "CONCLAVE_EMAIL_FALLBACK_FROM",
+    "SYNTILA_EMAIL_FALLBACK_FROM",
   );
   if (primary === fallback) {
     throw new Error(
-      "CONCLAVE_EMAIL_FROM and CONCLAVE_EMAIL_FALLBACK_FROM must differ",
+      "SYNTILA_EMAIL_FROM and SYNTILA_EMAIL_FALLBACK_FROM must differ",
     );
   }
 
   const displayName = configuredValue(
-    env.CONCLAVE_EMAIL_FROM_NAME,
+    env.SYNTILA_EMAIL_FROM_NAME,
     DEFAULT_DISPLAY_NAME,
-    "CONCLAVE_EMAIL_FROM_NAME",
+    "SYNTILA_EMAIL_FROM_NAME",
   );
   return { primary, fallback, displayName };
 }
@@ -262,10 +262,10 @@ export async function sendConfiguredEmail(
   env: EmailSenderEnvironment,
   message: OutgoingEmail,
 ): Promise<EmailDeliveryResult> {
-  if (!env.CONCLAVE_EMAIL) {
+  if (!env.SYNTILA_EMAIL) {
     throw new EmailDeliveryError(
       "configuration_error",
-      "CONCLAVE_EMAIL is required to send email",
+      "SYNTILA_EMAIL is required to send email",
     );
   }
 
@@ -283,7 +283,7 @@ export async function sendConfiguredEmail(
     );
   }
   const send = (sender: string) =>
-    env.CONCLAVE_EMAIL!.send({
+    env.SYNTILA_EMAIL!.send({
       to: recipient,
       from: { email: sender, name: config.displayName },
       subject: message.subject,

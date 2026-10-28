@@ -92,7 +92,7 @@ describe("v8 Workspace inventory recovery", () => {
 
     const gateway = new WorkspaceGateway(
       {} as never,
-      { CONCLAVE_DB: new LocalD1(database) } as never,
+      { SYNTILA_DB: new LocalD1(database) } as never,
     );
     const internal = gateway as unknown as {
       executionWorkspaceId: string;
@@ -262,7 +262,7 @@ describe("v8 Workspace inventory recovery", () => {
     `);
     const gateway = new WorkspaceGateway(
       {} as never,
-      { CONCLAVE_DB: new LocalD1(database) } as never,
+      { SYNTILA_DB: new LocalD1(database) } as never,
     );
     const internal = gateway as unknown as {
       executionWorkspaceId: string;

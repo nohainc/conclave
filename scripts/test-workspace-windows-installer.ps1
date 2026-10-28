@@ -2,7 +2,7 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Root = Split-Path $PSScriptRoot -Parent
-$Installer = @(Get-ChildItem (Join-Path $Root 'dist/conclave-workspace/installer/*Setup.exe'))
+$Installer = @(Get-ChildItem (Join-Path $Root 'dist/syntila-workspace/installer/*Setup.exe'))
 if ($Installer.Count -ne 1) { throw 'Expected exactly one installer.' }
 $Target = Join-Path $env:LOCALAPPDATA 'Programs/Syntila/Workspace-Installer-Test'
 function Run-Setup {
@@ -14,27 +14,27 @@ New-Item -ItemType Directory -Force (Split-Path $State -Parent) | Out-Null
 $Sentinel = [guid]::NewGuid().ToString()
 Set-Content $State $Sentinel
 Run-Setup
-$Engine = 'assets/engines/conclave-agent.exe'
-foreach ($File in @('conclave-workspace.exe', $Engine)) {
+$Engine = 'assets/engines/syntila-agent.exe'
+foreach ($File in @('syntila-workspace.exe', $Engine)) {
     if ((Get-FileHash (Join-Path $Target $File)).Hash -ne
-        (Get-FileHash (Join-Path $Root "dist/conclave-workspace/windows/release/$File")).Hash) {
+        (Get-FileHash (Join-Path $Root "dist/syntila-workspace/windows/release/$File")).Hash) {
         throw "Installed file mismatch: $File"
     }
 }
-$PreviousService = $env:CONCLAVE_TEST_WINDOWS_SERVICE
+$PreviousService = $env:SYNTILA_TEST_WINDOWS_SERVICE
 Push-Location (Join-Path $Root 'apps/workspace')
 try {
-    $env:CONCLAVE_TEST_WINDOWS_SERVICE = Join-Path $Target 'conclave-workspace.exe'
+    $env:SYNTILA_TEST_WINDOWS_SERVICE = Join-Path $Target 'syntila-workspace.exe'
     dart test test/windows_service_lifecycle_test.dart
     if ($LASTEXITCODE -ne 0) { throw 'Installed service lifecycle test failed.' }
 } finally {
-    $env:CONCLAVE_TEST_WINDOWS_SERVICE = $PreviousService
+    $env:SYNTILA_TEST_WINDOWS_SERVICE = $PreviousService
     Pop-Location
 }
 # Repeat installation to exercise the stable AppId upgrade path.
 Run-Setup
 $TestData = Join-Path $env:RUNNER_TEMP ('workspace-installer-' + [guid]::NewGuid())
-$App = Start-Process (Join-Path $Target 'conclave-workspace.exe') -ArgumentList @('run', '--data-dir', "`"$TestData`"") -WorkingDirectory $Target -PassThru
+$App = Start-Process (Join-Path $Target 'syntila-workspace.exe') -ArgumentList @('run', '--data-dir', "`"$TestData`"") -WorkingDirectory $Target -PassThru
 try {
     Start-Sleep -Seconds 8
     $App.Refresh()
@@ -44,13 +44,13 @@ try {
 } finally {
     if (-not $App.HasExited) { Stop-Process -Id $App.Id -Force; $App.WaitForExit() }
 }
-if ($env:CONCLAVE_WINDOWS_SIGNING) {
+if ($env:SYNTILA_WINDOWS_SIGNING) {
     & (Join-Path $PSScriptRoot 'sign-workspace-windows.ps1') (Join-Path $Target 'unins000.exe') -VerifyOnly
 }
 $Uninstall = Start-Process (Join-Path $Target 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -Wait -PassThru
 if ($Uninstall.ExitCode -ne 0) { throw "Uninstall failed: $($Uninstall.ExitCode)" }
 Remove-Item $TestData -Recurse -Force -ErrorAction SilentlyContinue
-if (Test-Path (Join-Path $Target 'conclave-workspace.exe')) { throw 'Uninstall left the app executable.' }
+if (Test-Path (Join-Path $Target 'syntila-workspace.exe')) { throw 'Uninstall left the app executable.' }
 
 if ((Get-Content $State -Raw).Trim() -ne $Sentinel) { throw 'Installer changed runtime state.' }
 Remove-Item $State

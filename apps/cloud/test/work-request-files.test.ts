@@ -56,7 +56,7 @@ describe("Work Request files", () => {
       userId: "user-1",
       digest: "sha256:x",
     });
-    const env = { CONCLAVE_ARTIFACTS: bucket } as never;
+    const env = { SYNTILA_ARTIFACTS: bucket } as never;
     const size = 10 * 1024 * 1024;
     await expect(
       verifyWorkRequestFile(env, fileId, "thread-1", "user-1", size),

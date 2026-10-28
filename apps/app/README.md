@@ -12,7 +12,7 @@ including when Cloud returns an absolute URL behind a web proxy. A successful
 upload displays the selected bytes immediately while the stored image is read
 back; read failures are reported without clearing that preview.
 
-AX's shared `ConclaveMarkdownBody` renders authored content as explicit GitHub
+AX's shared `SyntilaMarkdownBody` renders authored content as explicit GitHub
 Flavored Markdown with selectable text and soft line breaks. Its theme-derived
 style sheet covers headings, emphasis, code, quotes, lists, read-only task lists,
 tables, links and rules. HTML is not rendered. Source stays an ordinary Markdown

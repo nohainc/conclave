@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 
 import 'composer_metrics.dart';
 
@@ -74,7 +74,7 @@ class _EmojiPickerButtonState extends State<EmojiPickerButton> {
   @override
   Widget build(BuildContext context) => MenuAnchor(
         controller: _menu,
-        style: ConclaveMenuStyle.surface(
+        style: SyntilaMenuStyle.surface(
             Theme.of(context).brightness == Brightness.dark,
             composer: true),
         alignmentOffset: const Offset(0, 4),

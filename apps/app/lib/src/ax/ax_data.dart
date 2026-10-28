@@ -54,8 +54,8 @@ abstract class _AxApiClientCore
     implements AxDataSource, AxConditionalReadCache {
   _AxApiClientCore({String? baseUrl, http.Client? client})
       : baseUrl = baseUrl ??
-            (const String.fromEnvironment('CONCLAVE_API_URL').isNotEmpty
-                ? const String.fromEnvironment('CONCLAVE_API_URL')
+            (const String.fromEnvironment('SYNTILA_API_URL').isNotEmpty
+                ? const String.fromEnvironment('SYNTILA_API_URL')
                 : platform.defaultAxApiBaseUrl()),
         client = client ?? platform.createPlatformHttpClient();
 

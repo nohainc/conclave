@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter/foundation.dart';
 
 import '../bundled_cli_worker_engine_loader.dart';

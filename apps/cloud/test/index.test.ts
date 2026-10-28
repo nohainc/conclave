@@ -24,7 +24,7 @@ const identityDb = {
 };
 
 const env = {
-  CONCLAVE_ENVIRONMENT: "development",
+  SYNTILA_ENVIRONMENT: "development",
   TEST_AUTHENTICATION: async () => ({
     userId: "local-development",
     user: {
@@ -38,7 +38,7 @@ const env = {
     sessionId: "session-local-development",
     clientType: "desktop",
   }),
-  CONCLAVE_DB: identityDb,
+  SYNTILA_DB: identityDb,
 } as unknown as Env;
 
 describe("Worker smoke tests", () => {
@@ -56,7 +56,7 @@ describe("Worker smoke tests", () => {
 
   it("returns a health response", async () => {
     const response = await worker.fetch(
-      new Request("https://conclave.test/health"),
+      new Request("https://syntila.test/health"),
       env,
     );
 
@@ -69,7 +69,7 @@ describe("Worker smoke tests", () => {
 
   it("returns not found for unknown routes", async () => {
     const response = await worker.fetch(
-      new Request("https://conclave.test/unknown"),
+      new Request("https://syntila.test/unknown"),
       env,
     );
 
@@ -80,7 +80,7 @@ describe("Worker smoke tests", () => {
     const requests: Request[] = [];
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/desktop-auth/approve?intentId=intent-1",
+        "https://syntila.test/desktop-auth/approve?intentId=intent-1",
       ),
       {
         ...env,
@@ -98,27 +98,27 @@ describe("Worker smoke tests", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe("flutter-index");
     expect(requests[0]?.url).toBe(
-      "https://conclave.test/desktop-auth/approve?intentId=intent-1",
+      "https://syntila.test/desktop-auth/approve?intentId=intent-1",
     );
   });
 
   it("uses the development sign-in helper only for a real Better Auth flow", async () => {
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/api/dev/sign-in?provider=google&returnTo=/spaces",
+        "https://syntila.test/api/dev/sign-in?provider=google&returnTo=/spaces",
       ),
       env,
     );
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "https://conclave.test/api/auth/sign-in/google?returnTo=%2Fspaces",
+      "https://syntila.test/api/auth/sign-in/google?returnTo=%2Fspaces",
     );
 
     const productionResponse = await worker.fetch(
-      new Request("https://conclave.test/api/dev/sign-in"),
+      new Request("https://syntila.test/api/dev/sign-in"),
       {
         ...env,
-        CONCLAVE_ENVIRONMENT: "production",
+        SYNTILA_ENVIRONMENT: "production",
         TEST_AUTHENTICATION: undefined,
       } as unknown as Env,
     );
@@ -130,22 +130,22 @@ describe("Worker smoke tests", () => {
     async (provider) => {
       const response = await worker.fetch(
         new Request(
-          `https://conclave.test/api/dev/sign-in?provider=${provider}&returnTo=/account`,
+          `https://syntila.test/api/dev/sign-in?provider=${provider}&returnTo=/account`,
         ),
         env,
       );
       expect(response.status).toBe(302);
       expect(response.headers.get("location")).toBe(
-        `https://conclave.test/api/auth/sign-in/${provider}?returnTo=%2Faccount`,
+        `https://syntila.test/api/auth/sign-in/${provider}?returnTo=%2Faccount`,
       );
     },
   );
 
   it("fails closed when step-up completion has no passkey ceremony", async () => {
     const response = await worker.fetch(
-      new Request("https://conclave.test/api/auth/step-up/passkey/complete", {
+      new Request("https://syntila.test/api/auth/step-up/passkey/complete", {
         method: "POST",
-        headers: { origin: "https://conclave.test" },
+        headers: { origin: "https://syntila.test" },
         body: "{}",
       }),
       env,
@@ -159,11 +159,11 @@ describe("Worker smoke tests", () => {
   it("fails closed when production authentication is missing", async () => {
     const productionEnv = {
       ...env,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_ENVIRONMENT: "production",
       TEST_AUTHENTICATION: undefined,
     } as unknown as Env;
     const response = await worker.fetch(
-      new Request("https://conclave.test/api/spaces", {
+      new Request("https://syntila.test/api/spaces", {
         method: "GET",
         headers: {
           "content-type": "application/json",
@@ -184,7 +184,7 @@ describe("Worker smoke tests", () => {
     ] as const;
     for (const [method, path] of routes) {
       const response = await worker.fetch(
-        new Request(`https://conclave.test${path}`, { method }),
+        new Request(`https://syntila.test${path}`, { method }),
         env,
       );
       expect(response.status, `${method} ${path}`).toBe(404);

@@ -1,4 +1,4 @@
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@syntila/core";
 import {
   loadWorkflowWorkspace,
   resolveUserWorkflowWorkspace,
@@ -22,12 +22,12 @@ function definitionFor(id: string) {
 }
 
 export async function loadUserWorkflowDefault(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   userId: string,
   workspaceId: string | null,
 ) {
   if (!workspaceId) return CHAT_WORKFLOW_ID;
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT workflow_id AS workflowId FROM user_workflow_defaults WHERE user_id = ?1 AND workspace_id = ?2",
   )
     .bind(userId, workspaceId)
@@ -36,11 +36,11 @@ export async function loadUserWorkflowDefault(
 }
 
 export async function loadSpaceWorkflowDefault(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   spaceId: string,
   ownerUserId: string,
 ) {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT workflow_id AS workflowId FROM space_workflow_defaults WHERE space_id = ?1",
   )
     .bind(spaceId)
@@ -63,7 +63,7 @@ export async function handleWorkflowDefault(
   const context = await securityContext(request, env, ctx);
   let ownerUserId = context.userId;
   if (spaceId) {
-    const membership = await env.CONCLAVE_DB.prepare(
+    const membership = await env.SYNTILA_DB.prepare(
       `SELECT s.owner_user_id AS ownerUserId
          FROM spaces s
          JOIN space_memberships m ON m.space_id = s.id
@@ -96,7 +96,7 @@ export async function handleWorkflowDefault(
         ).configurations.find((value) => value.workflowId === selected)
       : JSON.parse(
           (
-            await env.CONCLAVE_DB.prepare(
+            await env.SYNTILA_DB.prepare(
               "SELECT configuration_json AS configurationJson FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2 AND workspace_id = ?3",
             )
               .bind(ownerUserId, selected, userWorkspaceId)
@@ -138,7 +138,7 @@ export async function handleWorkflowDefault(
       )
     : JSON.parse(
         (
-          await env.CONCLAVE_DB.prepare(
+          await env.SYNTILA_DB.prepare(
             "SELECT configuration_json AS configurationJson FROM user_workflow_configurations WHERE user_id = ?1 AND workflow_id = ?2 AND workspace_id = ?3",
           )
             .bind(ownerUserId, workflowId, userWorkspaceId)
@@ -152,7 +152,7 @@ export async function handleWorkflowDefault(
     );
   const now = new Date().toISOString();
   if (spaceId) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT INTO space_workflow_defaults(space_id,workflow_id,updated_at)
        VALUES(?1,?2,?3)
        ON CONFLICT(space_id) DO UPDATE SET workflow_id=excluded.workflow_id,updated_at=excluded.updated_at`,
@@ -160,7 +160,7 @@ export async function handleWorkflowDefault(
       .bind(spaceId, workflowId, now)
       .run();
   } else {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT INTO user_workflow_defaults(user_id,workspace_id,workflow_id,updated_at)
        VALUES(?1,?4,?2,?3)
        ON CONFLICT(user_id,workspace_id) DO UPDATE SET workflow_id=excluded.workflow_id,updated_at=excluded.updated_at`,

@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:conclave_profile_lab/app.dart';
-import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
-import 'package:conclave_profile_lab/profile_lab_session_store.dart';
+import 'package:syntila_profile_lab/app.dart';
+import 'package:syntila_profile_lab/controllers/profile_lab_controller.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_session_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

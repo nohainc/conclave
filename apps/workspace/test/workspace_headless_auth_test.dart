@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/desktop_auth.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/workspace_headless_auth.dart';
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/desktop_auth.dart';
+import 'package:syntila_workspace/secure_credentials.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/workspace_headless_auth.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
 import 'package:test/test.dart';
 
 class _Credentials implements SecureCredentialStore {

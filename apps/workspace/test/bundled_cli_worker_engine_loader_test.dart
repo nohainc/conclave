@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/bundled_cli_worker_engine_loader.dart';
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/bundled_cli_worker_engine_loader.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -21,7 +21,7 @@ void main() {
     expect(executable.path, contains('$cliWorkerEngineVersion-'));
     expect(executable.path, startsWith(root.path));
     expect(executable.uri.pathSegments.last,
-        Platform.isWindows ? 'conclave-agent.exe' : 'conclave-agent');
+        Platform.isWindows ? 'syntila-agent.exe' : 'syntila-agent');
   });
 
   test('repairs altered cached Engine bytes from the bundled release',

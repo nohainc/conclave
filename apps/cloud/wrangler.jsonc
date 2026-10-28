@@ -13,31 +13,31 @@
   },
   "send_email": [
     {
-      "name": "CONCLAVE_EMAIL",
+      "name": "SYNTILA_EMAIL",
       "remote": true,
     },
   ],
   "vars": {
-    "CONCLAVE_PROFILE_LAB_OWNER_EMAIL": "vitalii@nohainc.com",
-    "CONCLAVE_ENVIRONMENT": "development",
+    "SYNTILA_PROFILE_LAB_OWNER_EMAIL": "vitalii@nohainc.com",
+    "SYNTILA_ENVIRONMENT": "development",
     // Optional social sign-in; empty disables a provider. Declared here so
     // wrangler loads overrides from .dev.vars (with `secrets` configured it
     // only loads .dev.vars keys that are declared vars or required secrets).
-    "CONCLAVE_AUTH_GITHUB_CLIENT_ID": "",
-    "CONCLAVE_AUTH_GITHUB_CLIENT_SECRET": "",
-    "CONCLAVE_AUTH_GOOGLE_CLIENT_ID": "",
-    "CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET": "",
+    "SYNTILA_AUTH_GITHUB_CLIENT_ID": "",
+    "SYNTILA_AUTH_GITHUB_CLIENT_SECRET": "",
+    "SYNTILA_AUTH_GOOGLE_CLIENT_ID": "",
+    "SYNTILA_AUTH_GOOGLE_CLIENT_SECRET": "",
   },
   "secrets": {
     "required": [
-      "CONCLAVE_RELEASE_PUBLISHER",
-      "CONCLAVE_RELEASE_TRUST_KEYS_JSON",
+      "SYNTILA_RELEASE_PUBLISHER",
+      "SYNTILA_RELEASE_TRUST_KEYS_JSON",
       "BETTER_AUTH_SECRET",
     ],
   },
   "d1_databases": [
     {
-      "binding": "CONCLAVE_DB",
+      "binding": "SYNTILA_DB",
       "database_name": "conclave-development",
       "database_id": "local",
       "migrations_dir": "migrations-v8",
@@ -45,29 +45,29 @@
   ],
   "r2_buckets": [
     {
-      "binding": "CONCLAVE_ARTIFACTS",
+      "binding": "SYNTILA_ARTIFACTS",
       "bucket_name": "conclave-artifacts-development",
     },
   ],
   "workflows": [
     {
       "name": "conclave-run",
-      "binding": "CONCLAVE_RUN_WORKFLOW",
-      "class_name": "ConclaveRunWorkflow",
+      "binding": "SYNTILA_RUN_WORKFLOW",
+      "class_name": "SyntilaRunWorkflow",
     },
   ],
   "durable_objects": {
     "bindings": [
       {
-        "name": "CONCLAVE_WORKSPACE_GATEWAY",
+        "name": "SYNTILA_WORKSPACE_GATEWAY",
         "class_name": "WorkspaceGateway",
       },
       {
-        "name": "CONCLAVE_REALTIME_GATEWAY",
+        "name": "SYNTILA_REALTIME_GATEWAY",
         "class_name": "RealtimeGateway",
       },
       {
-        "name": "CONCLAVE_THREAD_COORDINATOR",
+        "name": "SYNTILA_THREAD_COORDINATOR",
         "class_name": "ThreadExecutionCoordinator",
       },
     ],

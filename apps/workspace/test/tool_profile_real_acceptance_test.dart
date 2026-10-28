@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/platform_runtime.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -30,14 +30,14 @@ final _officialProfiles = <_OfficialProfile>[
     definitionId: 'chatgpt-codex',
     logicalWorkerTypeId: 'chatgpt',
     profilePath: 'packages/tool-profile/test/fixtures/chatgpt-codex.v1.json',
-    optInVariable: 'CONCLAVE_TEST_REAL_PROFILE_CHATGPT',
+    optInVariable: 'SYNTILA_TEST_REAL_PROFILE_CHATGPT',
   ),
   _OfficialProfile(
     definitionId: 'gemini-antigravity',
     logicalWorkerTypeId: 'gemini',
     profilePath:
         'packages/tool-profile/test/fixtures/gemini-antigravity.v1.json',
-    optInVariable: 'CONCLAVE_TEST_REAL_PROFILE_GEMINI',
+    optInVariable: 'SYNTILA_TEST_REAL_PROFILE_GEMINI',
   ),
 ];
 
@@ -57,10 +57,10 @@ final class _OfficialProfile {
 
 Future<void> _runAcceptance(_OfficialProfile official) async {
   final evidenceDirectory =
-      Platform.environment['CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR'];
+      Platform.environment['SYNTILA_PROFILE_ACCEPTANCE_EVIDENCE_DIR'];
   if (evidenceDirectory == null || evidenceDirectory.isEmpty) {
     throw StateError(
-      'Set CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR to retain release evidence.',
+      'Set SYNTILA_PROFILE_ACCEPTANCE_EVIDENCE_DIR to retain release evidence.',
     );
   }
   final repository = _repositoryRoot();
@@ -70,7 +70,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
   final profile = jsonDecode(utf8.decode(profileBytes)) as Map<String, Object?>;
   final profileReleaseVersion = '${profile['releaseVersion']}';
   final root = await Directory.systemTemp.createTemp(
-    'conclave-profile-acceptance-${official.definitionId}-',
+    'syntila-profile-acceptance-${official.definitionId}-',
   );
   final stateDirectory = await Directory('${root.path}/state').create();
   final threadDirectory = await Directory(
@@ -184,7 +184,7 @@ Future<void> _runAcceptance(_OfficialProfile official) async {
 Directory _repositoryRoot() {
   var current = Directory.current;
   while (true) {
-    if (File('${current.path}/engines/cli_worker/bin/conclave_cli_worker.dart')
+    if (File('${current.path}/engines/cli_worker/bin/syntila_cli_worker.dart')
         .existsSync()) {
       return current;
     }
@@ -243,7 +243,7 @@ final class _EngineClient {
     final process = await currentPlatformRuntime.startIsolatedProcess(
       Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
       [
-        '${repository.path}/engines/cli_worker/bin/conclave_cli_worker.dart',
+        '${repository.path}/engines/cli_worker/bin/syntila_cli_worker.dart',
         '--profile',
         profileFile.path,
         '--engine-version',

@@ -4,7 +4,7 @@ import {
   parseWorkspaceRuntimeMessage,
   WORKSPACE_RUNTIME_PROTOCOL_NAME,
   WORKSPACE_RUNTIME_PROTOCOL_VERSION,
-} from "@conclave/workspace-runtime-protocol";
+} from "@syntila/workspace-runtime-protocol";
 const scheduler = vi.hoisted(() => ({ selectSpaceExecutionTarget: vi.fn() }));
 vi.mock("../src/scheduler.js", () => scheduler);
 
@@ -86,8 +86,8 @@ it.each([null, "low"])(
     };
     const result = await dispatchTaskAssignment(
       {
-        CONCLAVE_DB: db as unknown as D1Database,
-        CONCLAVE_WORKSPACE_GATEWAY:
+        SYNTILA_DB: db as unknown as D1Database,
+        SYNTILA_WORKSPACE_GATEWAY:
           namespace as unknown as DurableObjectNamespace,
       },
       {

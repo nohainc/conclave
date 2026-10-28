@@ -3,8 +3,8 @@ import { classifyEmailDeliveryFailure } from "./email/email-config.js";
 import { sendTemplateEmail } from "./email/email-service.js";
 
 export function resolveAppUrl(request: Request, env: SecurityEnv): string {
-  if (env.CONCLAVE_APP_URL && env.CONCLAVE_APP_URL.trim().length > 0) {
-    return env.CONCLAVE_APP_URL.trim().replace(/\/+$/, "");
+  if (env.SYNTILA_APP_URL && env.SYNTILA_APP_URL.trim().length > 0) {
+    return env.SYNTILA_APP_URL.trim().replace(/\/+$/, "");
   }
   if (env.BETTER_AUTH_URL && env.BETTER_AUTH_URL.trim().length > 0) {
     return env.BETTER_AUTH_URL.trim().replace(/\/+$/, "");
@@ -31,10 +31,10 @@ export async function sendSpaceInvitationEmail(
 ): Promise<boolean> {
   const { recipientEmail, inviterName, spaceName, role, appUrl } = params;
 
-  if (!env.CONCLAVE_EMAIL) {
+  if (!env.SYNTILA_EMAIL) {
     if (
-      env.CONCLAVE_ENVIRONMENT === "development" ||
-      env.CONCLAVE_ENVIRONMENT === "test"
+      env.SYNTILA_ENVIRONMENT === "development" ||
+      env.SYNTILA_ENVIRONMENT === "test"
     ) {
       console.info("invitation.email.development", {
         recipientEmail,
@@ -44,11 +44,11 @@ export async function sendSpaceInvitationEmail(
       });
       return true;
     }
-    console.warn("CONCLAVE_EMAIL is not configured; invitation email skipped");
+    console.warn("SYNTILA_EMAIL is not configured; invitation email skipped");
   }
 
   try {
-    const configuredOrigin = env.CONCLAVE_APP_URL ?? env.BETTER_AUTH_URL;
+    const configuredOrigin = env.SYNTILA_APP_URL ?? env.BETTER_AUTH_URL;
     const approvedOrigin = configuredOrigin
       ? new URL(configuredOrigin).origin
       : new URL(appUrl).origin;

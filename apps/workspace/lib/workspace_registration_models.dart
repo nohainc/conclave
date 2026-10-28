@@ -1,29 +1,29 @@
 import 'dart:async';
 import 'dart:io';
 
-const conclaveProductionCloudUrl = 'https://app.conclaveax.com';
-const conclaveLocalCloudUrl = 'http://localhost:8787';
+const syntilaProductionCloudUrl = 'https://app.conclaveax.com';
+const syntilaLocalCloudUrl = 'http://localhost:8787';
 
 /// Build-time target environment, set by the build scripts with
-/// `--dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=local|production`.
+/// `--dart-define=SYNTILA_WORKSPACE_ENVIRONMENT=local|production`.
 /// A Workspace build talks to exactly one Cloud; there is no runtime switch.
-const conclaveWorkspaceEnvironment = String.fromEnvironment(
-  'CONCLAVE_WORKSPACE_ENVIRONMENT',
+const syntilaWorkspaceEnvironment = String.fromEnvironment(
+  'SYNTILA_WORKSPACE_ENVIRONMENT',
   defaultValue: 'production',
 );
-const conclaveWorkspaceIsLocalBuild = conclaveWorkspaceEnvironment == 'local';
+const syntilaWorkspaceIsLocalBuild = syntilaWorkspaceEnvironment == 'local';
 
 /// Cloud origin used by registration clients: the value from workspace.nano,
 /// falling back to this build's default (local API for local builds).
 String resolveWorkspaceCloudUrl(String? savedCloudUrl) {
   if (savedCloudUrl != null && savedCloudUrl.isNotEmpty) return savedCloudUrl;
-  return conclaveWorkspaceIsLocalBuild
-      ? conclaveLocalCloudUrl
-      : conclaveProductionCloudUrl;
+  return syntilaWorkspaceIsLocalBuild
+      ? syntilaLocalCloudUrl
+      : syntilaProductionCloudUrl;
 }
 
-const conclaveWorkspaceAppVersion =
-    String.fromEnvironment('CONCLAVE_WORKSPACE_VERSION', defaultValue: '1.0.3');
+const syntilaWorkspaceAppVersion =
+    String.fromEnvironment('SYNTILA_WORKSPACE_VERSION', defaultValue: '1.0.3');
 
 String normalizeWorkspaceCloudOrigin(String cloudUrl) {
   final parsed = Uri.tryParse(cloudUrl.trim());
@@ -133,7 +133,7 @@ class SafeMachineFacts {
   }) {
     final os = platform ?? Platform.operatingSystem;
     final arch = architecture ?? detectArchitecture();
-    final ver = appVersion ?? conclaveWorkspaceAppVersion;
+    final ver = appVersion ?? syntilaWorkspaceAppVersion;
     final workspace = hostname ?? Platform.localHostname;
     final caps = capabilities ??
         defaultRuntimeCapabilities(os: os, arch: arch, appVersion: ver);
@@ -353,8 +353,8 @@ class WorkspaceRegistrationException implements Exception {
         kind: WorkspaceRegistrationErrorKind.workspaceNameTaken,
         message: 'You already have a Workspace with this name.',
         action: 'Change workspace.name in workspace.nano '
-            '(see: conclave-workspace config path), then run: '
-            'conclave-workspace register',
+            '(see: syntila-workspace config path), then run: '
+            'syntila-workspace register',
         statusCode: statusCode,
         serverError: serverError,
         serverCode: serverCode,

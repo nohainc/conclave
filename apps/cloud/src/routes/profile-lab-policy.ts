@@ -2,7 +2,7 @@ import {
   DESKTOP_PROFILE_LAB_AUDIENCE,
   authorizeProfileAdmin,
   type SecurityContext,
-} from "@conclave/security";
+} from "@syntila/security";
 import type { SecurityEnv } from "./http-security.js";
 
 /** A configured owner replaces ID allowlists; it never expands them. */
@@ -10,9 +10,9 @@ export async function isProfileLabOwner(
   env: SecurityEnv,
   userId: string,
 ): Promise<boolean> {
-  const email = env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL?.trim().toLowerCase();
+  const email = env.SYNTILA_PROFILE_LAB_OWNER_EMAIL?.trim().toLowerCase();
   if (!email) return false;
-  const user = await env.CONCLAVE_DB.prepare(
+  const user = await env.SYNTILA_DB.prepare(
     "SELECT email, status FROM users WHERE id = ?1",
   )
     .bind(userId)
@@ -31,12 +31,12 @@ export async function hasProfileLabPermission(
       actor.audience !== DESKTOP_PROFILE_LAB_AUDIENCE)
   )
     return false;
-  if (env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined)
+  if (env.SYNTILA_PROFILE_LAB_OWNER_EMAIL !== undefined)
     return isProfileLabOwner(env, actor.userId);
   const configured =
     permission === "profiles:release:manage"
-      ? env.CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS
-      : env.CONCLAVE_PROFILE_ADMIN_USER_IDS;
+      ? env.SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS
+      : env.SYNTILA_PROFILE_ADMIN_USER_IDS;
   try {
     authorizeProfileAdmin(
       actor,

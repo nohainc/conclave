@@ -88,7 +88,7 @@ function setup() {
       1,
     );
   const env = {
-    CONCLAVE_DB: db,
+    SYNTILA_DB: db,
   } as unknown as Env;
   return { db, sqlite, env };
 }
@@ -228,7 +228,7 @@ describe("V9 Worker Profile registry", () => {
   it("lists every managed Worker without channel-pointer resolution", async () => {
     const { env, sqlite } = setup();
     try {
-      const result = await listWorkerProfiles(env.CONCLAVE_DB);
+      const result = await listWorkerProfiles(env.SYNTILA_DB);
       expect(result.workers).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

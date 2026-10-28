@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_work_activity.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
-import 'package:conclave_app/src/ax/ax_work_progress.dart';
+import 'package:syntila_app/src/ax/ax_work_activity.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/ax/ax_work_progress.dart';
 
 void main() {
   test('does not show an unfinished activity after terminal failure', () {

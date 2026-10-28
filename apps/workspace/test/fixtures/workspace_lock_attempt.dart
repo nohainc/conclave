@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace.dart';
 
 Future<void> main(List<String> args) async {
   if (args.length != 3) {

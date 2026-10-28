@@ -6,10 +6,10 @@ import {
   NORMALIZED_ACTIVITY_EVENT_TYPES,
   NORMALIZED_ACTIVITY_STATUSES,
   NormalizedActivityDetailsSchema,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 
 export const WORKSPACE_RUNTIME_PROTOCOL_NAME =
-  "conclave.workspace-runtime-protocol" as const;
+  "syntila.workspace-runtime-protocol" as const;
 export const WORKSPACE_RUNTIME_PROTOCOL_VERSION = "5.1" as const;
 export const WORKSPACE_RUNTIME_PROTOCOL_SUPPORTED_VERSIONS = [
   "5.0",

@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/runtime_capabilities.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/thread_cleanup.dart';
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_marker.dart';
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/runtime_capabilities.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/thread_cleanup.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_marker.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
@@ -14,7 +14,7 @@ void main() {
   late Directory root;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('conclave-security-');
+    root = await Directory.systemTemp.createTemp('syntila-security-');
   });
 
   tearDown(() => root.delete(recursive: true));
@@ -39,7 +39,7 @@ void main() {
 
   test('rejects a Work Root symlink that escapes its canonical root', () async {
     final outside =
-        await Directory.systemTemp.createTemp('conclave-security-outside-');
+        await Directory.systemTemp.createTemp('syntila-security-outside-');
     addTearDown(() => outside.delete(recursive: true));
     await Link('${root.path}${Platform.pathSeparator}space-1')
         .create(outside.path);

@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 
 /// Shared Create/Rename/Delete Thread dialogs used by the sidebar and the
@@ -47,7 +47,7 @@ Future<bool> confirmDeleteThread(BuildContext context) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      constraints: ConclaveDialogStyle.small,
+      constraints: SyntilaDialogStyle.small,
       title: const Text('Delete Thread'),
       content: const Text(
         'Permanently delete this Thread and all its history? This action cannot be undone.',
@@ -59,7 +59,7 @@ Future<bool> confirmDeleteThread(BuildContext context) async {
         ),
         FilledButton(
           onPressed: () => Navigator.pop(dialogContext, true),
-          style: ConclaveDialogStyle.destructiveButton(),
+          style: SyntilaDialogStyle.destructiveButton(),
           child: const Text('Delete'),
         ),
       ],

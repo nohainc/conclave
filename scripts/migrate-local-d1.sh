@@ -2,8 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-database_name="${CONCLAVE_LOCAL_D1_NAME:-conclave-development}"
-wrangler_config="${CONCLAVE_WRANGLER_CONFIG:-${repo_root}/apps/cloud/wrangler.jsonc}"
+database_name="${SYNTILA_LOCAL_D1_NAME:-conclave-development}"
+wrangler_config="${SYNTILA_WRANGLER_CONFIG:-${repo_root}/apps/cloud/wrangler.jsonc}"
 
 if [[ ! -f "$wrangler_config" ]]; then
   echo "Wrangler config not found: $wrangler_config" >&2
@@ -13,7 +13,7 @@ fi
 cd "$repo_root"
 
 echo "Inspecting local D1 schema before migration: $database_name"
-prepared_dir="$(mktemp -d "${TMPDIR:-/tmp}/conclave-local-d1-migration.XXXXXX")"
+prepared_dir="$(mktemp -d "${TMPDIR:-/tmp}/syntila-local-d1-migration.XXXXXX")"
 trap 'rm -rf "$prepared_dir"' EXIT
 
 if [[ -d apps/cloud/.wrangler/state ]]; then

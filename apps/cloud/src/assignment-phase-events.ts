@@ -1,9 +1,9 @@
 import { createEventPublisher } from "./event-publisher.js";
 import { presentExecution } from "./execution-phase.js";
-import { canonicalExecutionErrorCode } from "@conclave/protocol";
+import { canonicalExecutionErrorCode } from "@syntila/protocol";
 
 interface PhaseEnv {
-  readonly CONCLAVE_DB: D1Database;
+  readonly SYNTILA_DB: D1Database;
 }
 
 /**
@@ -23,7 +23,7 @@ export async function publishAssignmentPhase(
   assignmentId: string,
 ): Promise<void> {
   try {
-    const row = await env.CONCLAVE_DB.prepare(
+    const row = await env.SYNTILA_DB.prepare(
       `SELECT wa.status AS assignmentStatus, wa.dispatched_at AS dispatchedAt,
               wa.acknowledged_at AS acknowledgedAt,
               wa.start_permit_issued_at AS startPermitIssuedAt,

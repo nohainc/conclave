@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'quiet_notices.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -23,12 +23,12 @@ class DiffViewer extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor =
-        isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface;
+        isDark ? SyntilaBrand.darkSurface : SyntilaBrand.lightSurface;
     final borderColor =
-        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
-    final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+        isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
+    final inkColor = isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk;
     final mutedInk =
-        isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+        isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
 
     final lines = diffContent.split('\n');
 
@@ -47,7 +47,7 @@ class DiffViewer extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color:
-                  isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper,
+                  isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper,
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
@@ -55,7 +55,7 @@ class DiffViewer extends StatelessWidget {
                 const Icon(
                   Icons.difference_outlined,
                   size: 16,
-                  color: ConclaveBrand.accent,
+                  color: SyntilaBrand.accent,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -64,9 +64,9 @@ class DiffViewer extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      fontFamily: ConclaveTypography.fontFamilyMono,
+                      fontFamily: SyntilaTypography.fontFamilyMono,
                       fontFamilyFallback:
-                          ConclaveTypography.fontFamilyMonoFallback,
+                          SyntilaTypography.fontFamilyMonoFallback,
                       color: inkColor,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -78,8 +78,8 @@ class DiffViewer extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? ConclaveBrand.darkSurface
-                          : ConclaveBrand.lightSurface,
+                          ? SyntilaBrand.darkSurface
+                          : SyntilaBrand.lightSurface,
                       borderRadius: BorderRadius.circular(4),
                       border: Border.all(color: borderColor),
                     ),
@@ -87,9 +87,9 @@ class DiffViewer extends StatelessWidget {
                       '${oldCommit!.substring(0, oldCommit!.length.clamp(0, 7))} → ${newCommit!.substring(0, newCommit!.length.clamp(0, 7))}',
                       style: TextStyle(
                           fontSize: 11,
-                          fontFamily: ConclaveTypography.fontFamilyMono,
+                          fontFamily: SyntilaTypography.fontFamilyMono,
                           fontFamilyFallback:
-                              ConclaveTypography.fontFamilyMonoFallback,
+                              SyntilaTypography.fontFamilyMonoFallback,
                           color: mutedInk),
                     ),
                   ),
@@ -137,23 +137,23 @@ class DiffViewer extends StatelessWidget {
 
     if (line.startsWith('+')) {
       bgColor = isDark
-          ? ConclaveBrand.successWashDark.withValues(alpha: 0.4)
-          : ConclaveBrand.successWash;
-      textColor = ConclaveColors.successText(isDark);
+          ? SyntilaBrand.successWashDark.withValues(alpha: 0.4)
+          : SyntilaBrand.successWash;
+      textColor = SyntilaColors.successText(isDark);
     } else if (line.startsWith('-')) {
       bgColor = isDark
-          ? ConclaveBrand.errorWashDark.withValues(alpha: 0.4)
-          : ConclaveBrand.errorWash;
-      textColor = ConclaveColors.errorText(isDark);
+          ? SyntilaBrand.errorWashDark.withValues(alpha: 0.4)
+          : SyntilaBrand.errorWash;
+      textColor = SyntilaColors.errorText(isDark);
     } else if (line.startsWith('@@')) {
       bgColor = isDark
-          ? ConclaveBrand.accentWashDark.withValues(alpha: 0.4)
-          : ConclaveBrand.accentWash;
-      textColor = ConclaveBrand.accent;
+          ? SyntilaBrand.accentWashDark.withValues(alpha: 0.4)
+          : SyntilaBrand.accentWash;
+      textColor = SyntilaBrand.accent;
       fontWeight = FontWeight.w600;
     } else {
       textColor =
-          isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+          isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
     }
 
     return Container(
@@ -163,8 +163,8 @@ class DiffViewer extends StatelessWidget {
       child: Text(
         line.isEmpty ? ' ' : line,
         style: TextStyle(
-          fontFamily: ConclaveTypography.fontFamilyMono,
-          fontFamilyFallback: ConclaveTypography.fontFamilyMonoFallback,
+          fontFamily: SyntilaTypography.fontFamilyMono,
+          fontFamilyFallback: SyntilaTypography.fontFamilyMonoFallback,
           fontSize: 12,
           height: 1.4,
           color: textColor,

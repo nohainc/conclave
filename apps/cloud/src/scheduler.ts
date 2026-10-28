@@ -3,8 +3,8 @@ import {
   supportsExecutionCatalogPin,
 } from "./execution-selection-snapshot.js";
 import { spaceWorkerExecutionOptions } from "./worker-execution-options.js";
-import { validateWorkerExecutionSelection } from "@conclave/core";
-import { spaceMemberPermissions } from "@conclave/security";
+import { validateWorkerExecutionSelection } from "@syntila/core";
+import { spaceMemberPermissions } from "@syntila/security";
 import {
   EXECUTION_PERMISSIONS,
   isWorkspaceSpaceGrantStatus,
@@ -14,7 +14,7 @@ import {
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
   type ThreadBindingId,
-} from "@conclave/core";
+} from "@syntila/core";
 import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "./assignment-transitions.js";
 
 export interface SpaceExecutionSelectionRequest {

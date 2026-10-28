@@ -1,14 +1,14 @@
-import 'package:conclave_app/src/app_shell.dart';
-import 'package:conclave_app/src/features/navigation/space_tree.dart';
-import 'package:conclave_app/src/features/navigation/app_top_hud.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/app_shell.dart';
+import 'package:syntila_app/src/features/navigation/space_tree.dart';
+import 'package:syntila_app/src/features/navigation/app_top_hud.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_snapshot.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 class LongListSource extends AxFixtureDataSource {
   List<AxThread> get threads => [
@@ -43,7 +43,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(ConclaveAppShell(
+    await tester.pumpWidget(SyntilaAppShell(
       services: const DefaultPlatformServices(),
       dataSource: const AxFixtureDataSource(),
       initialUri: Uri.parse('/spaces'),
@@ -69,7 +69,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ConclaveAppShell(
+    await tester.pumpWidget(SyntilaAppShell(
       services: const DefaultPlatformServices(),
       dataSource: LongListSource(),
       initialUri: Uri.parse('/spaces'),
@@ -98,7 +98,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(ConclaveAppShell(
+      await tester.pumpWidget(SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
         initialUri: Uri.parse('/spaces'),

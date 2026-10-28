@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
 import 'package:test/test.dart';
 
 void main() {

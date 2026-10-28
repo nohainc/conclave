@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { BUILTIN_WORKFLOWS } from "@conclave/core";
+import { BUILTIN_WORKFLOWS } from "@syntila/core";
 import {
   prepareWorkerStepExecution,
   completeWorkerStepExecution,

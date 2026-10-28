@@ -1,5 +1,5 @@
 {
-  "name": "@conclave/workspace-runtime-protocol",
+  "name": "@syntila/workspace-runtime-protocol",
   "version": "2.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@conclave/protocol": "workspace:*",
+    "@syntila/protocol": "workspace:*",
     "zod": "^4.1.11"
   }
 }

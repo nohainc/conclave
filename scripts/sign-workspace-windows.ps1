@@ -9,11 +9,11 @@ param(
 )
 # Authenticode signing for Windows Workspace releases.
 #
-# Backends (CONCLAVE_WINDOWS_SIGNING):
-#   azure - Azure Trusted Signing. Requires CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT,
+# Backends (SYNTILA_WINDOWS_SIGNING):
+#   azure - Azure Trusted Signing. Requires SYNTILA_WINDOWS_TRUSTED_SIGNING_ENDPOINT,
 #           _ACCOUNT, _PROFILE, _DLIB and AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET.
-#   pfx   - Certificate file. Requires CONCLAVE_WINDOWS_CERTIFICATE_PATH and
-#           CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD.
+#   pfx   - Certificate file. Requires SYNTILA_WINDOWS_CERTIFICATE_PATH and
+#           SYNTILA_WINDOWS_CERTIFICATE_PASSWORD.
 # Every signature is RFC 3161 timestamped so it outlives the certificate.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -44,17 +44,17 @@ if ($Files.Count -eq 0) { throw 'No files to sign.' }
 $SignTool = Find-SignTool
 
 if (-not $VerifyOnly) {
-    $Backend = Require-Env 'CONCLAVE_WINDOWS_SIGNING'
+    $Backend = Require-Env 'SYNTILA_WINDOWS_SIGNING'
     $Common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256')
     switch ($Backend) {
         'azure' {
-            $Dlib = Require-Env 'CONCLAVE_WINDOWS_TRUSTED_SIGNING_DLIB'
+            $Dlib = Require-Env 'SYNTILA_WINDOWS_TRUSTED_SIGNING_DLIB'
             foreach ($Name in @('AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET')) { Require-Env $Name | Out-Null }
-            $Metadata = Join-Path ([System.IO.Path]::GetTempPath()) ("conclave-signing-" + [guid]::NewGuid() + '.json')
+            $Metadata = Join-Path ([System.IO.Path]::GetTempPath()) ("syntila-signing-" + [guid]::NewGuid() + '.json')
             @{
-                Endpoint = Require-Env 'CONCLAVE_WINDOWS_TRUSTED_SIGNING_ENDPOINT'
-                CodeSigningAccountName = Require-Env 'CONCLAVE_WINDOWS_TRUSTED_SIGNING_ACCOUNT'
-                CertificateProfileName = Require-Env 'CONCLAVE_WINDOWS_TRUSTED_SIGNING_PROFILE'
+                Endpoint = Require-Env 'SYNTILA_WINDOWS_TRUSTED_SIGNING_ENDPOINT'
+                CodeSigningAccountName = Require-Env 'SYNTILA_WINDOWS_TRUSTED_SIGNING_ACCOUNT'
+                CertificateProfileName = Require-Env 'SYNTILA_WINDOWS_TRUSTED_SIGNING_PROFILE'
                 # Only the environment credential; never fall back to developer logins.
                 ExcludeCredentials = @('ManagedIdentityCredential', 'WorkloadIdentityCredential',
                     'SharedTokenCacheCredential', 'VisualStudioCredential', 'VisualStudioCodeCredential',
@@ -64,13 +64,13 @@ if (-not $VerifyOnly) {
             $Arguments = $Common + @('/tr', 'http://timestamp.acs.microsoft.com', '/dlib', $Dlib, '/dmdf', $Metadata)
         }
         'pfx' {
-            $Certificate = Require-Env 'CONCLAVE_WINDOWS_CERTIFICATE_PATH'
+            $Certificate = Require-Env 'SYNTILA_WINDOWS_CERTIFICATE_PATH'
             if (-not (Test-Path $Certificate)) { throw 'The Windows signing certificate file is missing.' }
-            $Timestamp = if ($env:CONCLAVE_WINDOWS_TIMESTAMP_URL) { $env:CONCLAVE_WINDOWS_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+            $Timestamp = if ($env:SYNTILA_WINDOWS_TIMESTAMP_URL) { $env:SYNTILA_WINDOWS_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
             $Arguments = $Common + @('/tr', $Timestamp, '/f', $Certificate,
-                '/p', (Require-Env 'CONCLAVE_WINDOWS_CERTIFICATE_PASSWORD'))
+                '/p', (Require-Env 'SYNTILA_WINDOWS_CERTIFICATE_PASSWORD'))
         }
-        default { throw "Unsupported CONCLAVE_WINDOWS_SIGNING backend: $Backend" }
+        default { throw "Unsupported SYNTILA_WINDOWS_SIGNING backend: $Backend" }
     }
     try {
         foreach ($File in $Files) {

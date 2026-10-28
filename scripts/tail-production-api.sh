@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 WRANGLER_CONFIG="${ROOT_DIR}/infra/cloudflare/app.wrangler.jsonc"
 
-RUNNER_TAIL="/tmp/conclave-tail-production-api.sh"
+RUNNER_TAIL="/tmp/syntila-tail-production-api.sh"
 cat << EOF > "${RUNNER_TAIL}"
 #!/usr/bin/env bash
 set -euo pipefail

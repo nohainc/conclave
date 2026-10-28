@@ -157,7 +157,7 @@ for (const [route, file] of routes) {
 
 const home = sources.get("/");
 const appLinks = [
-  ...home.matchAll(/href="(https:\/\/app\.conclaveax\.com[^"]*)"/g),
+  ...home.matchAll(/href="(https:\/\/app\.syntila\.com[^"]*)"/g),
 ];
 if (appLinks.length < 3)
   errors.push(
@@ -168,7 +168,7 @@ if (!home.includes('href="/#product"'))
 
 for (const [route, source] of sources) {
   const githubLinks = [
-    ...source.matchAll(/https:\/\/github\.com\/nohainc\/conclave[^"'\s]*/gi),
+    ...source.matchAll(/https:\/\/github\.com\/nohainc\/syntila[^"'\s]*/gi),
   ].map(([link]) => link);
   const approvedDownloads =
     route === "/downloads/" &&

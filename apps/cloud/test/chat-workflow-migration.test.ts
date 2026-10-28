@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@syntila/core";
 
 const sql = (name: string) =>
   readFileSync(new URL(`../migrations-v8/${name}`, import.meta.url), "utf8");

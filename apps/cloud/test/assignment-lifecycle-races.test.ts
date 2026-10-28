@@ -3,7 +3,7 @@ import {
   ASSIGNMENT_LIFECYCLE_STATUSES,
   isTerminalAssignmentStatus,
   type AssignmentLifecycleStatus,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   recordAssignmentCancelled,
   recordAssignmentError,

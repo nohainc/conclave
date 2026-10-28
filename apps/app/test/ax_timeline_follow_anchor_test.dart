@@ -1,11 +1,11 @@
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store_base.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/features/spaces/timeline_follow_anchor.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/ax/sync/ax_discussion_cache.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state_store_base.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/features/spaces/timeline_follow_anchor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

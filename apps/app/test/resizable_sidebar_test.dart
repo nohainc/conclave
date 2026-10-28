@@ -1,7 +1,7 @@
-import 'package:conclave_app/src/app_shell.dart';
-import 'package:conclave_app/src/features/navigation/ax_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/resizable_sidebar.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/app_shell.dart';
+import 'package:syntila_app/src/features/navigation/ax_sidebar.dart';
+import 'package:syntila_app/src/features/navigation/resizable_sidebar.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -55,7 +55,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ConclaveAppShell(
+    await tester.pumpWidget(SyntilaAppShell(
       services: const DefaultPlatformServices(),
       dataSource: const AxFixtureDataSource(),
       initialUri: Uri.parse('/'),

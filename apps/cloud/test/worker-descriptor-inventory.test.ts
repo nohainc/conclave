@@ -35,13 +35,13 @@ describe("Workspace Worker inventory catalog metadata", () => {
       all: vi.fn(async () => ({ results: [row] })),
     };
     const env = {
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: { prepare: vi.fn(() => statement) },
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: { prepare: vi.fn(() => statement) },
       TEST_AUTHENTICATION: async () => ({ userId: "user-1" }),
     } as unknown as Env;
 
     const response = await handleListWorkspaceWorkerInventory(
-      new Request("https://conclave.test/api/workers"),
+      new Request("https://syntila.test/api/workers"),
       env,
     );
     const body = (await response.json()) as {
@@ -70,7 +70,7 @@ describe("Workspace Worker inventory catalog metadata", () => {
 
     row.catalog_lifecycle_state = "retired";
     const retiredResponse = await handleListWorkspaceWorkerInventory(
-      new Request("https://conclave.test/api/workers"),
+      new Request("https://syntila.test/api/workers"),
       env,
     );
     const retiredBody = (await retiredResponse.json()) as {
@@ -121,13 +121,13 @@ describe("Workspace Worker inventory catalog metadata", () => {
       all: vi.fn(async () => ({ results: [row] })),
     };
     const env = {
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: { prepare: vi.fn(() => statement) },
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: { prepare: vi.fn(() => statement) },
       TEST_AUTHENTICATION: async () => ({ userId: "user-1" }),
     } as unknown as Env;
 
     const response = await handleListWorkspaceWorkerInventory(
-      new Request("https://conclave.test/api/workers"),
+      new Request("https://syntila.test/api/workers"),
       env,
     );
     const body = (await response.json()) as {
@@ -186,12 +186,12 @@ describe("Workspace Worker inventory catalog metadata", () => {
       }),
     };
     const env = {
-      CONCLAVE_DB: db,
+      SYNTILA_DB: db,
     } as unknown as Env;
 
     const response = await handleListWorkspaceWorkerCatalog(
       new Request(
-        "https://conclave.test/api/workspace-runtime/workers/catalog?workspaceRuntimeId=runtime-1",
+        "https://syntila.test/api/workspace-runtime/workers/catalog?workspaceRuntimeId=runtime-1",
         {
           headers: { authorization: "Bearer runtime-secret" },
         },
@@ -264,13 +264,13 @@ describe("Workspace Worker inventory catalog metadata", () => {
       }),
     };
     const env = {
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: db,
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: db,
       TEST_AUTHENTICATION: async () => ({ userId: "user-1" }),
     } as unknown as Env;
 
     const response = await handleListWorkerCatalog(
-      new Request("https://conclave.test/api/workers/catalog"),
+      new Request("https://syntila.test/api/workers/catalog"),
       env,
     );
     const body = (await response.json()) as {

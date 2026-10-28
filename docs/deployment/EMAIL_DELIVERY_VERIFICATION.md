@@ -14,7 +14,7 @@ not run in normal CI or deployment jobs.
 ## Preconditions
 
 - The `conclaveax.com` domain is enabled for Cloudflare Email Sending.
-- Both `conclave@conclaveax.com` and `vitalii@conclaveax.com` are authorized sender
+- Both `syntila@conclaveax.com` and `vitalii@conclaveax.com` are authorized sender
   identities in the same Cloudflare account.
 - The recipient is a mailbox controlled by the operator and is suitable for a
   disposable test message.
@@ -41,7 +41,7 @@ Send one message from each identity using the Cloudflare Email Sending REST
 API:
 
 ```bash
-for sender in conclave@conclaveax.com vitalii@conclaveax.com; do
+for sender in syntila@conclaveax.com vitalii@conclaveax.com; do
   curl --fail-with-body \
     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/email/sending/send" \
     --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -58,7 +58,7 @@ the following in the recipient mailbox and message headers:
 - the message arrives at the intended mailbox and at an external-domain test
   mailbox when one is available;
 - SPF, DKIM, and DMARC pass for `conclaveax.com`;
-- replies to `conclave@conclaveax.com` reach the configured mailbox.
+- replies to `syntila@conclaveax.com` reach the configured mailbox.
 
 Run the authentication verification and invitation verification separately
 through the normal application flows. Check that verification, reset, change
@@ -108,7 +108,7 @@ Use this order for the release:
    Google Workspace.
 2. Run the focused tests and `pnpm email:config-check`.
 3. Record the currently deployed sender configuration as the rollback point.
-4. Deploy the Worker configuration and verify that the `CONCLAVE_EMAIL`
+4. Deploy the Worker configuration and verify that the `SYNTILA_EMAIL`
    binding remains present.
 5. Send one controlled verification email from the primary sender, then run
    the authentication and invitation checks.

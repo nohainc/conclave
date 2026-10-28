@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_space_details.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/features/navigation/space_tree.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/ax_space_details.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/features/navigation/space_tree.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/navigation/ax_browser_navigation.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_realtime.dart';
 
@@ -132,7 +132,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
             dataSource: source,
             services: const DefaultPlatformServices(),
             browserNavigation: browser,

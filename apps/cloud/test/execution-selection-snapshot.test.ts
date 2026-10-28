@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { WorkerExecutionOptions } from "@conclave/core";
+import type { WorkerExecutionOptions } from "@syntila/core";
 import {
   resolveExecutionSelectionSnapshot,
   supportsExecutionCatalogPin,

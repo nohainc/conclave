@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 describe("email preview command", () => {
   it("renders every catalog template without a transport", () => {
-    const root = mkdtempSync(join(tmpdir(), "conclave-email-preview-"));
+    const root = mkdtempSync(join(tmpdir(), "syntila-email-preview-"));
     try {
       const result = spawnSync(
         process.execPath,

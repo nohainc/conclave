@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_profile_lab/utils/profile_activity_mapping_fixtures.dart';
+import 'package:syntila_profile_lab/utils/profile_activity_mapping_fixtures.dart';
 
 void main() {
   test('bundled Copilot Profile passes the activity mapping replay', () {

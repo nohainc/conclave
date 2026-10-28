@@ -5,7 +5,7 @@ import {
 } from "./execution-activity.js";
 
 /** Versioned contract for normalized observations of one Worker execution. */
-export const EXECUTION_EVENTS_PROTOCOL = "conclave.execution-events" as const;
+export const EXECUTION_EVENTS_PROTOCOL = "syntila.execution-events" as const;
 export const EXECUTION_EVENTS_PROTOCOL_VERSION = "1.0" as const;
 export const EXECUTION_EVENT_SCHEMA_VERSION = 1 as const;
 

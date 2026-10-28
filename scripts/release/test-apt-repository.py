@@ -20,7 +20,7 @@ spec.loader.exec_module(module)
 @unittest.skipUnless(all(shutil.which(tool) for tool in ('gpg', 'gpgv', 'dpkg-deb')), 'Needs GPG and dpkg')
 class RepositoryTest(unittest.TestCase):
     def test_signed_indexes_retain_versions_and_reject_replacement(self):
-        with tempfile.TemporaryDirectory(prefix='conclave-apt-') as temporary:
+        with tempfile.TemporaryDirectory(prefix='syntila-apt-') as temporary:
             root = Path(temporary)
             previous = os.environ.get('GNUPGHOME')
             os.environ['GNUPGHOME'] = str(root / 'gnupg')
@@ -32,7 +32,7 @@ class RepositoryTest(unittest.TestCase):
                 def package(version, arch, payload='original'):
                     stage = root / f'stage-{version}-{arch}'
                     (stage / 'DEBIAN').mkdir(parents=True, exist_ok=True)
-                    (stage / 'DEBIAN/control').write_text(f'Package: conclave-workspace\nVersion: {version}\nArchitecture: {arch}\nMaintainer: Test <test@example.invalid>\nDescription: fixture\n')
+                    (stage / 'DEBIAN/control').write_text(f'Package: syntila-workspace\nVersion: {version}\nArchitecture: {arch}\nMaintainer: Test <test@example.invalid>\nDescription: fixture\n')
                     (stage / 'payload').write_text(payload)
                     dest = root / f'{version}-{arch}.deb'
                     subprocess.run(['dpkg-deb', '--build', '--root-owner-group', str(stage), str(dest)], check=True, stdout=subprocess.DEVNULL)
@@ -53,7 +53,7 @@ class RepositoryTest(unittest.TestCase):
                     fields = dict(line.split(': ', 1) for line in paragraph.splitlines() if ': ' in line and not line.startswith(' '))
                     payload = (output / fields['Filename']).read_bytes()
                     self.assertEqual(hashlib.sha256(payload).hexdigest(), fields['SHA256'])
-                subprocess.run(['gpgv', '--keyring', str(output / 'conclave-archive-keyring.gpg'), str(output / 'dists/stable/InRelease')], check=True)
+                subprocess.run(['gpgv', '--keyring', str(output / 'syntila-archive-keyring.gpg'), str(output / 'dists/stable/InRelease')], check=True)
                 # Exercise the real publisher against a local bare git remote,
                 # with only GitHub transport mocked. No production credentials.
                 remote = root / 'remote.git'
@@ -71,7 +71,7 @@ class RepositoryTest(unittest.TestCase):
                 private = subprocess.check_output(['gpg', '--batch', '--armor', '--export-secret-keys', key], text=True)
                 publisher_env = dict(os.environ, PATH=str(wrappers) + os.pathsep + os.environ['PATH'],
                                      APT_TEST_REMOTE=str(remote), APT_TEST_GIT=real_git,
-                                     CONCLAVE_APT_PRIVATE_KEY=private, CONCLAVE_APT_SIGNING_FINGERPRINT=key,
+                                     SYNTILA_APT_PRIVATE_KEY=private, SYNTILA_APT_SIGNING_FINGERPRINT=key,
                                      GITHUB_REPOSITORY='test/apt', GITHUB_REF='refs/heads/main', GH_TOKEN='fixture')
                 publisher = Path(__file__).with_name('publish-apt-repository.sh').resolve()
                 exported = root / 'site'
@@ -80,13 +80,13 @@ class RepositoryTest(unittest.TestCase):
                     candidates.mkdir()
                     for arch in ('amd64', 'arm64'):
                         shutil.copyfile(package(version, arch), candidates / f'{arch}.deb')
-                    publisher_env['CONCLAVE_WORKSPACE_VERSION'] = version
+                    publisher_env['SYNTILA_WORKSPACE_VERSION'] = version
                     result = subprocess.run(['bash', str(publisher), str(candidates), str(exported)],
                                             env=publisher_env, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertFalse((exported / '.git').exists())
                 self.assertEqual({item.name for item in exported.iterdir()},
-                                 {'pool', 'dists', 'conclave-archive-keyring.gpg', '.nojekyll', 'index.html'})
+                                 {'pool', 'dists', 'syntila-archive-keyring.gpg', '.nojekyll', 'index.html'})
                 self.assertEqual(len(list((exported / 'pool').rglob('*.deb'))), 4)
                 self.assertIn(key, (exported / 'index.html').read_text())
                 self.assertNotIn('PRIVATE KEY', (exported / 'index.html').read_text())
@@ -94,7 +94,7 @@ class RepositoryTest(unittest.TestCase):
                     module.build(output, [package('1.0.0', 'amd64', 'changed')], key)
                 signed = output / 'dists/stable/InRelease'
                 signed.write_bytes(signed.read_bytes().replace(b'Origin: Syntila', b'Origin: Tampered'))
-                self.assertNotEqual(subprocess.run(['gpgv', '--keyring', str(output / 'conclave-archive-keyring.gpg'), str(signed)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode, 0)
+                self.assertNotEqual(subprocess.run(['gpgv', '--keyring', str(output / 'syntila-archive-keyring.gpg'), str(signed)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode, 0)
             finally:
                 subprocess.run(['gpgconf', '--kill', 'gpg-agent'], check=False)
                 if previous is None:

@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/notifications/browser_alerts.dart';
+import 'package:syntila_app/src/notifications/browser_alerts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

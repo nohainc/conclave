@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/allowed_folders.dart';
+import 'package:syntila_workspace/allowed_folders.dart';
 import 'package:test/test.dart';
 
 void main() {

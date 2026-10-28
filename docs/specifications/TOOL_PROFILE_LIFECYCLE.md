@@ -1,7 +1,7 @@
 # Tool Profile Lifecycle Specification
 
 **Status:** Superseded historical Architecture v8 Profile Lifecycle Contract
-**Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-conclave-profile-lab.md)  
+**Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-syntila-profile-lab.md)  
 **Profile Schema:** [Tool Profile v1](TOOL_PROFILE_V1.md)  
 **Authority:** Syntila Cloud Registry (`apps/cloud/src/tool-profile-registry.ts`) and D1 Schema (`apps/cloud/migrations-v8/0001_conclave_v8.sql`)
 
@@ -173,7 +173,7 @@ State transitions are strictly validated by Cloud registry routes and enforced i
   1. Profile Lab submits the local sandbox contract to the draft qualification endpoint; Cloud checks identity, digest, supported Engine/provider versions, freshness, and all required scenario statuses before storing an immutable qualification record.
   2. Profile Lab submits the returned `qualificationEvidenceId` with the publish request. Cloud reloads and revalidates that record against the current draft, checks user authorization and signer readiness, then signs the canonical message:
      ```text
-     CONCLAVE_TOOL_PROFILE_RELEASE:v1:<publisher>:<signingKeyId>:<payloadDigest>:<profileDefinitionId>:<releaseVersion>:<logicalWorkerTypeId>:<engineFamily>:<minEngine>:<maxExclusiveEngine>
+     SYNTILA_TOOL_PROFILE_RELEASE:v1:<publisher>:<signingKeyId>:<payloadDigest>:<profileDefinitionId>:<releaseVersion>:<logicalWorkerTypeId>:<engineFamily>:<minEngine>:<maxExclusiveEngine>
      ```
   3. Cloud updates the release record: `signature`, `signing_key_id`, `publisher`, `published_at = NOW()`, `lifecycle_state = 'testing'`. The lifecycle audit records the qualification ID.
 - **Database Trigger:** `tool_profile_release_payload_immutable` activates. From this timestamp forward, any SQL UPDATE targeting payload or identity fields will abort with:

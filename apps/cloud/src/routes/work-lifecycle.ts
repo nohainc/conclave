@@ -21,11 +21,11 @@ import {
   BUILTIN_WORKFLOW_CATALOG,
   type BuiltinWorkflowDefinition,
   type StepKind,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 
 import {
   HttpError,
@@ -142,7 +142,7 @@ export async function handleRetryWorkRequest(
   workRequestId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const parent = await env.CONCLAVE_DB.prepare(
+  const parent = await env.SYNTILA_DB.prepare(
     "SELECT thread_id AS threadId FROM work_requests WHERE id = ?1",
   )
     .bind(workRequestId)
@@ -155,7 +155,7 @@ export async function handleRetryWorkRequest(
     "execute",
     accessContext,
   );
-  const membership = await env.CONCLAVE_DB.prepare(
+  const membership = await env.SYNTILA_DB.prepare(
     "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
     .bind(spaceId, context.userId)
@@ -165,7 +165,7 @@ export async function handleRetryWorkRequest(
       403,
       "Space membership with execute access is required",
     );
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT wr.thread_id AS threadId, wr.mode, wr.status,
             wr.workflow_id AS workflowId, wr.workflow_version AS workflowVersion,
             wr.workflow_snapshot_json AS workflowSnapshotJson,
@@ -194,7 +194,7 @@ export async function handleRetryWorkRequest(
   );
   const step = workflow.steps?.find((candidate) => candidate.kind === stepKind);
   if (!step) throw new HttpError(400, "Step is not part of this Workflow");
-  const failedTask = await env.CONCLAVE_DB.prepare(
+  const failedTask = await env.SYNTILA_DB.prepare(
     `SELECT wt.status, wt.error, wa.error_json AS assignmentErrorJson,
             wa.status AS assignmentStatus, wa.dispatched_at AS dispatchedAt,
             wa.acknowledged_at AS acknowledgedAt,
@@ -256,7 +256,7 @@ export async function handleRetryWorkRequest(
       { status: 409 },
     );
   if (contextLimitExceeded) {
-    const active = await env.CONCLAVE_DB.prepare(
+    const active = await env.SYNTILA_DB.prepare(
       "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
     )
       .bind(String(row.threadId))
@@ -317,7 +317,7 @@ export async function handleRetryWorkRequest(
     );
   }
 
-  const latestRuns = await env.CONCLAVE_DB.prepare(
+  const latestRuns = await env.SYNTILA_DB.prepare(
     "SELECT COUNT(*) AS count FROM runs WHERE work_request_id = ?1",
   )
     .bind(workRequestId)
@@ -346,7 +346,7 @@ export async function handleRetryWorkRequest(
         : {}),
     },
   };
-  const reservation = await env.CONCLAVE_DB.prepare(
+  const reservation = await env.SYNTILA_DB.prepare(
     "UPDATE work_requests SET status = 'queued', updated_at = ?1 WHERE id = ?2 AND status = 'failed' RETURNING id",
   )
     .bind(now, workRequestId)
@@ -357,13 +357,13 @@ export async function handleRetryWorkRequest(
   if (reservation?.id !== workRequestId)
     throw new HttpError(409, "This Work Request is already being retried");
   try {
-    await env.CONCLAVE_DB.batch([
+    await env.SYNTILA_DB.batch([
       // Over the context limit, AI History is cut off just before the latest
       // Worker answer that precedes this request, so the new session keeps
       // that answer and this request as its only context.
       ...(contextLimitExceeded
         ? [
-            env.CONCLAVE_DB.prepare(
+            env.SYNTILA_DB.prepare(
               `UPDATE conversations SET context_floor_sequence = COALESCE(
                  (SELECT MAX(h.sequence) - 1 FROM conversation_history_entries h
                    WHERE h.conversation_id = conversations.id
@@ -375,7 +375,7 @@ export async function handleRetryWorkRequest(
                  context_floor_sequence)
                WHERE thread_id = ?1`,
             ).bind(String(row.threadId), workRequestId),
-            env.CONCLAVE_DB.prepare(
+            env.SYNTILA_DB.prepare(
               "UPDATE threads SET ai_history_cleared_at = ?1, updated_at = ?1 WHERE id = ?2",
             ).bind(now, String(row.threadId)),
           ]
@@ -386,12 +386,12 @@ export async function handleRetryWorkRequest(
       ...((stepKind === "implement" || contextLimitExceeded) &&
       retrySessionStrategy === "fresh"
         ? [
-            env.CONCLAVE_DB.prepare(
+            env.SYNTILA_DB.prepare(
               "UPDATE threads SET work_session_generation = work_session_generation + 1, updated_at = ?1 WHERE id = ?2",
             ).bind(now, String(row.threadId)),
           ]
         : []),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `UPDATE work_requests SET ai_context_generation =
         (SELECT ai_context_generation FROM threads WHERE id = ?1) WHERE id = ?2`,
       ).bind(String(row.threadId), workRequestId),
@@ -408,12 +408,12 @@ export async function handleRetryWorkRequest(
             ),
           ]
         : []),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `UPDATE workflow_tasks SET status = 'queued', output_json = NULL,
               error = NULL, started_at = NULL, finished_at = NULL, updated_at = ?1
         WHERE work_request_id = ?2 AND step_kind = ?3 AND status = 'failed'`,
       ).bind(now, workRequestId, stepKind),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO runs
        (id, space_id, thread_id, work_request_id,
         policy_snapshot_json, status, created_at, updated_at)
@@ -428,7 +428,7 @@ export async function handleRetryWorkRequest(
       ),
     ]);
   } catch (error) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "UPDATE work_requests SET status = 'failed', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
     )
       .bind(new Date().toISOString(), workRequestId)
@@ -437,9 +437,9 @@ export async function handleRetryWorkRequest(
   }
 
   if (row.mode === "stateful") {
-    if (!env.CONCLAVE_THREAD_COORDINATOR)
+    if (!env.SYNTILA_THREAD_COORDINATOR)
       throw new HttpError(503, "Thread runtime coordination is unavailable");
-    const coordinator = env.CONCLAVE_THREAD_COORDINATOR.getByName(
+    const coordinator = env.SYNTILA_THREAD_COORDINATOR.getByName(
       String(row.threadId),
     );
     const response = await coordinator.fetch(
@@ -498,7 +498,7 @@ export async function handleGetWorkRequest(
   workRequestId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT wr.id, wr.thread_id AS threadId,
             wr.requested_by_user_id AS requestedByUserId,
             (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversationId,
@@ -520,7 +520,7 @@ export async function handleGetWorkRequest(
     "view",
     accessContext,
   );
-  const task = await env.CONCLAVE_DB.prepare(
+  const task = await env.SYNTILA_DB.prepare(
     `SELECT output_json AS outputJson, error
      FROM workflow_tasks WHERE work_request_id = ?1
      ORDER BY created_at DESC, id DESC LIMIT 1`,
@@ -544,7 +544,7 @@ export async function handleGetWorkRequest(
     String(row.workflowSnapshotJson),
     {},
   );
-  const latestRun = await env.CONCLAVE_DB.prepare(
+  const latestRun = await env.SYNTILA_DB.prepare(
     `SELECT policy_snapshot_json AS policySnapshotJson
        FROM runs WHERE work_request_id = ?1
       ORDER BY created_at DESC, id DESC LIMIT 1`,
@@ -565,7 +565,7 @@ export async function handleGetWorkRequest(
     snapshot.resolvedBindings !== null
       ? (snapshot.resolvedBindings as Record<string, unknown>)
       : {};
-  const taskRows = await env.CONCLAVE_DB.prepare(
+  const taskRows = await env.SYNTILA_DB.prepare(
     `SELECT wt.id AS taskId, wt.step_kind AS kind, wt.status,
             wt.output_json AS outputJson, wt.error, wt.attempt,
             wt.started_at AS startedAt, wt.finished_at AS finishedAt,
@@ -613,7 +613,7 @@ export async function handleGetWorkRequest(
     (taskRows.results ?? []).map((value) => [String(value.kind), value]),
   );
   const turns =
-    (await loadConversationTurns(env.CONCLAVE_DB, [workRequestId])).get(
+    (await loadConversationTurns(env.SYNTILA_DB, [workRequestId])).get(
       workRequestId,
     ) ?? [];
   const workflowSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
@@ -776,14 +776,14 @@ export async function handleGetWorkRequest(
       .map((step) => step.errorCode)
       .find((code) => code !== null) ?? null;
   const workflowRun =
-    (await loadConversationWorkflowRuns(env.CONCLAVE_DB, [workRequestId])).get(
+    (await loadConversationWorkflowRuns(env.SYNTILA_DB, [workRequestId])).get(
       workRequestId,
     ) ?? null;
   const activities = await loadWorkRequestActivityHistory(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     workRequestId,
   );
-  const inputRows = await loadWorkRequestInputs(env.CONCLAVE_DB, workRequestId);
+  const inputRows = await loadWorkRequestInputs(env.SYNTILA_DB, workRequestId);
   const inputs = inputProgress(inputRows);
   return json({
     workRequest: {
@@ -858,7 +858,7 @@ async function aiHistoryClearedAt(
   env: SecurityEnv,
   threadId: string,
 ): Promise<string | null> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT ai_history_cleared_at AS clearedAt FROM threads WHERE id = ?1",
   )
     .bind(threadId)
@@ -890,7 +890,7 @@ export async function handleListWorkRequests(
   const beforeId = url.searchParams.get("beforeId");
   const activeOnly = url.searchParams.get("activeOnly") === "true";
   const recentCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
-  const page = await env.CONCLAVE_DB.prepare(
+  const page = await env.SYNTILA_DB.prepare(
     `SELECT wr.id, wr.requested_by_user_id AS requestedByUserId,
             (SELECT conversation_id FROM conversation_work_requests WHERE work_request_id = wr.id) AS conversationId,
             u.display_name AS requestedByName, wr.workflow_id AS workflowId,
@@ -922,9 +922,9 @@ export async function handleListWorkRequests(
       nextCursor: null,
     });
   const ids = requests.map((row) => String(row.id));
-  const turnsByRequest = await loadConversationTurns(env.CONCLAVE_DB, ids);
+  const turnsByRequest = await loadConversationTurns(env.SYNTILA_DB, ids);
   const workflowRunsByRequest = await loadConversationWorkflowRuns(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     ids,
   );
   const placeholders = ids.map((_, index) => `?${index + 1}`).join(", ");
@@ -954,7 +954,7 @@ export async function handleListWorkRequests(
     const workerPlaceholders = [...desiredWorkerIds]
       .map((_, index) => `?${index + 1}`)
       .join(", ");
-    const workerRows = await env.CONCLAVE_DB.prepare(
+    const workerRows = await env.SYNTILA_DB.prepare(
       `SELECT worker_id AS workerId, worker_type_id AS workerTypeId,
               engine_version AS engineVersion,
               profile_definition_id AS profileDefinitionId,
@@ -969,7 +969,7 @@ export async function handleListWorkRequests(
       desiredWorkers.set(String(worker.workerId), worker);
     }
   }
-  const taskRows = await env.CONCLAVE_DB.prepare(
+  const taskRows = await env.SYNTILA_DB.prepare(
     `SELECT wt.work_request_id AS workRequestId, wt.step_kind AS kind,
             wt.status, wt.output_json AS outputJson, wt.error,
             COALESCE(wt.started_at, wt.created_at) AS startedAt,
@@ -1014,7 +1014,7 @@ export async function handleListWorkRequests(
     values.push(task);
     tasksByRequest.set(key, values);
   }
-  const inputsByRequest = await loadInputsForRequests(env.CONCLAVE_DB, ids);
+  const inputsByRequest = await loadInputsForRequests(env.SYNTILA_DB, ids);
   const workRequests = requests.map((row) => {
     const id = String(row.id);
     const input = parseJson<Record<string, unknown>>(String(row.inputJson), {});
@@ -1248,7 +1248,7 @@ export async function handleCancelWorkRequest(
   workRequestId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT thread_id AS threadId, mode, status, cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
   )
     .bind(workRequestId)
@@ -1270,16 +1270,16 @@ export async function handleCancelWorkRequest(
     return json({ workRequestId, status: "cancelled" });
   if (row.status === "failed") {
     const now = new Date().toISOString();
-    await env.CONCLAVE_DB.batch([
-      env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.batch([
+      env.SYNTILA_DB.prepare(
         "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'failed'",
       ).bind(now, workRequestId),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1
           WHERE id = (SELECT id FROM runs WHERE work_request_id = ?2 AND status = 'failed'
                      ORDER BY created_at DESC, id DESC LIMIT 1)`,
       ).bind(now, workRequestId),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1
           WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')`,
       ).bind(now, workRequestId),
@@ -1287,9 +1287,9 @@ export async function handleCancelWorkRequest(
     return json({ workRequestId, status: "cancelled" });
   }
   if (row.status === "queued" && row.mode === "stateful") {
-    if (!env.CONCLAVE_THREAD_COORDINATOR)
+    if (!env.SYNTILA_THREAD_COORDINATOR)
       throw new HttpError(503, "Thread execution coordinator unavailable");
-    const coordinator = env.CONCLAVE_THREAD_COORDINATOR.getByName(row.threadId);
+    const coordinator = env.SYNTILA_THREAD_COORDINATOR.getByName(row.threadId);
     return coordinator.fetch(
       new Request("https://thread-coordinator/cancel", {
         method: "POST",
@@ -1303,14 +1303,14 @@ export async function handleCancelWorkRequest(
   }
   if (row.status === "queued") {
     const now = new Date().toISOString();
-    await env.CONCLAVE_DB.batch([
-      env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.batch([
+      env.SYNTILA_DB.prepare(
         "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'queued'",
       ).bind(now, workRequestId),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status = 'created'",
       ).bind(now, workRequestId),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')",
       ).bind(now, workRequestId),
     ]);
@@ -1320,13 +1320,13 @@ export async function handleCancelWorkRequest(
     throw new HttpError(409, "This Work Request cannot be cancelled");
 
   const requestedAt = row.cancelRequestedAt ?? new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE work_requests SET cancel_requested_at = COALESCE(cancel_requested_at, ?1), updated_at = ?1 WHERE id = ?2 AND status = 'running'",
   )
     .bind(requestedAt, workRequestId)
     .run();
 
-  const active = await env.CONCLAVE_DB.prepare(
+  const active = await env.SYNTILA_DB.prepare(
     `SELECT wa.id AS assignmentId, wa.execution_workspace_id AS workspaceId,
             wa.status AS assignmentStatus
        FROM workflow_tasks wt
@@ -1356,32 +1356,32 @@ export async function handleCancelWorkRequest(
   }
 
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "UPDATE work_requests SET status = 'cancelled', updated_at = ?1 WHERE id = ?2 AND status = 'running'",
     ).bind(now, workRequestId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "UPDATE runs SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('created', 'running')",
     ).bind(now, workRequestId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status IN ('queued', 'waiting')",
     ).bind(now, workRequestId),
   ]);
   await releaseThreadLeaseAfterCancel(env, row.threadId, workRequestId);
   if (!active) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "UPDATE workflow_tasks SET status = 'cancelled', finished_at = ?1, updated_at = ?1 WHERE work_request_id = ?2 AND status = 'running'",
     )
       .bind(now, workRequestId)
       .run();
-    const run = await env.CONCLAVE_DB.prepare(
+    const run = await env.SYNTILA_DB.prepare(
       "SELECT id FROM runs WHERE work_request_id = ?1 ORDER BY created_at DESC LIMIT 1",
     )
       .bind(workRequestId)
       .first<{ id: string }>();
-    if (run && env.CONCLAVE_RUN_WORKFLOW) {
+    if (run && env.SYNTILA_RUN_WORKFLOW) {
       const instanceId = await resolveWorkflowInstanceId(env, run.id);
-      const instance = await env.CONCLAVE_RUN_WORKFLOW.get(instanceId);
+      const instance = await env.SYNTILA_RUN_WORKFLOW.get(instanceId);
       await instance.terminate();
     }
   }
@@ -1404,12 +1404,12 @@ export async function handleClearWorkHistory(
 
   const receipt = await MutationIdempotency.from(
     request,
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     authorization.context.userId,
     `thread:${threadId}:clear-work-history`,
     {},
   );
-  const thread = await env.CONCLAVE_DB.prepare(
+  const thread = await env.SYNTILA_DB.prepare(
     "SELECT space_id AS spaceId FROM threads WHERE id = ?1",
   )
     .bind(threadId)
@@ -1437,13 +1437,13 @@ export async function handleClearWorkHistory(
   // keeps cleared exchanges out of any later Worker's context.
   const now = new Date().toISOString();
   const statements = [
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE conversations SET context_floor_sequence = COALESCE(
          (SELECT MAX(sequence) FROM conversation_history_entries h
            WHERE h.conversation_id = conversations.id), 0)
        WHERE thread_id = ?1`,
     ).bind(threadId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE threads SET ai_history_cleared_at = ?1,
          work_session_generation = work_session_generation + 1,
          ai_context_generation = ai_context_generation + 1, updated_at = ?1
@@ -1464,9 +1464,9 @@ export async function handleClearWorkHistory(
   const body = { threadId, cleared: true, aiHistoryClearedAt: now };
   const reply = receipt
     ? await receipt.commit(body, 200, (receiptStatements) =>
-        env.CONCLAVE_DB.batch([...statements, ...receiptStatements]),
+        env.SYNTILA_DB.batch([...statements, ...receiptStatements]),
       )
-    : (await env.CONCLAVE_DB.batch(statements), null);
+    : (await env.SYNTILA_DB.batch(statements), null);
 
   await announce();
 
@@ -1484,9 +1484,9 @@ async function releaseThreadLeaseAfterCancel(
   threadId: string,
   workRequestId: string,
 ): Promise<void> {
-  const namespace = env.CONCLAVE_THREAD_COORDINATOR;
+  const namespace = env.SYNTILA_THREAD_COORDINATOR;
   if (!namespace) return;
-  const lease = await env.CONCLAVE_DB.prepare(
+  const lease = await env.SYNTILA_DB.prepare(
     `SELECT id, fencing_token AS fencingToken FROM thread_runtime_leases
       WHERE work_request_id = ?1 AND thread_id = ?2 AND status = 'active'
       LIMIT 1`,

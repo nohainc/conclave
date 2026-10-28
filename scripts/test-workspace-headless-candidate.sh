@@ -12,18 +12,18 @@ cleanup() {
 trap cleanup EXIT
 # The default configuration is disconnected, so fake login data cannot leave
 # this host or create remote registration. A user bus alone must not pick a keyring.
-DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/conclave-no-secret-service \
-  "$BUNDLE/conclave-workspace" run --data-dir "$CHECK_ROOT/state" > "$CHECK_ROOT/service.log" 2>&1 &
+DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/syntila-no-secret-service \
+  "$BUNDLE/syntila-workspace" run --data-dir "$CHECK_ROOT/state" > "$CHECK_ROOT/service.log" 2>&1 &
 service_pid=$!
 ready=0
 for _ in $(seq 1 40); do
-  if "$BUNDLE/conclave-workspace" --data-dir "$CHECK_ROOT/state" --json status > "$CHECK_ROOT/health.json" 2>/dev/null &&
+  if "$BUNDLE/syntila-workspace" --data-dir "$CHECK_ROOT/state" --json status > "$CHECK_ROOT/health.json" 2>/dev/null &&
     python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("service", {}).get("serviceHealthy") is True else 1)' "$CHECK_ROOT/health.json"; then ready=1; break; fi
   sleep 0.25
 done
 [[ "$ready" == 1 ]] || { cat "$CHECK_ROOT/service.log"; exit 1; }
 if printf '%s\n' 'headless-test@example.invalid' 'nonsecret-test-password' |
-  "$BUNDLE/conclave-workspace" --data-dir "$CHECK_ROOT/state" login --password > "$CHECK_ROOT/login.json"; then
+  "$BUNDLE/syntila-workspace" --data-dir "$CHECK_ROOT/state" login --password > "$CHECK_ROOT/login.json"; then
   echo 'Unreachable Cloud must not complete login.' >&2; exit 1
 fi
 python3 - "$CHECK_ROOT" <<'PY'

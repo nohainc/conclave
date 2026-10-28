@@ -1,4 +1,4 @@
-import { hashToken } from "@conclave/security";
+import { hashToken } from "@syntila/security";
 
 type Database = Pick<D1Database, "prepare">;
 

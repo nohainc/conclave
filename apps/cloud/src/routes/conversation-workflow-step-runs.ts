@@ -2,7 +2,7 @@ import {
   planWorkflowTasks,
   type BuiltinWorkflowDefinition,
   type WorkflowStepRun,
-} from "@conclave/core";
+} from "@syntila/core";
 
 /** Authorized request scope only. Task state owns lifecycle; turns own actual invocation attribution. */
 export async function loadConversationWorkflowStepRuns(

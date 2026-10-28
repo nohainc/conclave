@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/workspace/workspaces_page.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 void main() {
   testWidgets('empty Workspaces explains desktop-owned registration',

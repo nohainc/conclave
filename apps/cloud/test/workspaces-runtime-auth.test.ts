@@ -8,10 +8,10 @@ describe("Workspace WebSocket runtime authentication", () => {
       const prepare = vi.fn();
       const response = await handleWorkspaceGatewayConnect(
         new Request(
-          `https://app.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1&${parameter}=secret`,
+          `https://app.syntila.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1&${parameter}=secret`,
           { headers: { upgrade: "websocket" } },
         ),
-        { CONCLAVE_DB: { prepare } } as never,
+        { SYNTILA_DB: { prepare } } as never,
       );
 
       expect(response.status).toBe(401);

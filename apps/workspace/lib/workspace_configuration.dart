@@ -56,7 +56,7 @@ class WorkspaceConfigurationResolver {
     final workspaceIndex = args.indexOf('--workspace-id');
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
+        : Platform.environment['SYNTILA_WORKSPACE_DATA_DIR'];
     final dataDirectory =
         path == null ? WorkspacePaths.defaultStateDirectory() : Directory(path);
     final settingsStore = WorkspaceSettingsStore(dataDirectory);
@@ -74,19 +74,19 @@ class WorkspaceConfigurationResolver {
             ? args[workspaceRuntimeIndex + 1]
             : (!ignoreSavedRegistration && registration != null
                 ? registration.workspaceRuntimeId
-                : Platform.environment['CONCLAVE_WORKSPACE_RUNTIME_ID']);
+                : Platform.environment['SYNTILA_WORKSPACE_RUNTIME_ID']);
     final installationId =
         installationIndex >= 0 && installationIndex + 1 < args.length
             ? args[installationIndex + 1]
             : (!ignoreSavedRegistration && registration != null
                 ? registration.installationId
-                : Platform.environment['CONCLAVE_WORKSPACE_INSTALLATION_ID'] ??
+                : Platform.environment['SYNTILA_WORKSPACE_INSTALLATION_ID'] ??
                     InstallationIdentityStore(dataDirectory).readSync());
     final workspaceId = workspaceIndex >= 0 && workspaceIndex + 1 < args.length
         ? args[workspaceIndex + 1]
         : (!ignoreSavedRegistration && registration != null
             ? registration.workspaceId
-            : Platform.environment['CONCLAVE_WORKSPACE_ID']);
+            : Platform.environment['SYNTILA_WORKSPACE_ID']);
     final workRootPath = settings.workRootPath;
     final secureStore = credentialStore ??
         PlatformSecureCredentialStore(
@@ -103,7 +103,7 @@ class WorkspaceConfigurationResolver {
         // for isolated fixture launches without a saved credential.
         runtimeToken: ignoreSavedRegistration
             ? null
-            : runtimeToken ?? Platform.environment['CONCLAVE_WORKSPACE_TOKEN'],
+            : runtimeToken ?? Platform.environment['SYNTILA_WORKSPACE_TOKEN'],
       ),
       cloudUri: ignoreSavedRegistration
           ? null
@@ -124,7 +124,7 @@ class WorkspaceConfigurationResolver {
     final index = args.indexOf('--data-dir');
     final path = index >= 0 && index + 1 < args.length
         ? args[index + 1]
-        : Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'];
+        : Platform.environment['SYNTILA_WORKSPACE_DATA_DIR'];
     return path == null
         ? WorkspacePaths.defaultStateDirectory()
         : Directory(path);

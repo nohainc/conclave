@@ -1,8 +1,8 @@
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/ax_discussion_cache.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'ax_fixture_data.dart';

@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_workspace/development_tool_profiles.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
-import 'package:conclave_workspace/tool_profile_resolver.dart';
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_workspace/development_tool_profiles.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/tool_profile_resolver.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
@@ -139,7 +139,7 @@ void main() {
         engineVersion: '1.0.0');
     final candidate = resolution.release!;
     final engineFile = File(
-        '$repository/apps/workspace/assets/engines/conclave_cli_worker_engine');
+        '$repository/apps/workspace/assets/engines/syntila_cli_worker_engine');
     expect(await engineFile.exists(), isTrue,
         reason: 'Build the CLI Worker Engine before acceptance tests');
     final supervisor =

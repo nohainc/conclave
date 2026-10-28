@@ -60,9 +60,9 @@ class ProfileLabSecurity {
       (m) => '${m.group(1)}[REDACTED_TOKEN]',
     );
 
-    // Redact API keys (e.g. sk-..., conclave_..., ghp_..., etc.)
+    // Redact API keys (e.g. sk-..., syntila_..., ghp_..., etc.)
     redacted = redacted.replaceAll(
-      RegExp(r'\b(sk|conclave|ghp|gho|glpat|xoxb|xoxp)-[A-Za-z0-9_\-]{16,}\b'),
+      RegExp(r'\b(sk|syntila|ghp|gho|glpat|xoxb|xoxp)-[A-Za-z0-9_\-]{16,}\b'),
       '[REDACTED_API_KEY]',
     );
 
@@ -89,7 +89,7 @@ class ProfileLabSecurity {
     final hostEnv = Map<String, String>.from(Platform.environment);
     hostEnv.removeWhere((key, _) {
       final k = key.toUpperCase();
-      return k.startsWith('CONCLAVE_SECRET_') ||
+      return k.startsWith('SYNTILA_SECRET_') ||
           k.contains('SECRET') ||
           k.contains('TOKEN') ||
           k.contains('API_KEY') ||

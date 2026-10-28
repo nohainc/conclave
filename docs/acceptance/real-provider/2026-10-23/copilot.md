@@ -174,7 +174,7 @@ emitted `WorkerActivity` frames.
 - `pnpm validate:profile-lab`: analysis and all 64 tests passed.
 - `pnpm validate:engine`: protocol (36) and Dart Profile (31) tests passed,
   then stopped on a pre-existing formatting difference in
-  `packages/conclave_cli_worker_runtime/test/cli_streaming_runner_test.dart`.
+  `packages/syntila_cli_worker_runtime/test/cli_streaming_runner_test.dart`.
 - Separate Engine analysis passed. Its full tests initially had 86 passes,
   2 skips, and 2 fixture-startup timeouts in `activity_execution_harness_test`.
   Both timed-out tests passed on an isolated rerun with `--concurrency=1`.

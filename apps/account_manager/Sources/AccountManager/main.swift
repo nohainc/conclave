@@ -30,7 +30,7 @@ struct Bridge {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             let resource = Bundle.main.resourceURL?.appendingPathComponent("repository.txt")
             let savedRoot = resource.flatMap { try? String(contentsOf: $0, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines) }
-            let root = ProcessInfo.processInfo.environment["CONCLAVE_REPOSITORY"] ?? savedRoot ?? FileManager.default.currentDirectoryPath
+            let root = ProcessInfo.processInfo.environment["SYNTILA_REPOSITORY"] ?? savedRoot ?? FileManager.default.currentDirectoryPath
             process.currentDirectoryURL = URL(fileURLWithPath: root)
             process.arguments = ["node", root + "/apps/cloud/scripts/account-manager.mjs"]
             var env = ProcessInfo.processInfo.environment

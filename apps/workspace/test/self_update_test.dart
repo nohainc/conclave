@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:conclave_workspace/self_update.dart';
+import 'package:syntila_workspace/self_update.dart';
 import 'package:crypto/crypto.dart';
-import 'package:conclave_workspace/worker_trust_policy.dart';
+import 'package:syntila_workspace/worker_trust_policy.dart';
 import 'support/ed25519_release_fixture.dart';
 import 'package:test/test.dart';
 
 void main() {
   test('accepts a Cloud release announcement without applying it', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final statuses = <WorkspaceUpdateStatus>[];
     final controller = WorkspaceUpdateController(
       cloudUri: Uri.parse('https://cloud.test'),
@@ -38,7 +38,7 @@ void main() {
 
   test('rejects downgrade and minimum-version-incompatible announcements',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final controller = WorkspaceUpdateController(
       cloudUri: Uri.parse('https://cloud.test'),
       currentVersion: '1.2.0',
@@ -67,7 +67,7 @@ void main() {
 
   test('fetches authenticated release metadata and bounded package bytes',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final packageBytes = [11, 22, 33];
     final digest = sha256.convert(packageBytes).toString();
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -127,7 +127,7 @@ void main() {
   });
 
   test('reports the complete update lifecycle through activation', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [31, 41, 59];
     final digest = 'sha256:${sha256.convert(bytes)}';
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -182,7 +182,7 @@ void main() {
   });
 
   test('does not activate a release without a restart bootstrap', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [3, 1, 4];
     final digest = sha256.convert(bytes).toString();
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -222,7 +222,7 @@ void main() {
   });
 
   test('activates a verified release and records metadata', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [1, 2, 3];
     await WorkspaceUpdater(root, requireSignature: false).apply(
       ReleasePackage(
@@ -239,7 +239,7 @@ void main() {
   });
 
   test('restores previous release after a failed health check', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     await root.create(recursive: true);
     final old = File('${root.path}/workspace.active')..writeAsBytesSync([9]);
     final bytes = [1, 2, 3];
@@ -259,7 +259,7 @@ void main() {
   });
 
   test('rolls back when the restart bootstrap fails', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final old = File('${root.path}/workspace.active')..writeAsBytesSync([9]);
     final bytes = [1, 2, 3];
     await expectLater(
@@ -279,7 +279,7 @@ void main() {
   });
 
   test('rejects an invalid signed release', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [4, 5, 6];
     final policy = WorkerTrustPolicy(trustedPublicKeys: {
       'release': {'test-key': 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='},
@@ -304,7 +304,7 @@ void main() {
 
   test('verifies signed Workspace metadata before activation', () async {
     final fixture = await Ed25519ReleaseFixture.create(publisher: 'conclave');
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [1, 3, 3, 7];
     final digest = sha256.convert(bytes).toString();
     final metadata = <String, Object?>{
@@ -343,7 +343,7 @@ void main() {
   });
 
   test('rejects an unsigned release by default', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [6, 7, 8];
     await expectLater(
       WorkspaceUpdater(root).apply(
@@ -363,7 +363,7 @@ void main() {
   });
 
   test('rejects a release requiring a newer protocol', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [7, 8, 9];
     await expectLater(
       WorkspaceUpdater(root,
@@ -384,7 +384,7 @@ void main() {
   });
 
   test('rejects a signed or valid release downgrade', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final currentBytes = [1, 1, 1];
     final currentDigest = sha256.convert(currentBytes).toString();
     await WorkspaceUpdater(root, requireSignature: false).apply(
@@ -416,7 +416,7 @@ void main() {
   });
 
   test('keeps release versions immutable and records provenance', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [2, 4, 6];
     final digest = sha256.convert(bytes).toString();
     final package = ReleasePackage(
@@ -458,7 +458,7 @@ void main() {
   });
 
   test('rejects malformed release versions before staging', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [8];
     await expectLater(
       WorkspaceUpdater(root, requireSignature: false).apply(
@@ -477,7 +477,7 @@ void main() {
   });
 
   test('rejects oversized release packages before staging', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [1, 2, 3, 4];
     await expectLater(
       WorkspaceUpdater(root, requireSignature: false).apply(
@@ -498,7 +498,7 @@ void main() {
   });
 
   test('does not stage an update while assignments are active', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-update-');
+    final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [10, 11, 12];
     await expectLater(
       WorkspaceUpdater(root, requireSignature: false).apply(

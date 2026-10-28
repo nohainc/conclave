@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_lifecycle.dart';
-import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
-import 'package:conclave_workspace/workspace_manager_service.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace_lifecycle.dart';
+import 'package:syntila_workspace/workspace_lifecycle_store.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/workspace_manager_service.dart';
 import 'package:test/test.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
 import 'support/logical_worker_catalog_fixture.dart';
 
 void main() {

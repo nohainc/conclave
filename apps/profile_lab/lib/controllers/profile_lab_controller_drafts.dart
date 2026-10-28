@@ -21,7 +21,7 @@ mixin _ProfileLabDraftOperations on _ProfileLabControllerState {
           'apps/profile_lab/assets/profiles was found above the working '
           'directory or the app binary, and none is remembered from an '
           'earlier run. Start Profile Lab once from the checkout (flutter '
-          'run), or set CONCLAVE_REPOSITORY to the checkout path.';
+          'run), or set SYNTILA_REPOSITORY to the checkout path.';
       notifyListeners();
       return;
     }

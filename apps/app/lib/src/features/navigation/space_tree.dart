@@ -128,10 +128,10 @@ class SpaceTree extends StatelessWidget {
             margin: const EdgeInsets.only(bottom: 6),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
-              color: ConclaveBrand.accent.withValues(alpha: 0.12),
+              color: SyntilaBrand.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: ConclaveBrand.accent.withValues(alpha: 0.3),
+                color: SyntilaBrand.accent.withValues(alpha: 0.3),
               ),
             ),
             child: InkWell(
@@ -143,7 +143,7 @@ class SpaceTree extends StatelessWidget {
                   const Icon(
                     Icons.mail_outline,
                     size: 14,
-                    color: ConclaveBrand.accent,
+                    color: SyntilaBrand.accent,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
@@ -159,7 +159,7 @@ class SpaceTree extends StatelessWidget {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 14,
-                    color: ConclaveColors.navigationTextMuted(
+                    color: SyntilaColors.navigationTextMuted(
                         Theme.of(context).brightness == Brightness.dark),
                   ),
                 ],
@@ -174,7 +174,7 @@ class SpaceTree extends StatelessWidget {
               'No spaces yet',
               style: TextStyle(
                 fontSize: 11.5,
-                color: ConclaveColors.navigationTextMuted(
+                color: SyntilaColors.navigationTextMuted(
                     Theme.of(context).brightness == Brightness.dark),
               ),
             ),
@@ -199,7 +199,7 @@ class SpaceTree extends StatelessWidget {
           style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
-              color: ConclaveColors.navigationTextMuted(
+              color: SyntilaColors.navigationTextMuted(
                   Theme.of(context).brightness == Brightness.dark))));
 
   Widget _buildSpaceItem(BuildContext context, AxSpace space) {
@@ -248,7 +248,7 @@ class SpaceTree extends StatelessWidget {
               height: pageLayout ? 52 : _sidebarRowHeight,
               decoration: BoxDecoration(
                 color: isSpaceActive
-                    ? ConclaveColors.navigationSelectedColor(
+                    ? SyntilaColors.navigationSelectedColor(
                         Theme.of(context).brightness == Brightness.dark)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(8),
@@ -289,10 +289,10 @@ class SpaceTree extends StatelessWidget {
                           child: Stack(
                             clipBehavior: Clip.none,
                             children: [
-                              ConclaveFolderIcon(
+                              SyntilaFolderIcon(
                                 isExpanded: isExpanded,
                                 size: 16,
-                                color: ConclaveColors.navigationTextMuted(
+                                color: SyntilaColors.navigationTextMuted(
                                     Theme.of(context).brightness ==
                                         Brightness.dark),
                               ),
@@ -317,7 +317,7 @@ class SpaceTree extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: ConclaveColors.navigationTextMuted(
+                            color: SyntilaColors.navigationTextMuted(
                                 Theme.of(context).brightness ==
                                     Brightness.dark),
                             fontSize: pageLayout ? 15 : 12.5,
@@ -330,7 +330,7 @@ class SpaceTree extends StatelessWidget {
                           padding: const EdgeInsets.only(right: 4),
                           child: Icon(Icons.push_pin_outlined,
                               size: 12,
-                              color: ConclaveColors.navigationTextMuted(
+                              color: SyntilaColors.navigationTextMuted(
                                   Theme.of(context).brightness ==
                                       Brightness.dark)),
                         ),
@@ -359,7 +359,7 @@ class SpaceTree extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(34, 6, 10, 6),
               child: Text('Loading Threads…',
                   style: TextStyle(
-                      color: ConclaveColors.navigationTextMuted(
+                      color: SyntilaColors.navigationTextMuted(
                           Theme.of(context).brightness == Brightness.dark),
                       fontSize: 11.5))),
         if (isExpanded && error != null)
@@ -401,7 +401,7 @@ class SpaceTree extends StatelessWidget {
                       padding: const EdgeInsets.only(left: 8, right: 2),
                       decoration: BoxDecoration(
                         color: isThreadActive
-                            ? ConclaveColors.navigationSelectedColor(
+                            ? SyntilaColors.navigationSelectedColor(
                                 Theme.of(context).brightness == Brightness.dark)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
@@ -424,7 +424,7 @@ class SpaceTree extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                color: ConclaveColors.navigationTextMuted(
+                                color: SyntilaColors.navigationTextMuted(
                                     Theme.of(context).brightness ==
                                         Brightness.dark),
                                 fontSize: pageLayout ? 15 : 11.5,
@@ -443,7 +443,7 @@ class SpaceTree extends StatelessWidget {
                               padding: const EdgeInsets.only(right: 4),
                               child: Icon(Icons.push_pin_outlined,
                                   size: 12,
-                                  color: ConclaveColors.navigationTextMuted(
+                                  color: SyntilaColors.navigationTextMuted(
                                       Theme.of(context).brightness ==
                                           Brightness.dark)),
                             ),
@@ -484,20 +484,20 @@ class SpaceTree extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isArchived =
         thread.archived || thread.status.toLowerCase() == 'archived';
-    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    final menuStyle = SyntilaMenuStyle.surface(isDark);
     ButtonStyle itemStyle({bool isDestructive = false}) =>
-        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive);
+        SyntilaMenuStyle.item(isDark, isDestructive: isDestructive);
 
     Widget divider() => Padding(
           padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
           child: Divider(
             height: 1,
             thickness: 1,
-            color: ConclaveColors.navigationBorder(isDark),
+            color: SyntilaColors.navigationBorder(isDark),
           ),
         );
 
-    final menuIconColor = ConclaveColors.textPrimary(isDark);
+    final menuIconColor = SyntilaColors.textPrimary(isDark);
 
     void select(String action) =>
         _handleThreadMenuItem(context, space, thread, action);
@@ -519,7 +519,7 @@ class SpaceTree extends StatelessWidget {
                   child: IconButton(
                     icon: Icon(
                       Icons.more_vert,
-                      color: ConclaveColors.navigationTextMuted(
+                      color: SyntilaColors.navigationTextMuted(
                           Theme.of(context).brightness == Brightness.dark),
                       size: 18,
                     ),
@@ -606,7 +606,7 @@ class SpaceTree extends StatelessWidget {
               leadingIcon: Icon(
                 Icons.delete_rounded,
                 size: 16,
-                color: ConclaveColors.errorText(isDark),
+                color: SyntilaColors.errorText(isDark),
               ),
               onPressed: () => select('delete'),
               child: Text(
@@ -614,7 +614,7 @@ class SpaceTree extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
-                  color: ConclaveColors.errorText(isDark),
+                  color: SyntilaColors.errorText(isDark),
                 ),
               ),
             ),
@@ -634,19 +634,19 @@ class SpaceTree extends StatelessWidget {
         .toList();
     final pinnedPosition = pinnedOrder.indexOf(space.id);
     final canReorderPins = space.isPinned && onReorderPinnedSpaces != null;
-    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    final menuStyle = SyntilaMenuStyle.surface(isDark);
     ButtonStyle itemStyle({bool isDestructive = false}) =>
-        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive);
+        SyntilaMenuStyle.item(isDark, isDestructive: isDestructive);
 
     Widget divider() => Padding(
           padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
           child: Divider(
             height: 1,
-            color: ConclaveColors.navigationBorder(isDark),
+            color: SyntilaColors.navigationBorder(isDark),
           ),
         );
 
-    final iconColor = ConclaveColors.textPrimary(isDark);
+    final iconColor = SyntilaColors.textPrimary(isDark);
     void select(String action) {
       switch (action) {
         case 'pin':
@@ -680,7 +680,7 @@ class SpaceTree extends StatelessWidget {
                 excludeFromSemantics: true,
                 child: IconButton(
                   icon: Icon(Icons.more_vert,
-                      color: ConclaveColors.navigationTextMuted(
+                      color: SyntilaColors.navigationTextMuted(
                           Theme.of(context).brightness == Brightness.dark),
                       size: 18),
                   splashRadius: 14,
@@ -748,10 +748,10 @@ class SpaceTree extends StatelessWidget {
           MenuItemButton(
             style: itemStyle(isDestructive: true),
             leadingIcon: Icon(Icons.delete_rounded,
-                size: 16, color: ConclaveColors.errorText(isDark)),
+                size: 16, color: SyntilaColors.errorText(isDark)),
             onPressed: () => select('delete'),
             child: Text('Delete Space',
-                style: TextStyle(color: ConclaveColors.errorText(isDark))),
+                style: TextStyle(color: SyntilaColors.errorText(isDark))),
           ),
         ],
       ),
@@ -816,7 +816,7 @@ class SpaceTree extends StatelessWidget {
     return showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: Text(title),
         content: Text(content),
         actions: [
@@ -860,7 +860,7 @@ class SpaceTree extends StatelessWidget {
     ScaffoldMessenger.maybeOf(context)?.showNotice(
       SnackBar(
         content: Text('Failed to $action: $error'),
-        backgroundColor: ConclaveColors.error,
+        backgroundColor: SyntilaColors.error,
       ),
     );
   }
@@ -880,7 +880,7 @@ class SpaceTree extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: ConclaveColors.textSecondaryLight,
+              color: SyntilaColors.textSecondaryLight,
               width: 1.2,
             ),
           ),
@@ -893,7 +893,7 @@ class SpaceTree extends StatelessWidget {
           width: 6.5,
           height: 6.5,
           decoration: const BoxDecoration(
-            color: ConclaveColors.warning,
+            color: SyntilaColors.warning,
             shape: BoxShape.circle,
           ),
         );
@@ -966,8 +966,8 @@ class _SidebarHoverRowState extends State<_SidebarHoverRow> {
       );
 }
 
-class ConclaveFolderIcon extends StatelessWidget {
-  const ConclaveFolderIcon({
+class SyntilaFolderIcon extends StatelessWidget {
+  const SyntilaFolderIcon({
     super.key,
     required this.isExpanded,
     this.size = 16,
@@ -982,7 +982,7 @@ class ConclaveFolderIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconColor = color ??
         IconTheme.of(context).color ??
-        ConclaveColors.navigationTextMuted(
+        SyntilaColors.navigationTextMuted(
             Theme.of(context).brightness == Brightness.dark);
     return CustomPaint(
       size: Size(size, size),
@@ -1147,7 +1147,7 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
           )
         else if (widget.unread)
           _dot(const ValueKey('sidebar-unread-indicator'), 'Unread messages',
-              ConclaveBrand.accent, (dot) => dot),
+              SyntilaBrand.accent, (dot) => dot),
       ],
     );
   }

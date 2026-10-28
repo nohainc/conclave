@@ -10,7 +10,7 @@ export function threadNotice(
   text: string,
   now: string,
 ) {
-  return env.CONCLAVE_DB.prepare(
+  return env.SYNTILA_DB.prepare(
     `INSERT INTO discussion_messages
     (id, thread_id, author_user_id, body, created_at, event_type)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
@@ -29,7 +29,7 @@ export async function requireDestructiveThreadAccess(
   threadId: string,
   userId: string,
 ) {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT t.lead_user_id AS creator,
     t.has_other_contributions AS contributed, s.owner_user_id AS owner
     FROM threads t JOIN spaces s ON s.id = t.space_id WHERE t.id = ?1`,
@@ -53,7 +53,7 @@ export function destructiveThreadGuard(
   threadId: string,
   userId: string,
 ) {
-  return env.CONCLAVE_DB.prepare(
+  return env.SYNTILA_DB.prepare(
     `UPDATE threads SET has_other_contributions = CASE
     WHEN ((lead_user_id = ?2 AND has_other_contributions = 0) OR EXISTS
       (SELECT 1 FROM spaces s WHERE s.id = threads.space_id AND s.owner_user_id = ?2))

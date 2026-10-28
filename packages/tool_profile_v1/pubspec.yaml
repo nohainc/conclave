@@ -1,4 +1,4 @@
-name: conclave_tool_profile_v1
+name: syntila_tool_profile_v1
 description: Shared Tool Profile v1 structural and security validator.
 publish_to: none
 version: 0.1.0

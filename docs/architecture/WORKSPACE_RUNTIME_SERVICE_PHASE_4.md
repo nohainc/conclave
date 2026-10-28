@@ -1,6 +1,6 @@
 # Workspace Runtime Service Phase 4
 
-> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md). Read this document as history.
+> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `syntila-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md). Read this document as history.
 
 > **Historical implementation record.** The current architecture is defined
 > in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
@@ -67,7 +67,7 @@ background service is unavailable and disables service launch actions instead
 of presenting a control that launchd will reject with a code-signing error.
 
 The standalone service is compiled with the same public
-`CONCLAVE_RELEASE_TRUST_KEYS_JSON` roots as the Flutter application for
+`SYNTILA_RELEASE_TRUST_KEYS_JSON` roots as the Flutter application for
 Workspace application-release verification. Worker Profiles are validated by
 canonical digest, schema, identity, and Engine compatibility; they do not use
 that application-release trust configuration.

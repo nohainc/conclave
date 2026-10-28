@@ -52,31 +52,31 @@ class ToastOverlay extends StatelessWidget {
 
             switch (toast.type) {
               case ToastType.success:
-                accentColor = ConclaveBrand.success;
+                accentColor = SyntilaBrand.success;
                 bgColor = isDark
-                    ? ConclaveBrand.successWashDark
-                    : ConclaveBrand.successWash;
+                    ? SyntilaBrand.successWashDark
+                    : SyntilaBrand.successWash;
                 icon = Icons.check_circle_outline_rounded;
                 break;
               case ToastType.warning:
-                accentColor = ConclaveBrand.warning;
+                accentColor = SyntilaBrand.warning;
                 bgColor = isDark
-                    ? ConclaveBrand.warningWashDark
-                    : ConclaveBrand.warningWash;
+                    ? SyntilaBrand.warningWashDark
+                    : SyntilaBrand.warningWash;
                 icon = Icons.warning_amber_rounded;
                 break;
               case ToastType.error:
-                accentColor = ConclaveBrand.error;
+                accentColor = SyntilaBrand.error;
                 bgColor = isDark
-                    ? ConclaveBrand.errorWashDark
-                    : ConclaveBrand.errorWash;
+                    ? SyntilaBrand.errorWashDark
+                    : SyntilaBrand.errorWash;
                 icon = Icons.error_outline_rounded;
                 break;
               case ToastType.info:
-                accentColor = ConclaveBrand.info;
+                accentColor = SyntilaBrand.info;
                 bgColor = isDark
-                    ? ConclaveBrand.infoWashDark
-                    : ConclaveBrand.infoWash;
+                    ? SyntilaBrand.infoWashDark
+                    : SyntilaBrand.infoWash;
                 icon = Icons.info_outline_rounded;
                 break;
             }
@@ -87,8 +87,8 @@ class ToastOverlay extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isDark
-                    ? ConclaveBrand.darkSurface
-                    : ConclaveBrand.lightSurface,
+                    ? SyntilaBrand.darkSurface
+                    : SyntilaBrand.lightSurface,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                     color: accentColor.withValues(alpha: 0.4), width: 1.2),
@@ -119,8 +119,8 @@ class ToastOverlay extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         color: isDark
-                            ? ConclaveBrand.darkInk
-                            : ConclaveBrand.lightInk,
+                            ? SyntilaBrand.darkInk
+                            : SyntilaBrand.lightInk,
                       ),
                     ),
                   ),
@@ -131,7 +131,7 @@ class ToastOverlay extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     constraints:
                         const BoxConstraints(minWidth: 24, minHeight: 24),
-                    color: ConclaveColors.primaryForeground(isDark),
+                    color: SyntilaColors.primaryForeground(isDark),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: toast.message));
                     },
@@ -144,8 +144,8 @@ class ToastOverlay extends StatelessWidget {
                         const BoxConstraints(minWidth: 24, minHeight: 24),
                     splashRadius: 14,
                     color: isDark
-                        ? ConclaveBrand.darkInkMuted
-                        : ConclaveBrand.lightInkMuted,
+                        ? SyntilaBrand.darkInkMuted
+                        : SyntilaBrand.lightInkMuted,
                     onPressed: () => onDismiss(toast.id),
                   ),
                 ],

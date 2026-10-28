@@ -63,15 +63,15 @@ temporary directory and never pushes to the remote repository.
 Run it only on the designated Workspace machine:
 
 ```text
-CONCLAVE_TEST_FULL_LOCAL_ACCESS=1 \
-CONCLAVE_TEST_FULL_LOCAL_ACCESS_EVIDENCE_DIR=/tmp/conclave-phase7-evidence \
+SYNTILA_TEST_FULL_LOCAL_ACCESS=1 \
+SYNTILA_TEST_FULL_LOCAL_ACCESS_EVIDENCE_DIR=/tmp/syntila-phase7-evidence \
 dart test test/full_local_access_host_acceptance_test.dart
 ```
 
 The repository and general HTTPS targets can be overridden with
-`CONCLAVE_TEST_HOST_REPOSITORY` and `CONCLAVE_TEST_HOST_URL`. The provider
+`SYNTILA_TEST_HOST_REPOSITORY` and `SYNTILA_TEST_HOST_URL`. The provider
 commands checked by default are `agy,codex`; override them with
-`CONCLAVE_TEST_HOST_PROVIDER_COMMANDS` when a machine has a different approved
+`SYNTILA_TEST_HOST_PROVIDER_COMMANDS` when a machine has a different approved
 provider installation. Environment values and credentials are not written to
 the evidence file.
 
@@ -89,20 +89,20 @@ reconnecting after a macOS restart require a device-level service test because
 they depend on launchd, signing, and the host's login/session state.
 
 To exercise the same host operations through the real provider CLI and the
-generic Engine, add `CONCLAVE_TEST_REAL_PROFILE_FULL_LOCAL_ACCESS=1` and enable
+generic Engine, add `SYNTILA_TEST_REAL_PROFILE_FULL_LOCAL_ACCESS=1` and enable
 one provider profile, for example:
 
 ```text
-CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
-CONCLAVE_TEST_REAL_PROFILE_FULL_LOCAL_ACCESS=1 \
-CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/tmp/conclave-profile-evidence \
+SYNTILA_TEST_REAL_PROFILE_CHATGPT=1 \
+SYNTILA_TEST_REAL_PROFILE_FULL_LOCAL_ACCESS=1 \
+SYNTILA_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/tmp/syntila-profile-evidence \
 dart test test/tool_profile_real_acceptance_test.dart
 ```
 
-Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` instead for the Gemini profile. Live
+Use `SYNTILA_TEST_REAL_PROFILE_GEMINI=1` instead for the Gemini profile. Live
 assignment workflows in `test/tool_profile_assignment_acceptance_test.dart` use
-separate `CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` and
-`CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1` flags so release-evidence runs do
+separate `SYNTILA_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` and
+`SYNTILA_TEST_ASSIGNMENT_PROFILE_GEMINI=1` flags so release-evidence runs do
 not trigger multi-step assignment suites implicitly. These real-provider checks
 are intentionally opt-in and should run only on an explicitly designated
 development machine.

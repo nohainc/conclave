@@ -2,7 +2,7 @@
 
 **Status:** Current V9 operational specification; the V8 material below is retained as a historical migration reference.
 **Architecture:** [Worker Profile V9](WORKER_PROFILE_V9.md)
-**Decision:** [ADR-019](../decisions/ADR-019-conclave-profile-lab.md)  
+**Decision:** [ADR-019](../decisions/ADR-019-syntila-profile-lab.md)  
 **Implementation:** `apps/profile_lab`
 
 ## V9 operating contract
@@ -92,7 +92,7 @@ The Create Worker form starts new catalog entries in the `testing` release stage
 
 Profile Lab executable discovery follows the same rule: it gathers executable names from the loaded Worker catalog's `providerToolName` and from Tool Profile `providerTool.name` and `providerTool.executableCandidates`. Profile-declared `standardLocations` are used for those candidates. Diagnostics list only the names found in loaded Worker/Profile data; the application does not maintain a built-in provider inventory. Session formats and resume arguments remain Profile data, and a failed session diagnostic does not let repair logic infer them from a provider name.
 
-Profile Lab builds default to `https://app.conclaveax.com`. Development builds can set `CONCLAVE_CLOUD_URL=http://localhost:8787` with a Dart define or choose an origin in the Cloud connection settings. The settings override persists locally and can be reset to the build default. Cloud origins must be HTTPS except for loopback HTTP in development builds; URLs with credentials, paths, queries, or fragments are rejected. Saved Keychain sessions are bound to their Cloud origin and are cleared when the origin changes. Legacy sessions without origin binding are discarded.
+Profile Lab builds default to `https://app.conclaveax.com`. Development builds can set `SYNTILA_CLOUD_URL=http://localhost:8787` with a Dart define or choose an origin in the Cloud connection settings. The settings override persists locally and can be reset to the build default. Cloud origins must be HTTPS except for loopback HTTP in development builds; URLs with credentials, paths, queries, or fragments are rejected. Saved Keychain sessions are bound to their Cloud origin and are cleared when the origin changes. Legacy sessions without origin binding are discarded.
 
 ### Profile Lab application boundaries
 
@@ -193,7 +193,7 @@ Profile Lab allows engineers to author and iteratively refine Draft Profiles bef
 
 - **Local Draft Store (`DraftProfileStore`):** Persists draft configurations locally under Profile Lab's dedicated application support directory (`~/Library/Application Support/conclave_profile_lab/drafts/`).
 - **Unsigned Draft Candidate (`LocalDraftProfileCandidate`):** Implements `ToolProfileCandidate` with `isSigned => false`. Unsigned drafts are strictly barred from entering Workspace's trusted profile store (`ToolProfileReleaseStore`).
-- **Sandbox Test Supervisor:** Uses `PlatformProcessSupervisor` from `conclave_cli_worker_runtime` to run tests out of process with hard execution deadlines, process tree cleanup, and secret redaction (`SafeProviderDiagnostics`).
+- **Sandbox Test Supervisor:** Uses `PlatformProcessSupervisor` from `syntila_cli_worker_runtime` to run tests out of process with hard execution deadlines, process tree cleanup, and secret redaction (`SafeProviderDiagnostics`).
 - **Progressive Test Ladder:** Keeps schema, Engine compatibility, executable discovery, version, passive probe, and live probe as preflight stages. It then submits actual assignments through the generic CLI Worker Engine, including a file write verified inside the isolated sandbox. Session create/resume and model selection each submit real Engine assignments when the Profile contract supports them; unsupported or untestable scenarios are shown as skipped, never passed.
 - **Representative Write Verification:** The write stage requires the expected UTF-8 sentinel and accepts either the exact bytes or one conventional terminal LF/CRLF. This accommodates provider CLIs that serialize a text-file edit with a final line ending while still rejecting missing, redirected, or altered content.
   Each restricted/full-access write assignment has a bounded three-minute
@@ -255,7 +255,7 @@ The separate Repair Loop remains an experimental local heuristic and is not mode
 
 Audit records provide clear operational history (e.g. *"Draft v20 created by AI-assisted change, reviewed by Vitalii, tested on Codex 0.188.0, published by controlled signer, promoted to Testing by Vitalii"*).
 
-Profile Lab's `CONCLAVE_RELEASE_TRUST_KEYS_JSON` build define contains public Ed25519 trust roots only. If no valid root is configured, no model runner is offered. Production and development builds must receive the same managed public trust configuration used to validate Workspace Tool Profile releases.
+Profile Lab's `SYNTILA_RELEASE_TRUST_KEYS_JSON` build define contains public Ed25519 trust roots only. If no valid root is configured, no model runner is offered. Production and development builds must receive the same managed public trust configuration used to validate Workspace Tool Profile releases.
 
 ---
 
@@ -264,7 +264,7 @@ Profile Lab's `CONCLAVE_RELEASE_TRUST_KEYS_JSON` build define contains public Ed
 Profile Lab enforces strict security boundaries verified by automated repository guards (`verify-v8-architecture.mjs`):
 
 1. **Zero Direct D1 Access:** Profile Lab communicates exclusively via HTTPS REST endpoints (`ProfileAdminApiClient`). Direct database bindings (`D1Database`, raw SQL) are strictly prohibited.
-2. **Zero Signing Seeds:** Signing private key seeds (`CONCLAVE_WORKSPACE_ED25519_SEED`, `Ed25519PrivateKey`) are forbidden in Profile Lab code. Signature generation belongs solely to Cloud.
+2. **Zero Signing Seeds:** Signing private key seeds (`SYNTILA_WORKSPACE_ED25519_SEED`, `Ed25519PrivateKey`) are forbidden in Profile Lab code. Signature generation belongs solely to Cloud.
 3. **Secret Redaction:** Test output logs and diagnostic summaries undergo strict secret redaction preventing provider keys or desktop tokens from being stored in logs or evidence artifacts.
 4. **Process Isolation:** Provider CLI processes run under bounded deadlines with full process tree termination upon completion or cancellation.
 
@@ -333,7 +333,7 @@ or packaged desktop acceptance.
 ## Development access and unsigned execution
 
 The checked-in Cloud configurations set
-`CONCLAVE_PROFILE_LAB_OWNER_EMAIL=vitalii@nohainc.com`. When this setting is
+`SYNTILA_PROFILE_LAB_OWNER_EMAIL=vitalii@nohainc.com`. When this setting is
 present, only that active account can approve, claim,
 or use a Profile Lab desktop session or administer Profiles. The email is
 resolved from Cloud's authenticated user record, never a client request field.
@@ -360,7 +360,7 @@ offers **View Releases** rather than publishing the same immutable version again
 No release rows are bootstrapped, and macOS app signing does not control these actions.
 
 The unsigned exception also supports an explicitly opted-in local-development
-Workspace. It uses `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` in a non-release build
+Workspace. It uses `SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY` in a non-release build
 and requires a loopback Cloud origin. It reads `<definition>/draft.json` from the
 selected local directory (normally the Lab draft directory), validates Tool
 Profile schema and catalog identity, and applies Engine/provider compatibility.
@@ -376,14 +376,14 @@ Profiles through the generic CLI Worker Engine.
 For local development, start Cloud/AX with the existing local startup workflow,
 then run `bash scripts/run-profile-lab-development.sh` and
 `bash scripts/run-workspace-development.sh`. Both default to
-`http://localhost:8787`; set `CONCLAVE_DEVELOPMENT_CLOUD_URL` to the same loopback
+`http://localhost:8787`; set `SYNTILA_DEVELOPMENT_CLOUD_URL` to the same loopback
 origin as your local Cloud. Sign in through the browser as the owner,
 save and test a draft in the Lab, sync it, and publish to Testing. Assign the
 development Workspace to Testing in the Lab and run a real task. The Workspace launcher
 uses a separate DevelopmentState directory so existing production registration
 is not reused. It now defaults to signed Cloud releases. Explicitly set
-`CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` to opt into unsigned local Draft execution;
-that exception remains loopback-only. `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR`
+`SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY` to opt into unsigned local Draft execution;
+that exception remains loopback-only. `SYNTILA_WORKSPACE_DEVELOPMENT_DATA_DIR`
 overrides development state.
 
 `scripts/setup-development-profile-signing.mjs` generates and validates a local
@@ -394,7 +394,7 @@ The local stack launcher prepares this configuration before starting Wrangler.
 `--hosted` prepares a separate development signer and public roots for the current
 hosted development deployment; upload its ignored secret JSON with Wrangler
 `secret bulk` only to the intended Worker. Launch both apps with
-`CONCLAVE_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` to use the corresponding
+`SYNTILA_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` to use the corresponding
 hosted public roots. Customer build scripts never automatically load development
 roots or private material; provision independent production keys before customer rollout.
 

@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
-import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/features/workflows/workflow_editor.dart';
-import 'package:conclave_app/src/features/workflows/workflows_page.dart';
-import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
-import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/sync/ax_session_catalogs.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_workflow_configurations.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/features/workflows/workflow_editor.dart';
+import 'package:syntila_app/src/features/workflows/workflows_page.dart';
+import 'package:syntila_app/src/features/workspace/workspaces_page.dart';
+import 'package:syntila_app/src/navigation/ax_browser_navigation.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 import 'workflow_editor_test.dart' show worker, choices;
 import 'ax_fixture_realtime.dart';
@@ -570,7 +570,7 @@ void main() {
     final cache = AxWorkflowConfigurations(source, engine: engine);
     final catalogs = AxSessionCatalogs(source, engine: engine);
     Widget page() => MaterialApp(
-        theme: ConclaveBrand.lightTheme(),
+        theme: SyntilaBrand.lightTheme(),
         home: Scaffold(
             body: SingleChildScrollView(
                 child: WorkflowsPage(
@@ -640,7 +640,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final browser = MemoryAxBrowserNavigation(Uri.parse('/workflows'));
-    await tester.pumpWidget(ConclaveAppShell(
+    await tester.pumpWidget(SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: WorkflowSource(),
         browserNavigation: browser,

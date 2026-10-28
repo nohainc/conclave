@@ -6,7 +6,7 @@ import {
   handleBetterAuthRequest,
   IdentityService,
   isSocialProviderConfigured,
-  provisionConclaveUser,
+  provisionSyntilaUser,
   safeAuthReturnTo,
   type AuthenticatedIdentity,
 } from "../src/auth/index.js";
@@ -15,10 +15,10 @@ import { requireSameOriginForCookieMutation } from "../src/routes/handlers.js";
 describe("IdentityService", () => {
   it("fails closed with a diagnostic response when Better Auth is not configured", async () => {
     const response = await handleBetterAuthRequest(
-      new Request("https://app.conclave.test/api/auth/sign-in/github"),
+      new Request("https://app.syntila.test/api/auth/sign-in/github"),
       {
-        CONCLAVE_DB: {} as D1Database,
-        CONCLAVE_ENVIRONMENT: "production",
+        SYNTILA_DB: {} as D1Database,
+        SYNTILA_ENVIRONMENT: "production",
       },
     );
 
@@ -43,7 +43,7 @@ describe("IdentityService", () => {
 
   it("keeps social login return paths same-origin", () => {
     const request = new Request(
-      "https://app.conclave.test/api/auth/sign-in/github",
+      "https://app.syntila.test/api/auth/sign-in/github",
     );
     expect(safeAuthReturnTo(request, "/spaces/p-1/threads/ws-1")).toBe(
       "/spaces/p-1/threads/ws-1",
@@ -79,17 +79,17 @@ describe("IdentityService", () => {
 
   it("reads the app origin and provider credentials from configuration", () => {
     expect(
-      configuredAppOrigin({ CONCLAVE_APP_URL: "http://localhost:3000/x" }),
+      configuredAppOrigin({ SYNTILA_APP_URL: "http://localhost:3000/x" }),
     ).toBe("http://localhost:3000");
     expect(
-      configuredAppOrigin({ CONCLAVE_APP_URL: "not a url" }),
+      configuredAppOrigin({ SYNTILA_APP_URL: "not a url" }),
     ).toBeUndefined();
     expect(configuredAppOrigin({})).toBeUndefined();
-    const onlyId = { CONCLAVE_AUTH_GOOGLE_CLIENT_ID: "id" };
+    const onlyId = { SYNTILA_AUTH_GOOGLE_CLIENT_ID: "id" };
     expect(isSocialProviderConfigured(onlyId, "google")).toBe(false);
     expect(
       isSocialProviderConfigured(
-        { ...onlyId, CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: "secret" },
+        { ...onlyId, SYNTILA_AUTH_GOOGLE_CLIENT_SECRET: "secret" },
         "google",
       ),
     ).toBe(true);
@@ -105,16 +105,16 @@ describe("IdentityService", () => {
         ),
         {
           // Minimal D1 surface so Better Auth initializes without a real database.
-          CONCLAVE_DB: {
+          SYNTILA_DB: {
             prepare: () => ({}),
             batch: async () => [],
             exec: async () => ({}),
             dump: async () => new ArrayBuffer(0),
           } as unknown as D1Database,
-          CONCLAVE_ENVIRONMENT: "development",
+          SYNTILA_ENVIRONMENT: "development",
           BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
           BETTER_AUTH_URL: "http://localhost:8787",
-          CONCLAVE_APP_URL: "http://localhost:3000",
+          SYNTILA_APP_URL: "http://localhost:3000",
         },
       );
       expect(response.status).toBe(302);
@@ -130,12 +130,12 @@ describe("IdentityService", () => {
 
   it("includes the app origin in Better Auth trusted origins", () => {
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "development",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "development",
       BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
-      CONCLAVE_APP_URL: "http://localhost:4000",
-      CONCLAVE_AUTH_GOOGLE_CLIENT_ID: "google-client-id",
-      CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
+      SYNTILA_APP_URL: "http://localhost:4000",
+      SYNTILA_AUTH_GOOGLE_CLIENT_ID: "google-client-id",
+      SYNTILA_AUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
     });
     expect(options.trustedOrigins).toContain("http://localhost:4000");
     expect(options.socialProviders.google).toMatchObject({
@@ -146,13 +146,13 @@ describe("IdentityService", () => {
 
   it("configures Better Auth against the clean Syntila core tables", () => {
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "development",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "development",
       BETTER_AUTH_SECRET: "a-secure-development-secret-that-is-long-enough",
-      CONCLAVE_AUTH_GITHUB_CLIENT_ID: "github-client-id",
-      CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
-      CONCLAVE_AUTH_GOOGLE_CLIENT_ID: "google-client-id",
-      CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
+      SYNTILA_AUTH_GITHUB_CLIENT_ID: "github-client-id",
+      SYNTILA_AUTH_GITHUB_CLIENT_SECRET: "github-client-secret",
+      SYNTILA_AUTH_GOOGLE_CLIENT_ID: "google-client-id",
+      SYNTILA_AUTH_GOOGLE_CLIENT_SECRET: "google-client-secret",
     });
 
     expect(options.user?.modelName).toBe("users");
@@ -209,8 +209,8 @@ describe("IdentityService", () => {
       },
     });
     const productionOptions = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
       BETTER_AUTH_URL: "https://app.conclaveax.com",
     });
@@ -234,21 +234,21 @@ describe("IdentityService", () => {
       messageId: "message-1",
     }));
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-      BETTER_AUTH_URL: "https://app.conclave.test",
-      CONCLAVE_EMAIL: { send },
+      BETTER_AUTH_URL: "https://app.syntila.test",
+      SYNTILA_EMAIL: { send },
     });
     const user = { email: "person@example.com", name: "Person" };
 
     await options.emailVerification?.sendVerificationEmail?.({
       user,
-      url: "https://app.conclave.test/verify",
+      url: "https://app.syntila.test/verify",
     });
     await options.emailAndPassword?.sendResetPassword?.({
       user,
-      url: "https://app.conclave.test/reset",
+      url: "https://app.syntila.test/reset",
     });
     expect(send).toHaveBeenCalledTimes(2);
     const messages = send.mock.calls.map(
@@ -263,7 +263,7 @@ describe("IdentityService", () => {
     );
     for (const message of messages) {
       expect(message).toMatchObject({
-        from: { email: "conclave@conclaveax.com", name: "Syntila" },
+        from: { email: "syntila@conclaveax.com", name: "Syntila" },
         to: "person@example.com",
       });
     }
@@ -271,9 +271,9 @@ describe("IdentityService", () => {
       "Verify your Syntila email address",
       "Reset your Syntila password",
     ]);
-    expect(messages[0]?.text).toContain("https://app.conclave.test/verify");
+    expect(messages[0]?.text).toContain("https://app.syntila.test/verify");
     expect(messages[0]?.text).toContain("This link is valid for 60 minutes.");
-    expect(messages[1]?.text).toContain("https://app.conclave.test/reset");
+    expect(messages[1]?.text).toContain("https://app.syntila.test/reset");
 
     await options.databaseHooks?.user?.create?.after?.({
       id: "user-1",
@@ -288,12 +288,12 @@ describe("IdentityService", () => {
       from: { email: string; name: string };
     };
     expect(welcomeMessage).toMatchObject({
-      from: { email: "conclave@conclaveax.com", name: "Syntila" },
+      from: { email: "syntila@conclaveax.com", name: "Syntila" },
       to: "person@example.com",
       subject: "Welcome to Syntila — your account is ready",
     });
     expect(welcomeMessage.text).toContain("Congratulations");
-    expect(welcomeMessage.text).toContain("https://app.conclave.test");
+    expect(welcomeMessage.text).toContain("https://app.syntila.test");
   });
 
   it("cleans avatar storage before account deletion and blocks deletion on storage failure", async () => {
@@ -306,10 +306,10 @@ describe("IdentityService", () => {
     });
     const remove = vi.fn().mockResolvedValue(undefined);
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "development",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "development",
       BETTER_AUTH_SECRET: "test-avatar-storage-secret-long-enough",
-      CONCLAVE_ARTIFACTS: { list, delete: remove } as unknown as R2Bucket,
+      SYNTILA_ARTIFACTS: { list, delete: remove } as unknown as R2Bucket,
     });
     await options.user.deleteUser.beforeDelete({ id: "a" });
     expect(list).toHaveBeenCalledWith({
@@ -331,10 +331,10 @@ describe("IdentityService", () => {
       messageId: "deleted-1",
     }));
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-      CONCLAVE_EMAIL: { send },
+      SYNTILA_EMAIL: { send },
     });
     expect(options.user.deleteUser.afterDelete).toEqual(expect.any(Function));
     await options.user.deleteUser.afterDelete({
@@ -345,7 +345,7 @@ describe("IdentityService", () => {
     expect(send.mock.calls[0]?.[0]).toMatchObject({
       to: "removed@example.com",
       subject: "Your Syntila account was deleted",
-      from: { email: "conclave@conclaveax.com", name: "Syntila" },
+      from: { email: "syntila@conclaveax.com", name: "Syntila" },
       text: expect.stringContaining("Hi Ada"),
       html: expect.stringContaining("Account deleted"),
     });
@@ -355,10 +355,10 @@ describe("IdentityService", () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const options = buildBetterAuthOptions({
-        CONCLAVE_DB: {} as D1Database,
-        CONCLAVE_ENVIRONMENT: "production",
+        SYNTILA_DB: {} as D1Database,
+        SYNTILA_ENVIRONMENT: "production",
         BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-        CONCLAVE_EMAIL: {
+        SYNTILA_EMAIL: {
           send: vi.fn(async () => {
             throw new Error("private provider response");
           }),
@@ -388,11 +388,11 @@ describe("IdentityService", () => {
   describe("verification email failures", () => {
     const failingEnv = () =>
       buildBetterAuthOptions({
-        CONCLAVE_DB: {} as D1Database,
-        CONCLAVE_ENVIRONMENT: "production",
+        SYNTILA_DB: {} as D1Database,
+        SYNTILA_ENVIRONMENT: "production",
         BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-        BETTER_AUTH_URL: "https://app.conclave.test",
-        CONCLAVE_EMAIL: {
+        BETTER_AUTH_URL: "https://app.syntila.test",
+        SYNTILA_EMAIL: {
           send: vi.fn(async () => {
             throw Object.assign(new Error("down"), { status: 503 });
           }),
@@ -400,13 +400,13 @@ describe("IdentityService", () => {
       });
     const payload = {
       user: { email: "person@example.com", name: "Person" },
-      url: "https://app.conclave.test/verify",
+      url: "https://app.syntila.test/verify",
     };
 
     it("does not fail sign-up after the account is created", async () => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const signUp = new Request(
-        "https://app.conclave.test/api/auth/sign-up/email",
+        "https://app.syntila.test/api/auth/sign-up/email",
         { method: "POST" },
       );
       await expect(
@@ -424,7 +424,7 @@ describe("IdentityService", () => {
 
     it("still reports failures to an explicit resend request", async () => {
       const resend = new Request(
-        "https://app.conclave.test/api/auth/send-verification-email",
+        "https://app.syntila.test/api/auth/send-verification-email",
         { method: "POST" },
       );
       await expect(
@@ -442,16 +442,16 @@ describe("IdentityService", () => {
       .mockRejectedValueOnce({ code: "E_SENDER_NOT_VERIFIED" })
       .mockResolvedValueOnce({ messageId: "message-2" });
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-      BETTER_AUTH_URL: "https://app.conclave.test",
-      CONCLAVE_EMAIL: { send },
+      BETTER_AUTH_URL: "https://app.syntila.test",
+      SYNTILA_EMAIL: { send },
     });
 
     await options.emailAndPassword?.sendResetPassword?.({
       user: { email: "person@example.com", name: "Person" },
-      url: "https://app.conclave.test/reset",
+      url: "https://app.syntila.test/reset",
     });
 
     expect(send).toHaveBeenCalledTimes(2);
@@ -465,11 +465,11 @@ describe("IdentityService", () => {
       messageId: "message-1",
     }));
     const options = buildBetterAuthOptions({
-      CONCLAVE_DB: {} as D1Database,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_DB: {} as D1Database,
+      SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-      BETTER_AUTH_URL: "https://app.conclave.test",
-      CONCLAVE_EMAIL: { send },
+      BETTER_AUTH_URL: "https://app.syntila.test",
+      SYNTILA_EMAIL: { send },
     });
 
     await expect(
@@ -496,12 +496,12 @@ describe("IdentityService", () => {
     }));
 
     const identity = await service.resolve(
-      new Request("https://conclave.test/api/spaces", {
+      new Request("https://syntila.test/api/spaces", {
         headers: { cookie: "better-auth.session_token=opaque" },
       }),
       {
-        CONCLAVE_DB: {} as D1Database,
-        CONCLAVE_ENVIRONMENT: "development",
+        SYNTILA_DB: {} as D1Database,
+        SYNTILA_ENVIRONMENT: "development",
       },
     );
 
@@ -520,9 +520,9 @@ describe("IdentityService", () => {
     }));
 
     await expect(
-      service.resolve(new Request("https://conclave.test/api/spaces"), {
-        CONCLAVE_DB: {} as D1Database,
-        CONCLAVE_ENVIRONMENT: "development",
+      service.resolve(new Request("https://syntila.test/api/spaces"), {
+        SYNTILA_DB: {} as D1Database,
+        SYNTILA_ENVIRONMENT: "development",
       }),
     ).resolves.toBeNull();
   });
@@ -532,9 +532,9 @@ describe("IdentityService", () => {
       api: { getSession: async () => null },
     }));
     await expect(
-      revoked.resolve(new Request("https://conclave.test/api/session"), {
-        CONCLAVE_DB: {} as D1Database,
-        CONCLAVE_ENVIRONMENT: "production",
+      revoked.resolve(new Request("https://syntila.test/api/session"), {
+        SYNTILA_DB: {} as D1Database,
+        SYNTILA_ENVIRONMENT: "production",
       }),
     ).resolves.toBeNull();
   });
@@ -564,34 +564,34 @@ describe("IdentityService", () => {
 
     await expect(
       service.resolve(
-        new Request("https://conclave.test/api/session", {
+        new Request("https://syntila.test/api/session", {
           headers: { cookie: "old-cookie" },
         }),
         {
-          CONCLAVE_DB: {} as D1Database,
-          CONCLAVE_ENVIRONMENT: "production",
+          SYNTILA_DB: {} as D1Database,
+          SYNTILA_ENVIRONMENT: "production",
         },
       ),
     ).resolves.toBeNull();
     await expect(
       service.resolve(
-        new Request("https://conclave.test/api/session", {
+        new Request("https://syntila.test/api/session", {
           headers: { cookie: "new-cookie" },
         }),
         {
-          CONCLAVE_DB: {} as D1Database,
-          CONCLAVE_ENVIRONMENT: "production",
+          SYNTILA_DB: {} as D1Database,
+          SYNTILA_ENVIRONMENT: "production",
         },
       ),
     ).resolves.toMatchObject({ sessionId: "session-new" });
     await expect(
       service.resolve(
-        new Request("https://conclave.test/api/session", {
+        new Request("https://syntila.test/api/session", {
           headers: { cookie: "second-cookie" },
         }),
         {
-          CONCLAVE_DB: {} as D1Database,
-          CONCLAVE_ENVIRONMENT: "production",
+          SYNTILA_DB: {} as D1Database,
+          SYNTILA_ENVIRONMENT: "production",
         },
       ),
     ).resolves.toMatchObject({ sessionId: "session-second" });
@@ -600,7 +600,7 @@ describe("IdentityService", () => {
   it("enforces same-origin mutations for cookie sessions", () => {
     expect(() =>
       requireSameOriginForCookieMutation(
-        new Request("https://app.conclave.test/api/spaces", {
+        new Request("https://app.syntila.test/api/spaces", {
           method: "POST",
           headers: {
             cookie: "better-auth.session_token=opaque",
@@ -612,11 +612,11 @@ describe("IdentityService", () => {
 
     expect(() =>
       requireSameOriginForCookieMutation(
-        new Request("https://app.conclave.test/api/spaces", {
+        new Request("https://app.syntila.test/api/spaces", {
           method: "POST",
           headers: {
             cookie: "better-auth.session_token=opaque",
-            origin: "https://app.conclave.test",
+            origin: "https://app.syntila.test",
           },
         }),
       ),
@@ -624,7 +624,7 @@ describe("IdentityService", () => {
 
     expect(() =>
       requireSameOriginForCookieMutation(
-        new Request("https://app.conclave.test/api/spaces", {
+        new Request("https://app.syntila.test/api/spaces", {
           method: "POST",
           headers: { cookie: "better-auth.session_token=opaque" },
         }),
@@ -672,8 +672,8 @@ describe("IdentityService", () => {
       sessionId: "session-1",
     };
 
-    await provisionConclaveUser(db, identity, "2026-09-23T00:00:00.000Z");
-    await provisionConclaveUser(db, identity, "2026-09-23T00:01:00.000Z");
+    await provisionSyntilaUser(db, identity, "2026-09-23T00:00:00.000Z");
+    await provisionSyntilaUser(db, identity, "2026-09-23T00:01:00.000Z");
 
     expect(
       queries.filter((query) => query.includes("INSERT INTO users")),
@@ -782,11 +782,11 @@ describe("IdentityService", () => {
           }),
         }),
         {
-          CONCLAVE_DB: db,
-          CONCLAVE_ENVIRONMENT: "production",
+          SYNTILA_DB: db,
+          SYNTILA_ENVIRONMENT: "production",
           BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
           BETTER_AUTH_URL: "https://app.conclaveax.com",
-          CONCLAVE_EMAIL: { send },
+          SYNTILA_EMAIL: { send },
         },
       );
 
@@ -804,7 +804,7 @@ describe("IdentityService", () => {
       };
       expect(sentMessage.to).toBe("newuser@example.com");
       expect(sentMessage.from).toEqual({
-        email: "conclave@conclaveax.com",
+        email: "syntila@conclaveax.com",
         name: "Syntila",
       });
       const stored = verifications.get("signup-otp:newuser@example.com");
@@ -829,11 +829,11 @@ describe("IdentityService", () => {
           }),
         }),
         {
-          CONCLAVE_DB: db,
-          CONCLAVE_ENVIRONMENT: "production",
+          SYNTILA_DB: db,
+          SYNTILA_ENVIRONMENT: "production",
           BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
           BETTER_AUTH_URL: "https://app.conclaveax.com",
-          CONCLAVE_EMAIL: { send },
+          SYNTILA_EMAIL: { send },
         },
       );
 
@@ -865,8 +865,8 @@ describe("IdentityService", () => {
           }),
         }),
         {
-          CONCLAVE_DB: db,
-          CONCLAVE_ENVIRONMENT: "production",
+          SYNTILA_DB: db,
+          SYNTILA_ENVIRONMENT: "production",
           BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
           BETTER_AUTH_URL: "https://app.conclaveax.com",
         },

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/worker_diagnostic_store.dart';
+import 'package:syntila_workspace/worker_diagnostic_store.dart';
 import 'package:test/test.dart';
 
 void main() {

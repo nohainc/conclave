@@ -20,7 +20,7 @@ const retiredApplicationAuth = [
   /CF_Authorization/i,
   /Cf-Access-Jwt-Assertion/i,
   /cf-access-authenticated-user-email/i,
-  /CONCLAVE_ACCESS_/i,
+  /SYNTILA_ACCESS_/i,
   /accessSecurityContext/i,
   /Cloudflare Access authentication required/i,
 ];

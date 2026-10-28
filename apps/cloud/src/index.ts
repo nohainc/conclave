@@ -1,4 +1,4 @@
-export { ConclaveRunWorkflow } from "./workflow.js";
+export { SyntilaRunWorkflow } from "./workflow.js";
 export { WorkspaceGateway } from "./workspace-gateway.js";
 export { ThreadExecutionCoordinator } from "./thread-coordinator.js";
 export { RealtimeGateway } from "./realtime-gateway.js";
@@ -210,7 +210,7 @@ const routeDependencies = {
 export default {
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const recoveredAssignments = await recoverStaleAssignments(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       new Date(),
       env,
     );
@@ -230,13 +230,13 @@ export default {
       );
       return;
     }
-    const deleted = await pruneExpiredRealtimeEvents(env.CONCLAVE_DB);
+    const deleted = await pruneExpiredRealtimeEvents(env.SYNTILA_DB);
     const deletedWorkerActivity = await pruneWorkerActivityHistory(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
     );
     const deletedIssueReports = await pruneExpiredIssueReports(
-      env.CONCLAVE_DB,
-      env.CONCLAVE_ARTIFACTS,
+      env.SYNTILA_DB,
+      env.SYNTILA_ARTIFACTS,
     );
     const deletedOrphanFiles = await pruneOrphanUserFiles(
       env as unknown as Parameters<typeof pruneOrphanUserFiles>[0],
@@ -320,11 +320,11 @@ export default {
       if (request.method === "GET" && url.pathname === "/health") {
         return handlers.json({
           ok: true,
-          environment: env.CONCLAVE_ENVIRONMENT,
+          environment: env.SYNTILA_ENVIRONMENT,
         });
       }
       if (request.method === "GET" && url.pathname === "/api/dev/sign-in") {
-        if (env.CONCLAVE_ENVIRONMENT !== "development") {
+        if (env.SYNTILA_ENVIRONMENT !== "development") {
           return new Response("Not found", { status: 404 });
         }
         const provider = url.searchParams.get("provider") ?? "github";
@@ -372,7 +372,7 @@ export default {
             { status: 401 },
           );
         }
-        const gateway = env.CONCLAVE_REALTIME_GATEWAY.getByName(
+        const gateway = env.SYNTILA_REALTIME_GATEWAY.getByName(
           `user:${identity.userId}`,
         );
         return gateway.fetch(request);

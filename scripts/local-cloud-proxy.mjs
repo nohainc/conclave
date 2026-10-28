@@ -1,12 +1,12 @@
 const upstream = "https://app.conclaveax.com";
-const localPrefix = "conclave-dev-";
+const localPrefix = "syntila-dev-";
 const upstreamTimeoutMs = 10_000;
 
 const legacyWorkHistoryPath =
   /^\/api\/threads\/workstream-[^/]+\/work-requests$/;
 
 export function upstreamCookie(value) {
-  return value.replace(/(^|;\s*)conclave-dev-(Secure|Host)-/g, "$1__$2-");
+  return value.replace(/(^|;\s*)syntila-dev-(Secure|Host)-/g, "$1__$2-");
 }
 
 export function localCookie(value) {

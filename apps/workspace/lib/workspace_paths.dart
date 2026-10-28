@@ -25,7 +25,7 @@ class WorkspacePaths {
         'Application Support',
         // Local development builds keep their state apart from the
         // production app so registrations and sessions never mix.
-        conclaveWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave',
+        syntilaWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave',
       ]));
     }
     if (runtime.operatingSystem == 'windows') {
@@ -37,10 +37,10 @@ class WorkspacePaths {
       }
       return Directory(_join([
         local ?? '${runtime.homeDirectory}/AppData/Local',
-        conclaveWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave'
+        syntilaWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave'
       ]));
     }
-    final folder = conclaveWorkspaceIsLocalBuild
+    final folder = syntilaWorkspaceIsLocalBuild
         ? '.conclave-workspace-local'
         : '.conclave-workspace';
     final legacy =
@@ -68,7 +68,7 @@ class WorkspacePaths {
         ? xdgStateHome
         : '$homeDirectory/.local/state';
     return Directory(
-        '$base/conclave/${conclaveWorkspaceIsLocalBuild ? 'workspace-local' : 'workspace'}');
+        '$base/conclave/${syntilaWorkspaceIsLocalBuild ? 'workspace-local' : 'workspace'}');
   }
 
   /// Earlier Linux service runs used `~/.conclave-workspace`. That root keeps
@@ -95,7 +95,7 @@ class WorkspacePaths {
     if (runtime.operatingSystem == 'windows') {
       final target = defaultWorkspaceDirectory(platform: runtime);
       final legacy = Directory(
-          '${runtime.homeDirectory}/${conclaveWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
+          '${runtime.homeDirectory}/${syntilaWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
       return resolveWindowsStateDirectory(legacy: legacy, target: target);
     }
     return defaultApplicationDataRoot(platform: runtime);
@@ -108,7 +108,7 @@ class WorkspacePaths {
       {required Directory legacy, required Directory target}) {
     if (legacy.existsSync()) {
       throw StateError(
-          'Legacy Windows Workspace state exists at ${legacy.path}. Files were preserved. Set CONCLAVE_WORKSPACE_DATA_DIR (or --data-dir for the service) to that root before activation; do not create a replacement Cloud Workspace.');
+          'Legacy Windows Workspace state exists at ${legacy.path}. Files were preserved. Set SYNTILA_WORKSPACE_DATA_DIR (or --data-dir for the service) to that root before activation; do not create a replacement Cloud Workspace.');
     }
     return target;
   }

@@ -9,7 +9,7 @@ import {
 describe("centralized email sender configuration", () => {
   it("uses the Syntila primary and Vitalii fallback by default", () => {
     expect(resolveEmailSenderConfig({})).toEqual({
-      primary: "conclave@conclaveax.com",
+      primary: "syntila@conclaveax.com",
       fallback: "vitalii@conclaveax.com",
       displayName: "Syntila",
     });
@@ -18,9 +18,9 @@ describe("centralized email sender configuration", () => {
   it("accepts overrides and normalizes sender addresses", () => {
     expect(
       resolveEmailSenderConfig({
-        CONCLAVE_EMAIL_FROM: "Primary@Example.com ",
-        CONCLAVE_EMAIL_FALLBACK_FROM: "fallback@example.com",
-        CONCLAVE_EMAIL_FROM_NAME: " Syntila Test ",
+        SYNTILA_EMAIL_FROM: "Primary@Example.com ",
+        SYNTILA_EMAIL_FALLBACK_FROM: "fallback@example.com",
+        SYNTILA_EMAIL_FROM_NAME: " Syntila Test ",
       }),
     ).toEqual({
       primary: "primary@example.com",
@@ -30,15 +30,15 @@ describe("centralized email sender configuration", () => {
   });
 
   it.each([
-    ["CONCLAVE_EMAIL_FROM", { CONCLAVE_EMAIL_FROM: "invalid" }],
+    ["SYNTILA_EMAIL_FROM", { SYNTILA_EMAIL_FROM: "invalid" }],
     [
-      "CONCLAVE_EMAIL_FALLBACK_FROM",
-      { CONCLAVE_EMAIL_FALLBACK_FROM: "invalid" },
+      "SYNTILA_EMAIL_FALLBACK_FROM",
+      { SYNTILA_EMAIL_FALLBACK_FROM: "invalid" },
     ],
-    ["CONCLAVE_EMAIL_FROM", { CONCLAVE_EMAIL_FROM: "auth@auth.earthuc.com" }],
+    ["SYNTILA_EMAIL_FROM", { SYNTILA_EMAIL_FROM: "auth@auth.earthuc.com" }],
     [
-      "CONCLAVE_EMAIL_FALLBACK_FROM",
-      { CONCLAVE_EMAIL_FALLBACK_FROM: "auth@auth.earthuc.com" },
+      "SYNTILA_EMAIL_FALLBACK_FROM",
+      { SYNTILA_EMAIL_FALLBACK_FROM: "auth@auth.earthuc.com" },
     ],
   ])("rejects invalid %s values", (_field, env) => {
     expect(() => resolveEmailSenderConfig(env)).toThrow();
@@ -47,8 +47,8 @@ describe("centralized email sender configuration", () => {
   it("rejects identical primary and fallback addresses", () => {
     expect(() =>
       resolveEmailSenderConfig({
-        CONCLAVE_EMAIL_FROM: "same@example.com",
-        CONCLAVE_EMAIL_FALLBACK_FROM: "SAME@example.com",
+        SYNTILA_EMAIL_FROM: "same@example.com",
+        SYNTILA_EMAIL_FALLBACK_FROM: "SAME@example.com",
       }),
     ).toThrow("must differ");
   });
@@ -57,18 +57,18 @@ describe("centralized email sender configuration", () => {
     const send = vi.fn(async () => ({ messageId: "message-1" }));
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject", text: "Body" },
       ),
     ).resolves.toEqual({
       status: "accepted",
-      sender: "conclave@conclaveax.com",
+      sender: "syntila@conclaveax.com",
       usedFallback: false,
       messageId: "message-1",
     });
     expect(send).toHaveBeenCalledWith({
       to: "person@example.com",
-      from: { email: "conclave@conclaveax.com", name: "Syntila" },
+      from: { email: "syntila@conclaveax.com", name: "Syntila" },
       subject: "Subject",
       text: "Body",
     });
@@ -81,7 +81,7 @@ describe("centralized email sender configuration", () => {
       .mockResolvedValueOnce({ messageId: "message-2" });
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).resolves.toEqual({
@@ -102,7 +102,7 @@ describe("centralized email sender configuration", () => {
     const send = vi.fn().mockRejectedValue(error);
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).rejects.toMatchObject({
@@ -121,7 +121,7 @@ describe("centralized email sender configuration", () => {
     const send = vi.fn().mockRejectedValue(providerError);
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).rejects.toMatchObject({ status });
@@ -135,7 +135,7 @@ describe("centralized email sender configuration", () => {
     const send = vi.fn();
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send }, CONCLAVE_EMAIL_FROM: "invalid" },
+        { SYNTILA_EMAIL: { send }, SYNTILA_EMAIL_FROM: "invalid" },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).rejects.toMatchObject({ status: "configuration_error" });
@@ -149,7 +149,7 @@ describe("centralized email sender configuration", () => {
       .mockRejectedValueOnce({ code: "E_SENDER_DOMAIN_NOT_AVAILABLE" });
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).rejects.toMatchObject({ status: "sender_not_authorized" });
@@ -163,7 +163,7 @@ describe("centralized email sender configuration", () => {
       .mockRejectedValueOnce({ code: "E_SENDER_DOMAIN_NOT_AVAILABLE" });
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).rejects.toMatchObject({
@@ -178,7 +178,7 @@ describe("centralized email sender configuration", () => {
     const send = vi.fn().mockRejectedValue({ code: "recipient_rejected" });
     await expect(
       sendConfiguredEmail(
-        { CONCLAVE_EMAIL: { send } },
+        { SYNTILA_EMAIL: { send } },
         { to: "person@example.com", subject: "Subject" },
       ),
     ).rejects.toBeInstanceOf(EmailDeliveryError);
@@ -203,7 +203,7 @@ describe("centralized email sender configuration", () => {
       const send = vi.fn();
       await expect(
         sendConfiguredEmail(
-          { CONCLAVE_EMAIL: { send } },
+          { SYNTILA_EMAIL: { send } },
           { to, subject: "Subject" },
         ),
       ).rejects.toMatchObject({ status: "recipient_rejected" });

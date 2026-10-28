@@ -7,10 +7,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Root = Split-Path $PSScriptRoot -Parent
-$Bundle = Join-Path $Root 'dist/conclave-workspace/windows/release'
-$Output = Join-Path $Root 'dist/conclave-workspace/installer'
+$Bundle = Join-Path $Root 'dist/syntila-workspace/windows/release'
+$Output = Join-Path $Root 'dist/syntila-workspace/installer'
 if (-not (Test-Path $Compiler)) { throw 'Inno Setup 6 ISCC.exe is required.' }
-foreach ($File in @('conclave-workspace.exe', 'assets/engines/conclave-agent.exe')) {
+foreach ($File in @('syntila-workspace.exe', 'assets/engines/syntila-agent.exe')) {
     if (-not (Test-Path (Join-Path $Bundle $File))) { throw "Missing release bundle file: $File" }
 }
 $VersionLine = (Select-String -Path (Join-Path $Root 'apps/workspace/pubspec.yaml') -Pattern '^version:').Line
@@ -24,7 +24,7 @@ if ($Sign) {
     & $SignScript -Bundle $Bundle -VerifyOnly
     # Inno Setup substitutes $q with a quote and $f with the quoted file path.
     $CompilerArguments += @('/DSignInstaller',
-        "/Sconclave=powershell.exe -NoProfile -ExecutionPolicy Bypass -File `$q$SignScript`$q `$f")
+        "/Ssyntila=powershell.exe -NoProfile -ExecutionPolicy Bypass -File `$q$SignScript`$q `$f")
 }
 & $Compiler @CompilerArguments (Join-Path $Root 'packaging/windows/workspace.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }

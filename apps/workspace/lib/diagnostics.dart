@@ -318,9 +318,9 @@ Future<Map<String, Object?>> buildWorkspaceDiagnostics({
     diagnosticTimeline.removeRange(0, diagnosticTimeline.length - 200);
   }
   return {
-    'format': 'conclave-workspace-diagnostics-v1',
-    'appVersion': conclaveWorkspaceAppVersion,
-    'workspaceVersion': conclaveWorkspaceAppVersion,
+    'format': 'syntila-workspace-diagnostics-v1',
+    'appVersion': syntilaWorkspaceAppVersion,
+    'workspaceVersion': syntilaWorkspaceAppVersion,
     'cliWorkerEngineVersion': cliWorkerEngineVersion,
     'exportedAt': DateTime.now().toUtc().toIso8601String(),
     'workspace': {

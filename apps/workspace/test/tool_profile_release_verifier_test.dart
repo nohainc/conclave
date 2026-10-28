@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show
         ToolProfileReleaseVerifier,
         WorkerProfileSnapshotVerifier,

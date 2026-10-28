@@ -791,13 +791,13 @@ hexadecimal SHA-256 over the canonical JSON encoding of the complete validated
 Profile v1 object. The Ed25519 signature is over UTF-8 bytes of:
 
 ~~~text
-conclave-tool-profile-release-v1\n<canonical envelope JSON>
+syntila-tool-profile-release-v1\n<canonical envelope JSON>
 ~~~
 
 The canonical envelope JSON has exactly these signing claims:
 
 ~~~text
-domain = conclave-tool-profile-release-v1
+domain = syntila-tool-profile-release-v1
 publisher
 signingKeyId
 payloadDigest
@@ -906,15 +906,15 @@ allowance.
 Run one controlled profile from `apps/workspace` with:
 
 ~~~sh
-CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
-CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/secure/path/profile-evidence \
+SYNTILA_TEST_REAL_PROFILE_CHATGPT=1 \
+SYNTILA_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/secure/path/profile-evidence \
 flutter test test/tool_profile_real_acceptance_test.dart
 ~~~
 
-Use `CONCLAVE_TEST_REAL_PROFILE_GEMINI=1` for the Gemini Profile. Live
+Use `SYNTILA_TEST_REAL_PROFILE_GEMINI=1` for the Gemini Profile. Live
 assignment acceptance (`test/tool_profile_assignment_acceptance_test.dart`) uses
-separate `CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` and
-`CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1` opt-in variables. The evidence
+separate `SYNTILA_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` and
+`SYNTILA_TEST_ASSIGNMENT_PROFILE_GEMINI=1` opt-in variables. The evidence
 artifact contains version and scenario metadata only; it does not retain
 credentials, prompts, provider output, or Thread file contents.
 
@@ -1027,7 +1027,7 @@ model's efforts from the CLI itself instead of a Profile list. For each
 discovered model (at most 32) the Engine runs the declared `arguments` with
 `{{model}}` replaced by the model ID, within `timeoutMs`, and reads the list
 after `use one of:` in stdout or stderr, for example Grok Build's
-`unknown effort level 'conclave-effort-probe'; use one of: xhigh, high,
+`unknown effort level 'syntila-effort-probe'; use one of: xhigh, high,
 medium, low`. Efforts are ordered lowest first. A model whose output names no
 efforts (Grok: `grok-4.6 isn't in the model catalog`), or whose probe fails or
 times out, is offered without an effort choice. The arguments must pass an

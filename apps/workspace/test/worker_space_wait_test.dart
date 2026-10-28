@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/assignment_startup.dart';
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart'
+import 'package:syntila_workspace/assignment_startup.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart'
     show CliWorkerEngineSupervisor;
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/space_directory.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/space_directory.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 import 'support/assignment_worker_fixture.dart';

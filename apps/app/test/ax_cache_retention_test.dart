@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/sync/ax_discussion_cache.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
 import 'ax_discussion_cache_test.dart' show message, DiscussionSource;
 import 'ax_work_history_test.dart' show request;
 

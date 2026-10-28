@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 
 /// Discovery parses bounded CLI metadata, never executes a model request.
 List<DiscoveredModel> parseDiscoveredModels(String output, String idPrefix) {
@@ -191,7 +191,7 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
       'method': 'initialize',
       'params': {
         'clientInfo': {
-          'name': 'conclave-cli-worker-engine',
+          'name': 'syntila-cli-worker-engine',
           'version': '1.2.0',
         },
         'capabilities': null,
@@ -286,7 +286,7 @@ Future<Map<String, Object?>> readAppServerResult({
           ? {'protocolVersion': 1, 'clientCapabilities': <String, Object?>{}}
           : {
               'clientInfo': {
-                'name': 'conclave-cli-worker-engine',
+                'name': 'syntila-cli-worker-engine',
                 'version': '1.2.0',
               },
               'capabilities': null,

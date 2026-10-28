@@ -1,8 +1,8 @@
-import 'package:conclave_app/src/app_shell.dart';
-import 'package:conclave_app/src/features/home/home_page.dart';
-import 'package:conclave_app/src/features/people/people_page.dart';
-import 'package:conclave_app/src/features/spaces/archived_spaces_page.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/app_shell.dart';
+import 'package:syntila_app/src/features/home/home_page.dart';
+import 'package:syntila_app/src/features/people/people_page.dart';
+import 'package:syntila_app/src/features/spaces/archived_spaces_page.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -21,7 +21,7 @@ void main() {
         '/archived-spaces': ArchivedSpacesPage,
       }.entries) {
         await tester.pumpWidget(MaterialApp(
-          home: ConclaveAppShell(
+          home: SyntilaAppShell(
             key: ValueKey(entry.key),
             services: const DefaultPlatformServices(),
             dataSource: const AxFixtureDataSource(),

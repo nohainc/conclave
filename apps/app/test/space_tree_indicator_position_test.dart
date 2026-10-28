@@ -1,8 +1,8 @@
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
-import 'package:conclave_app/src/features/navigation/space_tree.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/features/navigation/space_tree.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,7 +60,7 @@ void main() {
             .color;
 
     await render(running: false);
-    expect(color('sidebar-unread-indicator'), ConclaveBrand.accent);
+    expect(color('sidebar-unread-indicator'), SyntilaBrand.accent);
     expect(
         find.byKey(const ValueKey('sidebar-running-indicator')), findsNothing);
 
@@ -291,7 +291,7 @@ void main() {
           tester.renderObject<RenderParagraph>(find.text('Space A'));
       expect(
           tester
-              .widget<ConclaveFolderIcon>(find.byType(ConclaveFolderIcon))
+              .widget<SyntilaFolderIcon>(find.byType(SyntilaFolderIcon))
               .color,
           paragraph.text.style?.color);
       return (

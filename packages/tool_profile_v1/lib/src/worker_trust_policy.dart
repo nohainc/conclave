@@ -67,7 +67,7 @@ class WorkerTrustPolicy {
       publisher: publisher,
       signingKeyId: signingKeyId,
       signature: signature,
-      message: utf8.encode('conclave-workspace-release-v1\n$digest'),
+      message: utf8.encode('syntila-workspace-release-v1\n$digest'),
     );
   }
 
@@ -84,7 +84,7 @@ class WorkerTrustPolicy {
         _revokedReleaseIds.contains('workspace@${metadata['version']}')) {
       return false;
     }
-    final payload = 'conclave-workspace-release-metadata-v1\n'
+    final payload = 'syntila-workspace-release-metadata-v1\n'
         '${canonicalJson({
           ...metadata,
           'publisher': publisher,

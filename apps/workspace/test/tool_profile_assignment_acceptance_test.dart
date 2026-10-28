@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_workspace/tool_profile_release_verifier.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/tool_profile_release_verifier.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -187,7 +187,7 @@ Future<void> _withRuntime(
     engineExecutable:
         Platform.environment['DART_EXECUTABLE'] ?? Platform.resolvedExecutable,
     engineArgumentsPrefix: [
-      '$root/engines/cli_worker/bin/conclave_cli_worker.dart',
+      '$root/engines/cli_worker/bin/syntila_cli_worker.dart',
     ],
   );
   try {
@@ -218,7 +218,7 @@ Future<void> _withRuntime(
         return result.output;
       } on CliWorkerEngineProbeException catch (error) {
         final diagnosticsDirectory =
-            Platform.environment['CONCLAVE_PROFILE_ACCEPTANCE_DIAGNOSTICS_DIR'];
+            Platform.environment['SYNTILA_PROFILE_ACCEPTANCE_DIAGNOSTICS_DIR'];
         if (diagnosticsDirectory != null &&
             diagnosticsDirectory.isNotEmpty &&
             error.localDiagnostics != null) {
@@ -318,13 +318,13 @@ const _profiles = <_Profile>[
     definitionId: 'chatgpt-codex',
     workerTypeId: 'chatgpt',
     profilePath: 'packages/tool-profile/test/fixtures/chatgpt-codex.v1.json',
-    optInVariable: 'CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT',
+    optInVariable: 'SYNTILA_TEST_ASSIGNMENT_PROFILE_CHATGPT',
   ),
   _Profile(
     definitionId: 'gemini-antigravity',
     workerTypeId: 'gemini',
     profilePath:
         'packages/tool-profile/test/fixtures/gemini-antigravity.v1.json',
-    optInVariable: 'CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI',
+    optInVariable: 'SYNTILA_TEST_ASSIGNMENT_PROFILE_GEMINI',
   ),
 ];

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
-import 'package:conclave_app/src/ax/sync/ax_space_tab_queries.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/sync/ax_space_tab_queries.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
 import 'ax_fixture_data.dart';
 
 void main() {

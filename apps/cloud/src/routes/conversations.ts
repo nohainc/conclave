@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Conversation, WorkflowDefinition } from "@conclave/core";
+import type { Conversation, WorkflowDefinition } from "@syntila/core";
 import { authorizeThreadAccess, json, type SecurityEnv } from "./handlers.js";
 
 /**
@@ -72,7 +72,7 @@ export async function handleListConversations(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   await authorizeThreadAccess(request, env, threadId, "view", accessContext);
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `SELECT id, thread_id AS threadId,
     workflow_id AS workflowId, workflow_version AS workflowVersion,
     conversation_revision AS conversationRevision, context_revision AS contextRevision,

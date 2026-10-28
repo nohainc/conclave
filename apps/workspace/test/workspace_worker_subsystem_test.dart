@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/release_trust_roots.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
-import 'package:conclave_workspace/workspace_worker_subsystem.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/release_trust_roots.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/workspace_worker_subsystem.dart';
 
 import 'support/logical_worker_catalog_fixture.dart';
 

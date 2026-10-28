@@ -327,12 +327,12 @@ describe("production Workspace Gateway smoke schema gate", () => {
     const definitions = { ...canonicalDefinitions };
     definitions.desktop_auth_intents = definitions.desktop_auth_intents.replace(
       "'conclave.profile-lab.management'",
-      "'conclave.workspace.legacy'",
+      "'syntila.workspace.legacy'",
     );
     definitions.desktop_human_sessions =
       definitions.desktop_human_sessions.replace(
         "'conclave.profile-lab.management'",
-        "'conclave.workspace.legacy'",
+        "'syntila.workspace.legacy'",
       );
     definitions.execution_workspaces = definitions.execution_workspaces.replace(
       "'draining'",
@@ -372,7 +372,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
       'audience: "conclave.desktop.management"',
       'audience: "conclave.profile-lab.management"',
       "verifyWorkspaceAuth",
-      "CONCLAVE_PROFILE_LAB_OWNER_EMAIL",
+      "SYNTILA_PROFILE_LAB_OWNER_EMAIL",
       "Profile Lab is restricted to its verified owner account",
       "deniedClaim.status !== 409",
       "Rejected Profile Lab intent must remain unapproved and unclaimed",

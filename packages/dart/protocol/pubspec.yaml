@@ -1,4 +1,4 @@
-name: conclave_protocol
+name: syntila_protocol
 description: Generated-compatible Dart bindings for the Syntila cross-language protocol.
 publish_to: none
 version: 0.1.0

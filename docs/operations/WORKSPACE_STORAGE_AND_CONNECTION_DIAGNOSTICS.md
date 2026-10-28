@@ -20,7 +20,7 @@ The default layout is:
     Engines/     generic CLI Worker Engine
     Workers/     per-Worker state, sessions, and diagnostics
     Updates/     staged Workspace updates
-~/Library/Logs/Syntila Workspace/
+~/Library/Logs/Conclave Workspace/
     workspace.log
 ~/Documents/Conclave/
     <Space>/     user-owned Space Work Directories and Thread files
@@ -37,7 +37,7 @@ the installed provider CLI and is not copied into Workspace state. Credentials
 are not stored in this directory, copied into connection URL parameters, or
 included in diagnostics. Runtime authentication uses the authorization header
 for WebSocket and the bearer authorization header for HTTPS fallback.
-`--data-dir` and `CONCLAVE_WORKSPACE_DATA_DIR` remain
+`--data-dir` and `SYNTILA_WORKSPACE_DATA_DIR` remain
 supported and keep state, updates, and logs colocated with the explicit
 override.
 
@@ -63,7 +63,7 @@ The ownership boundary is explicit:
 USER-OWNED
 ~/Documents/Conclave/<Space>/projects/files
 
-CONCLAVE-OWNED
+SYNTILA-OWNED
 ~/Library/Application Support/Conclave/Workspace/
   profiles/ engines/ sessions/ logs/ runtime/
 ~/Library/Application Support/Conclave/Profile Lab/
@@ -75,7 +75,7 @@ Workspace removal, and uninstall/reinstall preserve the user Work Root.
 
 ## Connection stages
 
-The runtime records these stages for `conclave-workspace status` and diagnostics:
+The runtime records these stages for `syntila-workspace status` and diagnostics:
 
 1. `validating`: local runtime credential and WebSocket endpoint are checked.
 2. `connecting`: DNS/TLS and the HTTP WebSocket upgrade are attempted.

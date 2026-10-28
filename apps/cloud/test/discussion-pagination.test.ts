@@ -51,13 +51,13 @@ function fixture(count = 7) {
       };
     },
   };
-  const env = { CONCLAVE_DB: db } as unknown as Parameters<
+  const env = { SYNTILA_DB: db } as unknown as Parameters<
     typeof handleListDiscussionMessages
   >[1];
   async function page(parameters = "", id = "w") {
     const response = await handleListDiscussionMessages(
       new Request(
-        `https://conclave.test/api/threads/${id}/discussion-messages${parameters}`,
+        `https://syntila.test/api/threads/${id}/discussion-messages${parameters}`,
       ),
       env,
       id,

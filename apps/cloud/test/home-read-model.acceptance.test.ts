@@ -79,8 +79,8 @@ it("spaces authorized Home read model with attention, running, recentWork, produ
     };
 
     const response = await handleGetHomeReadModel(
-      new Request("https://conclave.test/api/home"),
-      { CONCLAVE_DB: db } as unknown as Parameters<
+      new Request("https://syntila.test/api/home"),
+      { SYNTILA_DB: db } as unknown as Parameters<
         typeof handleGetHomeReadModel
       >[1],
     );

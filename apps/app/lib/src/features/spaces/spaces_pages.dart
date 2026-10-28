@@ -1,7 +1,7 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import '../common/quiet_notices.dart';
 import '../common/thread_dialogs.dart';
-import 'package:conclave_protocol/conclave_protocol.dart'
+import 'package:syntila_protocol/syntila_protocol.dart'
     show ExecutionSelection;
 import '../../ax/workflow_configuration_options.dart';
 import '../../ax/sync/ax_space_invitations.dart';
@@ -42,7 +42,7 @@ import '../common/composer_metrics.dart';
 import '../common/markdown_composer.dart';
 import '../notes/note_editor.dart';
 import '../common/attachment_cards.dart';
-import '../common/conclave_markdown_body.dart';
+import '../common/syntila_markdown_body.dart';
 import '../common/collapsible_own_message.dart';
 import '../common/message_grouping.dart';
 import 'thread_presentation_controller.dart';

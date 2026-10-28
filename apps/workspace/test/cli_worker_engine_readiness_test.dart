@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
-import 'package:conclave_workspace/worker_catalog_coordinator.dart';
-import 'package:conclave_workspace/worker_diagnostic_store.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/worker_catalog_coordinator.dart';
+import 'package:syntila_workspace/worker_diagnostic_store.dart';
 
 import 'package:test/test.dart';
 
@@ -84,7 +84,7 @@ void main() {
       addTearDown(catalog.close);
       final bundledEngine = File(
         '$repository/apps/workspace/assets/engines/'
-        'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+        'syntila_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
       );
       final engine = CliWorkerEngineSupervisor(
         engineExecutable: bundledEngine.existsSync()
@@ -93,7 +93,7 @@ void main() {
                 Platform.resolvedExecutable,
         engineArgumentsPrefix: bundledEngine.existsSync()
             ? const []
-            : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
+            : ['$repository/engines/cli_worker/bin/syntila_cli_worker.dart'],
         environmentOverrides: {'HOME': root.path},
       );
       final profileDiagnostics = WorkerDiagnosticStore(

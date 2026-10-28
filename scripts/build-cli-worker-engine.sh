@@ -4,25 +4,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENGINE_DIR="$ROOT/engines/cli_worker"
 OUTPUT_DIR="$ROOT/apps/workspace/assets/engines"
-DART_BIN="${CONCLAVE_DART_EXECUTABLE:-$(command -v dart || true)}"
+DART_BIN="${SYNTILA_DART_EXECUTABLE:-$(command -v dart || true)}"
 
 if [[ -z "$DART_BIN" ]]; then
   echo "Dart SDK is required to build the CLI Worker Engine." >&2
   exit 1
 fi
 DART_DIR="$(cd "$(dirname "$DART_BIN")" && pwd)"
-if [[ -z "${CONCLAVE_DART_EXECUTABLE:-}" && -x "$DART_DIR/cache/dart-sdk/bin/dart" ]]; then
+if [[ -z "${SYNTILA_DART_EXECUTABLE:-}" && -x "$DART_DIR/cache/dart-sdk/bin/dart" ]]; then
   DART_BIN="$DART_DIR/cache/dart-sdk/bin/dart"
 fi
 
 TARGET_FLAGS=()
 CROSS_BUILD=0
-if [[ -n "${CONCLAVE_BUILD_TARGET_OS:-}${CONCLAVE_BUILD_TARGET_ARCH:-}" ]]; then
-  [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]] || { echo "Only Linux cross-builds are supported." >&2; exit 2; }
-  case "${CONCLAVE_BUILD_TARGET_ARCH:-}" in x64|arm64) ;; *) echo "Target architecture must be x64 or arm64." >&2; exit 2 ;; esac
-  TARGET_FLAGS=(--target-os=linux "--target-arch=$CONCLAVE_BUILD_TARGET_ARCH")
+if [[ -n "${SYNTILA_BUILD_TARGET_OS:-}${SYNTILA_BUILD_TARGET_ARCH:-}" ]]; then
+  [[ "${SYNTILA_BUILD_TARGET_OS:-}" == linux ]] || { echo "Only Linux cross-builds are supported." >&2; exit 2; }
+  case "${SYNTILA_BUILD_TARGET_ARCH:-}" in x64|arm64) ;; *) echo "Target architecture must be x64 or arm64." >&2; exit 2 ;; esac
+  TARGET_FLAGS=(--target-os=linux "--target-arch=$SYNTILA_BUILD_TARGET_ARCH")
   CROSS_BUILD=1
-  OUTPUT_DIR="$ROOT/dist/cli-worker-engine/linux-$CONCLAVE_BUILD_TARGET_ARCH"
+  OUTPUT_DIR="$ROOT/dist/cli-worker-engine/linux-$SYNTILA_BUILD_TARGET_ARCH"
 fi
 
 VERSION="$(awk '/^version:/ {print $2; exit}' "$ENGINE_DIR/pubspec.yaml")"
@@ -37,19 +37,19 @@ fi
 mkdir -p "$OUTPUT_DIR"
 if [[ "$CROSS_BUILD" == 0 ]]; then mkdir -p "$ROOT/apps/profile_lab/assets/engines"; fi
 if [[ "$CROSS_BUILD" == 0 && "$(uname -s)" =~ ^(MINGW|MSYS|CYGWIN) ]]; then
-  OUTPUT="$OUTPUT_DIR/conclave-agent.exe"
-  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave-agent.exe"
+  OUTPUT="$OUTPUT_DIR/syntila-agent.exe"
+  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/syntila-agent.exe"
 else
-  OUTPUT="$OUTPUT_DIR/conclave-agent"
-  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/conclave-agent"
+  OUTPUT="$OUTPUT_DIR/syntila-agent"
+  PROFILE_LAB_OUTPUT="$ROOT/apps/profile_lab/assets/engines/syntila-agent"
 fi
 (cd "$ENGINE_DIR" && "$DART_BIN" compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   "-DENGINE_VERSION=$VERSION" \
-  bin/conclave_cli_worker.dart \
+  bin/syntila_cli_worker.dart \
   -o "$OUTPUT")
-cp "$OUTPUT" "$OUTPUT_DIR/conclave_cli_worker_engine${OUTPUT##*conclave-agent}" 2>/dev/null || true
+cp "$OUTPUT" "$OUTPUT_DIR/syntila_cli_worker_engine${OUTPUT##*syntila-agent}" 2>/dev/null || true
 cp "$OUTPUT" "$PROFILE_LAB_OUTPUT" 2>/dev/null || true
-cp "$OUTPUT" "$ROOT/apps/profile_lab/assets/engines/conclave_cli_worker_engine${OUTPUT##*conclave-agent}" 2>/dev/null || true
+cp "$OUTPUT" "$ROOT/apps/profile_lab/assets/engines/syntila_cli_worker_engine${OUTPUT##*syntila-agent}" 2>/dev/null || true
 if [[ "$CROSS_BUILD" == 1 ]]; then
   chmod 755 "$OUTPUT"
   echo "Built generic CLI Worker Engine $VERSION: $OUTPUT"

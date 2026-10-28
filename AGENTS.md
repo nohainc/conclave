@@ -60,7 +60,7 @@ Every implementation task must report:
   It supersedes the historical phase plans in `docs/architecture/`.
 - One headless Dart Workspace Service owns Cloud connectivity, assignment
   scheduling, Worker Engine processes, sessions, and runtime state. The
-  `conclave-workspace` CLI is a management client over authenticated versioned
+  `syntila-workspace` CLI is a management client over authenticated versioned
   local IPC; there is no Workspace GUI. Do not reintroduce a second client-owned
   runtime or a direct client Cloud connection.
 - The CLI and any management client must not spawn a Worker Engine or provider CLI. The generic
@@ -86,7 +86,7 @@ Every implementation task must report:
   signing, Keychain, and TCC claims require device or release-build evidence.
 - Keep the canonical build pipeline explicit: `build-cli-worker-engine.sh`
   produces the Engine artifact, `build-workspace-service.sh` builds the
-  unified `conclave-workspace` binary, and `build-workspace-macos.sh`
+  unified `syntila-workspace` binary, and `build-workspace-macos.sh`
   assembles/signs the macOS bundle.
 - `service stop` must leave registration intact; Disconnect Cloud must leave the
   service process running. Preserve the per-installation lock as the duplicate

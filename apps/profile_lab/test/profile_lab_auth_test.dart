@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_profile_lab/profile_lab_auth.dart';
+import 'package:syntila_profile_lab/profile_lab_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -19,7 +19,7 @@ void main() {
         'user': {
           'userId': 'admin-user-1',
           'displayName': 'Admin User',
-          'email': 'admin@conclave.test',
+          'email': 'admin@syntila.test',
         },
         'expiresAt': expiresAt.toIso8601String(),
         'issuedAt': issuedAt.toIso8601String(),
@@ -29,7 +29,7 @@ void main() {
       expect(session.sessionId, 'session-xyz');
       expect(session.userId, 'admin-user-1');
       expect(session.displayName, 'Admin User');
-      expect(session.email, 'admin@conclave.test');
+      expect(session.email, 'admin@syntila.test');
       expect(session.audience, 'conclave.profile-lab.management');
       expect(session.isExpired, isFalse);
     });
@@ -46,7 +46,7 @@ void main() {
           'user': {
             'userId': 'admin-user-1',
             'displayName': 'Admin User',
-            'email': 'admin@conclave.test',
+            'email': 'admin@syntila.test',
           },
           'expiresAt': expiresAt.toIso8601String(),
         }),
@@ -77,7 +77,7 @@ void main() {
         sessionId: 'session-step-up',
         userId: 'admin-1',
         displayName: 'Admin',
-        email: 'admin@conclave.test',
+        email: 'admin@syntila.test',
         expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
       );
 
@@ -153,7 +153,7 @@ void main() {
             'user': {
               'userId': 'admin-1',
               'displayName': 'Admin One',
-              'email': 'admin1@conclave.test',
+              'email': 'admin1@syntila.test',
             },
             'expiresAt': DateTime.now()
                 .toUtc()
@@ -170,7 +170,7 @@ void main() {
             'user': {
               'userId': 'admin-1',
               'displayName': 'Admin One',
-              'email': 'admin1@conclave.test',
+              'email': 'admin1@syntila.test',
             },
           }));
         }
@@ -224,7 +224,7 @@ void main() {
         sessionId: 'session-lab-1',
         userId: 'admin-1',
         displayName: 'Admin',
-        email: 'admin@conclave.test',
+        email: 'admin@syntila.test',
         expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
       );
 

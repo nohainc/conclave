@@ -41,8 +41,8 @@ function fixture() {
     "INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES('T','S','Thread','active','alice','2020','2020')",
   );
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
     TEST_AUTHENTICATION: async (request: Request) => {
       const userId = request.headers.get("test-user")!;
       return {

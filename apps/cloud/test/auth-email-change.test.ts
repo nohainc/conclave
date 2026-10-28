@@ -95,11 +95,11 @@ describe("two-step email change", () => {
     const memory = createMemoryDb({ "user-1": user.email, ...extraUsers });
     const send = vi.fn(async (_message: unknown) => ({ messageId: "m" }));
     const env = {
-      CONCLAVE_DB: memory.db,
-      CONCLAVE_ENVIRONMENT: "production",
+      SYNTILA_DB: memory.db,
+      SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
       BETTER_AUTH_URL: "https://app.conclaveax.com",
-      CONCLAVE_EMAIL: { send },
+      SYNTILA_EMAIL: { send },
     };
     return { ...memory, send, env };
   }

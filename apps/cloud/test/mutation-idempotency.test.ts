@@ -1,4 +1,4 @@
-import { hashToken } from "@conclave/security";
+import { hashToken } from "@syntila/security";
 import { describe, expect, it } from "vitest";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import { MutationIdempotency } from "../src/routes/mutation-idempotency.js";
@@ -22,8 +22,8 @@ function fixture() {
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at) VALUES
     ('owner','owner@test','Owner','now','now'), ('other','other@test','Other','now','now')`);
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
     TEST_AUTHENTICATION: async () => ({
       userId: "owner",
       user: {

@@ -7,7 +7,7 @@ import type { SecurityEnv } from "../src/routes/handlers.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 
 function request(etag?: string) {
-  return new Request("https://conclave.test/api/spaces/p", {
+  return new Request("https://syntila.test/api/spaces/p", {
     headers: etag ? { "if-none-match": etag } : {},
   });
 }
@@ -18,8 +18,8 @@ function fixture() {
     INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES ('m','p','u','owner','now','now');
     INSERT INTO threads(id,space_id,name,status,lead_user_id,created_at,updated_at) VALUES ('w','p','Work','active','u','now','now');`);
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
     TEST_AUTHENTICATION: async () => ({
       userId: "u",
       user: { id: "u", email: "u@test", displayName: "User", status: "active" },

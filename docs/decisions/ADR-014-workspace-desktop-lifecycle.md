@@ -1,6 +1,6 @@
 # ADR-014: Syntila Workspace Desktop Lifecycle, Locking, and Background Runtime
 
-> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
+> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `syntila-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
 
 **Status:** Accepted for implementation  
 **Date:** 2026-09-27  

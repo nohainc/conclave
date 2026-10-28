@@ -1,19 +1,19 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 
 /// Profile Lab styling and visual identity.
 abstract final class ProfileLabTheme {
-  static const interactionText = ConclaveColors.primaryForegroundDark;
-  static const secondaryText = ConclaveColors.textSecondaryDark;
-  static const borderColor = ConclaveColors.borderDark;
-  static const primaryAccent = ConclaveColors.primary;
-  static const darkBackground = ConclaveColors.canvasDark;
-  static const darkSurface = ConclaveColors.surfaceDark;
-  static const darkCard = ConclaveColors.surfaceHoverDark;
-  static const darkForeground = ConclaveColors.textPrimaryDark;
-  static const passColor = ConclaveColors.success;
-  static const warnColor = ConclaveColors.warning;
-  static const failColor = ConclaveColors.error;
+  static const interactionText = SyntilaColors.primaryForegroundDark;
+  static const secondaryText = SyntilaColors.textSecondaryDark;
+  static const borderColor = SyntilaColors.borderDark;
+  static const primaryAccent = SyntilaColors.primary;
+  static const darkBackground = SyntilaColors.canvasDark;
+  static const darkSurface = SyntilaColors.surfaceDark;
+  static const darkCard = SyntilaColors.surfaceHoverDark;
+  static const darkForeground = SyntilaColors.textPrimaryDark;
+  static const passColor = SyntilaColors.success;
+  static const warnColor = SyntilaColors.warning;
+  static const failColor = SyntilaColors.error;
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -64,7 +64,7 @@ abstract final class ProfileLabTheme {
           side: BorderSide(color: borderColor, width: 1),
         ),
       ),
-      fontFamily: ConclaveTypography.fontFamily,
+      fontFamily: SyntilaTypography.fontFamily,
       textTheme: const TextTheme(
         headlineMedium:
             TextStyle(fontWeight: FontWeight.w700, letterSpacing: -0.5),
@@ -76,5 +76,5 @@ abstract final class ProfileLabTheme {
     );
   }
 
-  static TextStyle get monoStyle => ConclaveTypography.mono;
+  static TextStyle get monoStyle => SyntilaTypography.mono;
 }

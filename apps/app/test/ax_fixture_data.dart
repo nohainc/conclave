@@ -1,5 +1,5 @@
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_snapshot.dart';
 

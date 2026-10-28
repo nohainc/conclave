@@ -196,7 +196,7 @@ class _ThreadPageState extends State<ThreadPage>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title:
             Text(history ? 'Reset AI context' : 'Clear Conversation History'),
         content: Text(history
@@ -226,7 +226,7 @@ class _ThreadPageState extends State<ThreadPage>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: const Text('Clear Note'),
         content: const Text(
             'Delete all content from this note? This action cannot be undone.'),
@@ -1871,7 +1871,7 @@ class _ThreadPageState extends State<ThreadPage>
                                 },
                                 style: TextButton.styleFrom(
                                   foregroundColor:
-                                      ConclaveColors.textPrimary(isDark),
+                                      SyntilaColors.textPrimary(isDark),
                                   textStyle: TextStyle(
                                     fontWeight: !history && !notes
                                         ? FontWeight.bold
@@ -1895,7 +1895,7 @@ class _ThreadPageState extends State<ThreadPage>
                                   },
                                   style: TextButton.styleFrom(
                                     foregroundColor:
-                                        ConclaveColors.textPrimary(isDark),
+                                        SyntilaColors.textPrimary(isDark),
                                     textStyle: TextStyle(
                                       fontWeight: history
                                           ? FontWeight.bold
@@ -1916,7 +1916,7 @@ class _ThreadPageState extends State<ThreadPage>
                                   onPressed: () => _setNotesOpen(true),
                                   style: TextButton.styleFrom(
                                     foregroundColor:
-                                        ConclaveColors.textPrimary(isDark),
+                                        SyntilaColors.textPrimary(isDark),
                                     textStyle: TextStyle(
                                       fontWeight: notes
                                           ? FontWeight.bold
@@ -2186,7 +2186,7 @@ class _ThreadPageState extends State<ThreadPage>
                 const Icon(
                   Icons.chat_bubble_outline_rounded,
                   size: 42,
-                  color: ConclaveColors.neutral,
+                  color: SyntilaColors.neutral,
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -2194,7 +2194,7 @@ class _ThreadPageState extends State<ThreadPage>
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: ConclaveColors.textSecondary(isDark),
+                    color: SyntilaColors.textSecondary(isDark),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -2203,7 +2203,7 @@ class _ThreadPageState extends State<ThreadPage>
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: ConclaveColors.neutral,
+                    color: SyntilaColors.neutral,
                   ),
                 ),
               ],
@@ -2377,7 +2377,7 @@ class _ThreadPageState extends State<ThreadPage>
                             Theme.of(context).brightness == Brightness.dark;
                         final highlightDecoration = BoxDecoration(
                           color: isHighlighted
-                              ? ConclaveColors.primarySoftColor(isDark)
+                              ? SyntilaColors.primarySoftColor(isDark)
                                   .withValues(alpha: isDark ? 0.35 : 0.45)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
@@ -2411,7 +2411,7 @@ class _ThreadPageState extends State<ThreadPage>
         Text('Requested before AI context reset',
             style: TextStyle(
                 fontSize: 12,
-                color: ConclaveColors.textSecondary(
+                color: SyntilaColors.textSecondary(
                     Theme.of(context).brightness == Brightness.dark))),
       _workComposer().requestCard(context, request,
           responseAnchorKey:
@@ -2443,8 +2443,8 @@ class _ThreadPageState extends State<ThreadPage>
     final dark = Theme.of(context).brightness == Brightness.dark;
     // Indicate the active mode with icon color only in both themes.
     final selectedForeground = dark
-        ? ConclaveColors.focusBorderDark
-        : ConclaveColors.primaryForegroundLight;
+        ? SyntilaColors.focusBorderDark
+        : SyntilaColors.primaryForegroundLight;
     Widget toggle(bool askAi, String tooltip, IconData icon) {
       final selected = _askAiMode == askAi;
       return IconButton(
@@ -2521,10 +2521,10 @@ class _ThreadPageState extends State<ThreadPage>
                         buttonContext: buttonContext,
                         itemHeight: 36,
                         items: [
-                          ConclaveMenuEntry<String>(
+                          SyntilaMenuEntry<String>(
                             value: 'files',
                             child: MenuItemButton(
-                              style: ConclaveMenuStyle.item(
+                              style: SyntilaMenuStyle.item(
                                   Theme.of(context).brightness ==
                                       Brightness.dark),
                               leadingIcon:
@@ -2536,7 +2536,7 @@ class _ThreadPageState extends State<ThreadPage>
                                   ? () => Navigator.pop(buttonContext, 'files')
                                   : null,
                               child: const Text('Add files',
-                                  style: ConclaveMenuStyle.textStyle),
+                                  style: SyntilaMenuStyle.textStyle),
                             ),
                           ),
                         ],

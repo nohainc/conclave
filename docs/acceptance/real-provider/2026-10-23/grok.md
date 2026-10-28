@@ -79,7 +79,7 @@ property-only config-check selectors cannot address.
 
 The Profile declares no model or effort list. Models come from `grok models`;
 each model's efforts come from `discovery.effortProbe`, which runs
-`grok --model <id> --reasoning-effort conclave-effort-probe --output-format
+`grok --model <id> --reasoning-effort syntila-effort-probe --output-format
 json -p x` and reads Grok's rejection. Live checks on CLI 1.0.67:
 
 - `grok-4.7` → `use one of: xhigh, high, medium, low` (exit 1, about 1.1 s).
@@ -107,7 +107,7 @@ README; a first-party downloadable asset has not been verified.
   `grok_profile_execution_test.dart` (fixture replay through the Engine,
   provider error, adapter, `indented_list`, policy-bound session store).
 - `packages/tool-profile`: 159 tests and the TypeScript check pass.
-- `packages/tool_profile_v1` (33) and `packages/conclave_cli_worker_runtime`
+- `packages/tool_profile_v1` (33) and `packages/syntila_cli_worker_runtime`
   (27) tests pass. `pnpm validate:engine` itself stops at the runtime package
   format check on `test/cli_streaming_runner_test.dart`, which is unformatted at
   HEAD and unrelated to Grok.

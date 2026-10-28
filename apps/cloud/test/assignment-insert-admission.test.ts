@@ -79,8 +79,8 @@ async function fixture() {
     dispatch: () =>
       dispatchTaskAssignment(
         {
-          CONCLAVE_DB: db,
-          CONCLAVE_WORKSPACE_GATEWAY: {
+          SYNTILA_DB: db,
+          SYNTILA_WORKSPACE_GATEWAY: {
             idFromName: () => "WS",
             get: () => ({ fetch }),
           } as unknown as DurableObjectNamespace,

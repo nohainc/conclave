@@ -2,7 +2,7 @@ import {
   type WorkerExecutionOptions,
   validateWorkerExecutionSelection,
   workerEffortOptionsForModel,
-} from "@conclave/core";
+} from "@syntila/core";
 
 /** Frozen public evidence; provider-native resolution belongs to the Engine. */
 export function resolveExecutionSelectionSnapshot(

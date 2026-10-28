@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_service_state.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace_service_state.dart';
 import 'package:test/test.dart';
 
 void main() {

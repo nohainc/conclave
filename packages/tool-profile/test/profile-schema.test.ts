@@ -194,7 +194,7 @@ describe("Tool Profile v1 canonical schema", () => {
       [
         "environment names",
         (p) => {
-          p.environment.passthrough.push("CONCLAVE_TOKEN");
+          p.environment.passthrough.push("SYNTILA_TOKEN");
         },
       ],
       [

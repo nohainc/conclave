@@ -1,5 +1,5 @@
-import 'package:conclave_app/src/ax/sync/persistence/ax_read_cache_codec.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_read_cache_codec.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

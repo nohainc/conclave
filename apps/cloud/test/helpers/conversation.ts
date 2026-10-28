@@ -1,4 +1,4 @@
-import { CONVERSATION_WORKFLOWS } from "@conclave/core";
+import { CONVERSATION_WORKFLOWS } from "@syntila/core";
 import { sqliteD1 } from "./sqlite-d1.js";
 import {
   conversationSubmissionStatements,

@@ -37,7 +37,7 @@ internal environments; it is not an application authentication dependency.
 The deployment builds Flutter Web with the planned same-origin API endpoint:
 
 ```
-flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
+flutter build web --release --dart-define=SYNTILA_API_URL=https://app.conclaveax.com/api
 ```
 
 Syntila uses its normal connection-error state when the API is unavailable. This
@@ -62,14 +62,14 @@ repository access. Repository authorization is a separate future integration.
 Set these values in the Worker environment:
 
 - `BETTER_AUTH_URL` — application origin, such as `https://app.conclaveax.com`;
-- `CONCLAVE_APP_URL` — browser application origin used for desktop Workspace
+- `SYNTILA_APP_URL` — browser application origin used for desktop Workspace
   approval pages, such as `https://app.conclaveax.com`. Set this separately
   when the Cloud API and browser application use different origins or local
   development ports.
-- `CONCLAVE_AUTH_GITHUB_CLIENT_ID` — GitHub OAuth client ID;
-- `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
-- `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` — Google OAuth client ID;
-- `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
+- `SYNTILA_AUTH_GITHUB_CLIENT_ID` — GitHub OAuth client ID;
+- `SYNTILA_AUTH_GITHUB_CLIENT_SECRET` — GitHub OAuth client secret;
+- `SYNTILA_AUTH_GOOGLE_CLIENT_ID` — Google OAuth client ID;
+- `SYNTILA_AUTH_GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
 - `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret;
 - `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Syntila
   origins for local or controlled preview environments.
@@ -78,9 +78,9 @@ The production Worker also uses Cloudflare Email Service for email verification,
 password reset, and Space invitations. Sender configuration is centralized in
 the Cloud email service and uses these production variables:
 
-- `CONCLAVE_EMAIL_FROM=conclave@conclaveax.com`
-- `CONCLAVE_EMAIL_FALLBACK_FROM=vitalii@conclaveax.com`
-- `CONCLAVE_EMAIL_FROM_NAME=Syntila`
+- `SYNTILA_EMAIL_FROM=syntila@conclaveax.com`
+- `SYNTILA_EMAIL_FALLBACK_FROM=vitalii@conclaveax.com`
+- `SYNTILA_EMAIL_FROM_NAME=Syntila`
 
 Both addresses must be independently authorized by the Cloudflare Email
 Sending configuration on the `conclaveax.com` zone before deploying this change.
@@ -89,7 +89,7 @@ sender before accepting the message. Timeouts, recipient failures, and unknown
 errors are not retried with another sender, which avoids duplicate messages
 after an uncertain provider acceptance. The retired `auth@auth.earthuc.com`
 address is rejected by the configuration validator. Local development uses
-`remote: true` on the `CONCLAVE_EMAIL` binding so real emails are delivered via
+`remote: true` on the `SYNTILA_EMAIL` binding so real emails are delivered via
 Cloudflare Email Sending when logged into Wrangler (and falls back to logging
 when the binding is absent).
 
@@ -113,7 +113,7 @@ documented in the [email delivery verification runbook](EMAIL_DELIVERY_VERIFICAT
 ### GitHub sign-in
 
 GitHub sign-in uses Better Auth's GitHub provider. It is active only when both
-`CONCLAVE_AUTH_GITHUB_CLIENT_ID` and `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` are
+`SYNTILA_AUTH_GITHUB_CLIENT_ID` and `SYNTILA_AUTH_GITHUB_CLIENT_SECRET` are
 set; without them the "Continue with GitHub" button returns to the sign-in page
 with "Sign-in with this provider is not set up on this server yet."
 
@@ -131,9 +131,9 @@ with "Sign-in with this provider is not set up on this server yet."
    device flow off.
 2. Generate a client secret and copy the client ID and secret.
 3. Production: add them as the GitHub Actions secrets
-   `CONCLAVE_AUTH_GITHUB_CLIENT_ID` and `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`
+   `SYNTILA_AUTH_GITHUB_CLIENT_ID` and `SYNTILA_AUTH_GITHUB_CLIENT_SECRET`
    and run the deployment workflow, or set them on the Worker directly with
-   `pnpm exec wrangler secret put CONCLAVE_AUTH_GITHUB_CLIENT_ID --config
+   `pnpm exec wrangler secret put SYNTILA_AUTH_GITHUB_CLIENT_ID --config
    infra/cloudflare/app.wrangler.jsonc` (and the same for the secret).
 4. Local: add both values to `apps/cloud/.dev.vars` and start
    `./scripts/start-local.sh --isolated`. The default local mode proxies to the
@@ -155,7 +155,7 @@ Behavior:
 ### Google sign-in
 
 Google sign-in uses Better Auth's Google provider. It is active only when both
-`CONCLAVE_AUTH_GOOGLE_CLIENT_ID` and `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` are
+`SYNTILA_AUTH_GOOGLE_CLIENT_ID` and `SYNTILA_AUTH_GOOGLE_CLIENT_SECRET` are
 set; without them the "Continue with Google" button returns to the sign-in page
 with "Sign-in with this provider is not set up on this server yet."
 
@@ -176,9 +176,9 @@ with "Sign-in with this provider is not set up on this server yet."
    The redirect URI is the Cloud API origin (`BETTER_AUTH_URL`), not the Flutter
    app origin.
 3. Production: add the client ID and secret as the GitHub Actions secrets
-   `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` and `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`
+   `SYNTILA_AUTH_GOOGLE_CLIENT_ID` and `SYNTILA_AUTH_GOOGLE_CLIENT_SECRET`
    and run the deployment workflow, or set them on the Worker directly with
-   `pnpm exec wrangler secret put CONCLAVE_AUTH_GOOGLE_CLIENT_ID --config
+   `pnpm exec wrangler secret put SYNTILA_AUTH_GOOGLE_CLIENT_ID --config
    infra/cloudflare/app.wrangler.jsonc` (and the same for the secret).
 4. Local: add both values to `apps/cloud/.dev.vars` and start
    `./scripts/start-local.sh --isolated`. The default local mode proxies to the
@@ -196,11 +196,11 @@ Behavior:
   and use **Link Google** in the profile security settings; later Google
   sign-ins then work.
 - After sign-in the browser returns to the application page that started it.
-  Cloud accepts only its own origin and `CONCLAVE_APP_URL` as a return target.
+  Cloud accepts only its own origin and `SYNTILA_APP_URL` as a return target.
   Provider failures return to `/login?error=<code>` on the application origin.
 
-Store `CONCLAVE_AUTH_GITHUB_CLIENT_SECRET`,
-`CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET`, and
+Store `SYNTILA_AUTH_GITHUB_CLIENT_SECRET`,
+`SYNTILA_AUTH_GOOGLE_CLIENT_SECRET`, and
 `BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
 `wrangler secret put`). Do not commit values to source, Wrangler configuration,
 CI files, or browser bundles. These are ultimately secrets on the
@@ -212,11 +212,11 @@ still be managed per deployment.
 V9 Profile publication does not require a Profile signing key or Profile trust
 root. Cloud revalidates the candidate JSON, canonical digest, evidence, and
 expected revision, then publishes the current Profile atomically. The
-`CONCLAVE_RELEASE_PUBLISHER` and `CONCLAVE_RELEASE_TRUST_KEYS_JSON` settings
+`SYNTILA_RELEASE_PUBLISHER` and `SYNTILA_RELEASE_TRUST_KEYS_JSON` settings
 remain only for Workspace application-release verification.
 
 Profile Lab requires the active browser account `vitalii@nohainc.com`.
-Both Wrangler configurations set `CONCLAVE_PROFILE_LAB_OWNER_EMAIL`; this exclusive
+Both Wrangler configurations set `SYNTILA_PROFILE_LAB_OWNER_EMAIL`; this exclusive
 owner policy replaces the legacy user-ID allowlists for this deployment. Browser
 approval, session claim, and subsequent Lab requests enforce the policy.
 All environments support Profile publication and rollout; there is no release
@@ -225,7 +225,7 @@ ID signing does not gate the internal lifecycle.
 
 Profile Lab builds default to `https://app.conclaveax.com`. Development builds
 can select local Cloud with
-`--dart-define=CONCLAVE_CLOUD_URL=http://localhost:8787`; the Cloud connection
+`--dart-define=SYNTILA_CLOUD_URL=http://localhost:8787`; the Cloud connection
 settings also allow a local origin override and can reset to the build default.
 The app accepts HTTP only for loopback addresses in development builds. Release
 builds require HTTPS. Saved Profile Lab sessions are bound to the selected
@@ -323,7 +323,7 @@ Production now targets the separately provisioned `conclave-v8-production`
 database. It was initialized from the clean v8 baseline, then populated from a
 private export of the existing production database. Aggregate row counts and
 key parent-child relationships were checked after import. The old
-`conclave-production` database remains intact as a rollback copy until the v8
+`syntila-production` database remains intact as a rollback copy until the v8
 Worker deployment and production checks pass. The v8 migration is a clean
 baseline, not an in-place upgrade for a database initialized from an earlier
 migration chain. Do not apply it to the old database.

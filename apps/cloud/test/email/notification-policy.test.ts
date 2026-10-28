@@ -49,7 +49,7 @@ describe("email notification policy", () => {
   it("does not invoke the transport when an optional message is suppressed", async () => {
     const transport = createMockEmailTransport();
     const result = await sendPolicyControlledTemplateEmail(
-      { CONCLAVE_EMAIL: transport },
+      { SYNTILA_EMAIL: transport },
       {
         to: "ada@example.com",
         templateId: "space.invitation-accepted.v1",
@@ -71,7 +71,7 @@ describe("email notification policy", () => {
   it("uses the existing renderer and transport when enabled", async () => {
     const send = vi.fn(async () => ({ messageId: "message-1" }));
     const result = await sendPolicyControlledTemplateEmail(
-      { CONCLAVE_EMAIL: { send } },
+      { SYNTILA_EMAIL: { send } },
       {
         to: "ada@example.com",
         templateId: "space.invitation-accepted.v1",

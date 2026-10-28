@@ -14,4 +14,4 @@ Protocol versions use `major.minor.patch`:
 TypeScript and Dart bindings are generated from this schema by
 `scripts/generate-protocol-bindings.mjs` and checked by
 `scripts/verify-protocol-bindings.mjs`. Local Worker Protocol 4.0 is defined
-and validated only in `packages/conclave_worker_protocol`.
+and validated only in `packages/syntila_worker_protocol`.

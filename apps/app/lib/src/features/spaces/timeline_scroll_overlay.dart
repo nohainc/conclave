@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 
@@ -103,7 +103,7 @@ class _TimelineScrollOverlayState extends State<TimelineScrollOverlay> {
                       // No hover hint; the label keeps it accessible.
                       onPressed: _scrollToLatest,
                       // Same color as message timestamps.
-                      color: ConclaveColors.neutral,
+                      color: SyntilaColors.neutral,
                       icon: const Icon(Icons.arrow_downward_rounded,
                           semanticLabel: 'Scroll to latest'),
                     ),

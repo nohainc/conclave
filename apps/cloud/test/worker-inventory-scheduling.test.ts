@@ -38,7 +38,7 @@ describe("inventory scheduling for Workers configured after Workspace selection"
       all: async () => ({ results: sqlite.prepare(sql).all(...values) }),
     });
     env = {
-      CONCLAVE_DB: { prepare: (sql: string) => statement(sql) },
+      SYNTILA_DB: { prepare: (sql: string) => statement(sql) },
     } as unknown as typeof env;
   });
   afterEach(() => sqlite.close());

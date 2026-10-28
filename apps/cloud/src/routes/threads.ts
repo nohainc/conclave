@@ -26,7 +26,7 @@ import {
   DEFAULT_THREAD_ACCESS_POLICY,
   type SpaceMembership,
   type Thread,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   HttpError,
   authorizeRequest,
@@ -56,7 +56,7 @@ export async function handleListSpaceThreads(
     spaceId,
     accessContext,
   );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT threads.id, threads.space_id AS spaceId,
             threads.name, threads.status, threads.has_other_contributions AS hasOtherContributions,
             threads.access_policy_json AS accessPolicyJson,
@@ -123,7 +123,7 @@ export async function handleListSpaceThreads(
     .bind(spaceId, context.userId)
     .all<Record<string, unknown>>();
 
-  const membership = await env.CONCLAVE_DB.prepare(
+  const membership = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, user_id AS userId, role,
             created_at AS createdAt, updated_at AS updatedAt
        FROM space_memberships WHERE space_id = ?1 AND user_id = ?2`,
@@ -200,7 +200,7 @@ export async function handleCreateThread(
   >;
   const receipt = await MutationIdempotency.from(
     request,
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context.userId,
     `space:${spaceId}:create-thread`,
     body,
@@ -208,7 +208,7 @@ export async function handleCreateThread(
   const replay = await receipt?.replay();
   if (replay) return replay;
   const name = requiredString(body.name, "name");
-  const duplicate = await env.CONCLAVE_DB.prepare(
+  const duplicate = await env.SYNTILA_DB.prepare(
     `SELECT id FROM threads
      WHERE space_id = ?1 AND LOWER(TRIM(name)) = LOWER(TRIM(?2))
      LIMIT 1`,
@@ -226,7 +226,7 @@ export async function handleCreateThread(
     typeof body.accessPolicy === "object" && body.accessPolicy !== null
       ? body.accessPolicy
       : DEFAULT_THREAD_ACCESS_POLICY;
-  const mutation = env.CONCLAVE_DB.prepare(
+  const mutation = env.SYNTILA_DB.prepare(
     `INSERT INTO threads
        (id, space_id, name, status, access_policy_json, lead_user_id, created_at, updated_at)
        VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6, ?6)`,
@@ -324,7 +324,7 @@ export async function handleUpdateThread(
     metadataPatch !== undefined &&
     Object.keys(body).every((key) => key === "metadata");
   if (name.trim().toLowerCase() !== thread.name.trim().toLowerCase()) {
-    const duplicate = await env.CONCLAVE_DB.prepare(
+    const duplicate = await env.SYNTILA_DB.prepare(
       `SELECT id FROM threads
        WHERE space_id = ?1 AND id <> ?2
          AND LOWER(TRIM(name)) = LOWER(TRIM(?3))
@@ -343,7 +343,7 @@ export async function handleUpdateThread(
   const updatedAt = metadataOnly ? thread.updatedAt : now;
   const mutations: D1PreparedStatement[] = [];
   mutations.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE threads
      SET name = ?1, status = ?2, access_policy_json = ?3, updated_at = ?4,
          metadata_json = json_patch(metadata_json, ?6)
@@ -377,7 +377,7 @@ export async function handleUpdateThread(
   }
   if (workConfig !== undefined) {
     mutations.push(
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO thread_work_configs
          (thread_id, config_json, updated_by_user_id, updated_at)
        VALUES (?1, ?2, ?3, ?4)
@@ -388,14 +388,14 @@ export async function handleUpdateThread(
   }
   const savedWorkConfigJson =
     workConfig === undefined
-      ? await env.CONCLAVE_DB.prepare(
+      ? await env.SYNTILA_DB.prepare(
           "SELECT config_json FROM thread_work_configs WHERE thread_id = ?1",
         )
           .bind(threadId)
           .first<{ config_json: string }>()
           .then((row) => row?.config_json)
       : JSON.stringify(workConfig);
-  const savedMetadataJson = await env.CONCLAVE_DB.prepare(
+  const savedMetadataJson = await env.SYNTILA_DB.prepare(
     "SELECT metadata_json FROM threads WHERE id = ?1",
   )
     .bind(threadId)
@@ -407,7 +407,7 @@ export async function handleUpdateThread(
       );
       return JSON.stringify(mergeMetadata(current, metadataPatch ?? {}));
     });
-  const member = await env.CONCLAVE_DB.prepare(
+  const member = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, user_id AS userId, role,
             created_at AS createdAt, updated_at AS updatedAt
        FROM space_memberships WHERE space_id = ?1 AND user_id = ?2`,
@@ -419,7 +419,7 @@ export async function handleUpdateThread(
     context.userId,
     thread.spaceId,
   );
-  const creator = await env.CONCLAVE_DB.prepare(
+  const creator = await env.SYNTILA_DB.prepare(
     "SELECT u.email, s.owner_user_id AS ownerUserId FROM users u JOIN spaces s ON s.id = ?1 WHERE u.id = ?2",
   )
     .bind(thread.spaceId, thread.lead.userId)
@@ -461,7 +461,7 @@ export async function handleUpdateThread(
         policy.role === "owner" ||
         (thread.lead.userId === context.userId &&
           (
-            await env.CONCLAVE_DB.prepare(
+            await env.SYNTILA_DB.prepare(
               "SELECT has_other_contributions AS contributed FROM threads WHERE id = ?1",
             )
               .bind(threadId)
@@ -496,7 +496,7 @@ export async function handleDeleteThread(
     accessContext,
   );
   await requireDestructiveThreadAccess(env, threadId, context.userId);
-  const active = await env.CONCLAVE_DB.prepare(
+  const active = await env.SYNTILA_DB.prepare(
     "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
   )
     .bind(threadId)
@@ -506,7 +506,7 @@ export async function handleDeleteThread(
       409,
       "Cancel active requests before deleting this Thread",
     );
-  const mutation = env.CONCLAVE_DB.prepare(
+  const mutation = env.SYNTILA_DB.prepare(
     "DELETE FROM threads WHERE id = ?1",
   ).bind(threadId);
   await publishCollaborationEvent(env, "thread.deleted", spaceId, threadId, {
@@ -576,7 +576,7 @@ export async function handleListDiscussionMessages(
   const forward = after !== null;
   const comparison = forward ? ">" : "<";
   const order = forward ? "ASC" : "DESC";
-  const statement = env.CONCLAVE_DB.prepare(
+  const statement = env.SYNTILA_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
             dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.reply_to_json AS replyToJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
@@ -643,7 +643,7 @@ export async function handleCreateDiscussionMessage(
   const body = (await request.json()) as Record<string, unknown>;
   const receipt = await MutationIdempotency.from(
     request,
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context.userId,
     `thread:${threadId}:send-discussion`,
     body,
@@ -663,13 +663,13 @@ export async function handleCreateDiscussionMessage(
       : requiredString(rawContent, "body");
   const references = discussionReferences(body.references);
   const replyTo = await resolveReplyReference(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     threadId,
     body.replyTo,
   );
   const now = new Date().toISOString();
   const id = `discussion-${crypto.randomUUID()}`;
-  const userRow = await env.CONCLAVE_DB.prepare(
+  const userRow = await env.SYNTILA_DB.prepare(
     `SELECT display_name AS displayName FROM users WHERE id = ?1`,
   )
     .bind(context.userId)
@@ -677,7 +677,7 @@ export async function handleCreateDiscussionMessage(
   const authorName = userRow?.displayName || "Member";
   const mutations: D1PreparedStatement[] = [];
   mutations.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO discussion_messages
        (id, thread_id, author_user_id, body, references_json, created_at, attachments_json, reply_to_json)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
@@ -693,7 +693,7 @@ export async function handleCreateDiscussionMessage(
     ),
   );
   mutations.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO space_audit_log
        (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
      VALUES (?1, ?2, 'user', ?3, 'thread.discussion.created', 'discussion_message', ?4, ?5, ?6)`,
@@ -740,7 +740,7 @@ export async function handleGetDiscussionMessage(
   messageId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const message = await env.CONCLAVE_DB.prepare(
+  const message = await env.SYNTILA_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
       COALESCE(u.display_name, 'Member') AS authorName,
       dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.reply_to_json AS replyToJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
@@ -773,7 +773,7 @@ export async function handleEditDiscussionMessage(
   messageId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const message = await env.CONCLAVE_DB.prepare(
+  const message = await env.SYNTILA_DB.prepare(
     `SELECT dm.id, dm.thread_id AS threadId, dm.author_user_id AS authorUserId,
             COALESCE(u.display_name, 'Member') AS authorName,
             dm.body, dm.attachments_json AS attachmentsJson, dm.references_json AS referencesJson, dm.reply_to_json AS replyToJson, dm.edited_at AS editedAt, dm.created_at AS createdAt,
@@ -807,7 +807,7 @@ export async function handleEditDiscussionMessage(
     body.references ?? parseJson(message.referencesJson, []),
   );
   const editedAt = new Date().toISOString();
-  const mutation = env.CONCLAVE_DB.prepare(
+  const mutation = env.SYNTILA_DB.prepare(
     "UPDATE discussion_messages SET body = ?1, references_json = ?2, edited_at = ?3 WHERE id = ?4",
   ).bind(content, JSON.stringify(references), editedAt, messageId);
   await publishCollaborationEvent(
@@ -833,7 +833,7 @@ export async function handleDeleteDiscussionMessage(
   messageId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const message = await env.CONCLAVE_DB.prepare(
+  const message = await env.SYNTILA_DB.prepare(
     `SELECT id, thread_id AS threadId, author_user_id AS authorUserId, event_type AS eventType, kind
      FROM discussion_messages
      WHERE id = ?1`,
@@ -864,7 +864,7 @@ export async function handleDeleteDiscussionMessage(
     );
   const now = new Date().toISOString();
   const text = `Message removed by ${context.user.displayName || "Member"}${policy.role === "owner" && String(message.authorUserId) !== context.userId ? " · Space owner" : ""}`;
-  const mutation = env.CONCLAVE_DB.prepare(
+  const mutation = env.SYNTILA_DB.prepare(
     "UPDATE discussion_messages SET body = ?1, attachments_json = '[]', references_json = '[]', reply_to_json = NULL, event_type = 'message.removed', edited_at = ?2 WHERE id = ?3 AND event_type IS NULL",
   ).bind(text, now, messageId);
   await publishCollaborationEvent(
@@ -892,7 +892,7 @@ export async function handleClearChatHistory(
     accessContext,
   );
   await requireDestructiveThreadAccess(env, threadId, context.userId);
-  const active = await env.CONCLAVE_DB.prepare(
+  const active = await env.SYNTILA_DB.prepare(
     "SELECT COUNT(*) AS count FROM work_requests WHERE thread_id = ?1 AND status IN ('queued', 'running', 'waiting')",
   )
     .bind(threadId)
@@ -903,7 +903,7 @@ export async function handleClearChatHistory(
       `Cannot clear the Conversation with ${active.count} active Work Request(s). Cancel first.`,
     );
   }
-  const db = env.CONCLAVE_DB;
+  const db = env.SYNTILA_DB;
   // Clearing the Conversation is the real deletion: Chat messages, every Work
   // Request with its answers and diagnostics, and Worker session continuity.
   // Deleting the owning Conversations lets canonical history cascade legally.
@@ -960,7 +960,7 @@ export async function handleMarkThreadRead(
     accessContext,
   );
   const readAt = new Date().toISOString();
-  const mutation = env.CONCLAVE_DB.prepare(
+  const mutation = env.SYNTILA_DB.prepare(
     `INSERT INTO thread_read_states (thread_id, user_id, read_at)
      VALUES (?1, ?2, ?3)
      ON CONFLICT (thread_id, user_id) DO UPDATE SET read_at = excluded.read_at

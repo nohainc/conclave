@@ -43,11 +43,11 @@ vitest run apps/cloud/test/worker-profile-v9-registry.test.ts
 ```
 
 The acceptance tests use deterministic local provider fixtures. Full Local
-Access host validation (`CONCLAVE_TEST_FULL_LOCAL_ACCESS=1`), real Profile
-evidence (`CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1` /
-`CONCLAVE_TEST_REAL_PROFILE_GEMINI=1`), and live assignment workflows
-(`CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` /
-`CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1`) remain opt-in device tests because
+Access host validation (`SYNTILA_TEST_FULL_LOCAL_ACCESS=1`), real Profile
+evidence (`SYNTILA_TEST_REAL_PROFILE_CHATGPT=1` /
+`SYNTILA_TEST_REAL_PROFILE_GEMINI=1`), and live assignment workflows
+(`SYNTILA_TEST_ASSIGNMENT_PROFILE_CHATGPT=1` /
+`SYNTILA_TEST_ASSIGNMENT_PROFILE_GEMINI=1`) remain opt-in device tests because
 they require the operator's provider installation and credentials; the automated
 Workspace test verifies the authorization state and its preservation across
 Profile publication.

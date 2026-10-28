@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/notifications/notification_models.dart';
+import 'package:syntila_app/src/notifications/notification_models.dart';
 
 void main() {
   test('only meaningful realtime states create notifications', () {

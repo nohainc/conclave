@@ -4,7 +4,7 @@ import {
   resolveUserWorkflowConfiguration,
   type WorkflowSelection,
   type BuiltinWorkflowDefinition,
-} from "@conclave/core";
+} from "@syntila/core";
 import { HttpError, type SecurityEnv } from "./http-security.js";
 import { loadSpacePermissions } from "./space-permissions.js";
 import { validateWorkflowWorkerEligibility } from "./handlers.js";
@@ -121,7 +121,7 @@ export async function resolveWorkflowExecutionBindings(
       422,
       "Choose a Workspace in Workflows before sending a request",
     );
-  const inventory = await env.CONCLAVE_DB.prepare(
+  const inventory = await env.SYNTILA_DB.prepare(
     `SELECT i.worker_id AS workerId, i.workspace_id AS workspaceId
      FROM workspace_worker_inventory i
      WHERE i.workspace_id = ?1 ORDER BY i.workspace_id, i.worker_id`,
@@ -129,7 +129,7 @@ export async function resolveWorkflowExecutionBindings(
     .bind(ownWorkspaceId ?? space.workspaceId)
     .all<{ workerId: string; workspaceId: string }>();
   // Invited members may only use what the Workspace owner shares with them.
-  const workspaceOwner = await env.CONCLAVE_DB.prepare(
+  const workspaceOwner = await env.SYNTILA_DB.prepare(
     "SELECT owner_user_id AS ownerUserId FROM execution_workspaces WHERE id = ?1",
   )
     .bind(space.workspaceId)
@@ -137,7 +137,7 @@ export async function resolveWorkflowExecutionBindings(
   // A Workspace lent to the Space owner is used only by people who hold their
   // own Person Grant (ADR-020); Space membership and the Space owner's grant
   // never extend to other members.
-  const spaceOwner = await env.CONCLAVE_DB.prepare(
+  const spaceOwner = await env.SYNTILA_DB.prepare(
     "SELECT owner_user_id AS ownerUserId FROM spaces WHERE id = ?1",
   )
     .bind(spaceId)
@@ -149,7 +149,7 @@ export async function resolveWorkflowExecutionBindings(
     workspaceOwner.ownerUserId !== spaceOwner.ownerUserId &&
     workspaceOwner.ownerUserId !== userId
   ) {
-    const grant = await env.CONCLAVE_DB.prepare(
+    const grant = await env.SYNTILA_DB.prepare(
       "SELECT max_concurrent_requests AS maxConcurrent, max_run_seconds_per_month AS maxRunSeconds FROM workspace_person_grants WHERE workspace_id = ?1 AND user_id = ?2 AND status = 'active'",
     )
       .bind(space.workspaceId, userId)
@@ -159,13 +159,13 @@ export async function resolveWorkflowExecutionBindings(
         403,
         "You do not have access to this Workspace; ask its owner to invite you",
       );
-    const inFlight = await env.CONCLAVE_DB.prepare(
+    const inFlight = await env.SYNTILA_DB.prepare(
       "SELECT COUNT(*) AS n FROM work_requests WHERE requested_by_user_id = ?1 AND primary_workspace_id = ?2 AND status IN ('queued','running','waiting')",
     )
       .bind(userId, space.workspaceId)
       .first<{ n: number }>();
     if (grant.maxRunSeconds !== null) {
-      const used = await env.CONCLAVE_DB.prepare(MONTHLY_RUN_SECONDS_SQL)
+      const used = await env.SYNTILA_DB.prepare(MONTHLY_RUN_SECONDS_SQL)
         .bind(space.workspaceId, userId, monthStartIso())
         .first<{ seconds: number }>();
       if ((used?.seconds ?? 0) >= grant.maxRunSeconds)
@@ -290,7 +290,7 @@ async function ownChatWorkerWorkspace(
   workerId: string | null | undefined,
 ): Promise<string | null> {
   if (definition.id !== "chat" || !workerId) return null;
-  const worker = await env.CONCLAVE_DB.prepare(
+  const worker = await env.SYNTILA_DB.prepare(
     `SELECT i.workspace_id AS workspaceId
        FROM workspace_worker_inventory i
        JOIN execution_workspaces ew ON ew.id = i.workspace_id
@@ -320,7 +320,7 @@ async function ensureOwnChatWorkspaceGrant(
   spaceId: string,
   workspaceId: string,
 ) {
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     "SELECT status, expires_at AS expiresAt FROM workspace_space_grants WHERE space_id=?1 AND workspace_id=?2 AND status IN ('active','suspended')",
   )
     .bind(spaceId, workspaceId)
@@ -337,11 +337,11 @@ async function ensureOwnChatWorkspaceGrant(
       );
     return;
   }
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,allowed_permissions_json,concurrency_json,created_at,updated_at) VALUES(?1,?2,?3,?4,'active','[\"repository:read\"]','{\"maxConcurrentAssignments\":1}',?5,?5)",
     ).bind(crypto.randomUUID(), spaceId, workspaceId, userId, now),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "INSERT INTO space_audit_log(id,space_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at) VALUES(?1,?2,'user',?3,'chat.own_workspace.authorized','execution_workspace',?4,?5,?6)",
     ).bind(
       crypto.randomUUID(),

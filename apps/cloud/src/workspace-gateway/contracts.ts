@@ -98,14 +98,14 @@ export function normalizeWorkspaceWorkerInstallationStatus(
 }
 
 export interface WorkspaceGatewayEnv {
-  CONCLAVE_DB: D1Database;
-  CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
+  SYNTILA_DB: D1Database;
+  SYNTILA_REALTIME_GATEWAY?: DurableObjectNamespace;
   /** Holds Work Request input files delivered with `assignment.start`. */
-  CONCLAVE_ARTIFACTS?: R2Bucket;
+  SYNTILA_ARTIFACTS?: R2Bucket;
   /** Used to wake the Workflow that waits for a terminal assignment. */
-  CONCLAVE_RUN_WORKFLOW?: WorkflowSignalEnv["CONCLAVE_RUN_WORKFLOW"];
+  SYNTILA_RUN_WORKFLOW?: WorkflowSignalEnv["SYNTILA_RUN_WORKFLOW"];
   /** Lets a terminal assignment schedule the lost-Workflow check. */
-  CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
+  SYNTILA_THREAD_COORDINATOR?: DurableObjectNamespace;
 }
 
 export interface WorkspaceAssignmentCorrelation {

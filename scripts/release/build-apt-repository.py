@@ -23,7 +23,7 @@ def metadata(path):
     fields = run('dpkg-deb', '--field', str(path))
     parsed = dict(line.split(': ', 1) for line in fields.splitlines()
                   if ': ' in line and not line.startswith(' '))
-    if parsed.get('Package') != 'conclave-workspace' or parsed.get('Architecture') not in ('amd64', 'arm64'):
+    if parsed.get('Package') != 'syntila-workspace' or parsed.get('Architecture') not in ('amd64', 'arm64'):
         raise ValueError(f'Unexpected package: {path}')
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+([+~.-][A-Za-z0-9.+~-]+)?', parsed['Version']):
         raise ValueError('Invalid package version')
@@ -31,11 +31,11 @@ def metadata(path):
 
 
 def build(output, packages, key):
-    pool = output / 'pool/main/c/conclave-workspace'
+    pool = output / 'pool/main/c/syntila-workspace'
     pool.mkdir(parents=True, exist_ok=True)
     for source in packages:
         _, info = metadata(source)
-        dest = pool / f"conclave-workspace_{info['Version']}_{info['Architecture']}.deb"
+        dest = pool / f"syntila-workspace_{info['Version']}_{info['Architecture']}.deb"
         if dest.exists() and dest.read_bytes() != source.read_bytes():
             raise ValueError(f'Refusing to replace immutable package: {dest.name}')
         if source.resolve() != dest.resolve():
@@ -71,12 +71,12 @@ def build(output, packages, key):
     public_key = subprocess.check_output(['gpg', '--batch', '--export', key])
     if not public_key:
         raise ValueError('Signing key has no exportable public key')
-    (output / 'conclave-archive-keyring.gpg').write_bytes(public_key)
+    (output / 'syntila-archive-keyring.gpg').write_bytes(public_key)
     for mode, target in (('--clearsign', release.with_name('InRelease')),
                          ('--detach-sign', release.with_name('Release.gpg'))):
         subprocess.run(['gpg', '--batch', '--yes', '--local-user', key, '--digest-algo', 'SHA256',
                         '--output', str(target), mode, str(release)], check=True)
-    subprocess.run(['gpgv', '--keyring', str((output / 'conclave-archive-keyring.gpg').resolve()),
+    subprocess.run(['gpgv', '--keyring', str((output / 'syntila-archive-keyring.gpg').resolve()),
                     str(release.with_name('InRelease'))], check=True)
     (output / '.nojekyll').touch()
     print(f'Signed APT repository: {output}')

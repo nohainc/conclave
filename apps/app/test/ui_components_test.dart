@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/features/common/conclave_code_block.dart';
-import 'package:conclave_app/src/features/common/command_palette.dart';
-import 'package:conclave_app/src/features/common/toast_overlay.dart';
-import 'package:conclave_app/src/features/execution/task_pipeline_dag.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/features/common/syntila_code_block.dart';
+import 'package:syntila_app/src/features/common/command_palette.dart';
+import 'package:syntila_app/src/features/common/toast_overlay.dart';
+import 'package:syntila_app/src/features/execution/task_pipeline_dag.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'ax_fixture_snapshot.dart';
 
 void main() {
   group('UI & UX Feature Components', () {
-    testWidgets('renders ConclaveCodeBlock with language tag and copy button',
+    testWidgets('renders SyntilaCodeBlock with language tag and copy button',
         (WidgetTester tester) async {
       String? copied;
       tester.binding.defaultBinaryMessenger
@@ -27,9 +27,9 @@ void main() {
           .setMockMethodCallHandler(SystemChannels.platform, null));
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.lightTheme(),
+          theme: SyntilaBrand.lightTheme(),
           home: const Scaffold(
-            body: ConclaveCodeBlock(
+            body: SyntilaCodeBlock(
               code: 'function hello() {\n  return "world";\n}',
               language: 'typescript',
             ),
@@ -53,7 +53,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.lightTheme(),
+          theme: SyntilaBrand.lightTheme(),
           home: Scaffold(
             body: Stack(
               children: [
@@ -92,7 +92,7 @@ void main() {
           title: 'Research architecture',
           phase: 'Research',
           status: TaskStatus.completed,
-          worker: 'conclave.research',
+          worker: 'syntila.research',
           detail: 'Done',
           progress: 1.0,
           dependencies: [],
@@ -102,7 +102,7 @@ void main() {
           title: 'Implement feature',
           phase: 'Implementation',
           status: TaskStatus.running,
-          worker: 'conclave.implement',
+          worker: 'syntila.implement',
           detail: 'In progress',
           progress: 0.5,
           dependencies: ['task-1'],
@@ -111,7 +111,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.lightTheme(),
+          theme: SyntilaBrand.lightTheme(),
           home: Scaffold(
             body: TaskPipelineDAG(
               tasks: tasks,
@@ -138,7 +138,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.lightTheme(),
+          theme: SyntilaBrand.lightTheme(),
           home: Scaffold(
             body: CommandPaletteDialog(
               spaces: snapshot.spaces,
@@ -186,7 +186,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.lightTheme(),
+          theme: SyntilaBrand.lightTheme(),
           home: Scaffold(
             body: CommandPaletteDialog(
               spaces: axFixtureSnapshot().spaces,

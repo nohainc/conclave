@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/process_tree.dart';
+import 'package:syntila_workspace/process_tree.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -49,7 +49,7 @@ HOME
 - **Purpose:** Fast resumption of ongoing collaborative work in context. Spaces are broad; the true return destination is the active Thread/conversation.
 - **Capacity:** Shows up to four latest authorized, non-archived Threads (two columns on wide screens).
 - **Card Structure:**
-  1. **Space Name:** Uppercase tracked label (e.g., `CONCLAVE DEVELOPMENT`, `WEBSITE`).
+  1. **Space Name:** Uppercase tracked label (e.g., `SYNTILA DEVELOPMENT`, `WEBSITE`).
   2. **Thread Title:** Prominent bold title (e.g., `Worker Sessions`, `Landing Page`).
   3. **Relative Time:** When the Thread last had activity (e.g., `23 min ago`, `Yesterday`).
   4. **Last Message:** A short preview (whitespace collapsed, at most two lines) prefixed with its sender, e.g. `Alex: We should persist the...`. The sender comes from the thread list `briefAuthorName` (member display name, or the Worker display name for AI answers).

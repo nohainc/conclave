@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
-import 'package:conclave_cli_worker_engine/src/model_discovery.dart';
-import 'package:conclave_cli_worker_engine/src/provider_activity_adapter.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_cli_worker_engine/src/engine_session_store.dart';
+import 'package:syntila_cli_worker_engine/src/model_discovery.dart';
+import 'package:syntila_cli_worker_engine/src/provider_activity_adapter.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -60,7 +60,7 @@ void main(List<String> args) async {
     stdout.write(utf8.decode(base64Decode('${base64.encode(utf8.encode(_modelsOutput))}')));
     return;
   }
-  if (args.contains('conclave-effort-probe')) {
+  if (args.contains('syntila-effort-probe')) {
     // Grok Build 1.0.67 wording: the account's catalog lists grok-4.7 only.
     final model = args[args.indexOf('--model') + 1];
     final reason = model == 'grok-4.7'
@@ -68,7 +68,7 @@ void main(List<String> args) async {
         : " (\$model isn't in the model catalog)";
     stderr.writeln(
         "Error: --effort/--reasoning-effort: unknown effort level "
-        "'conclave-effort-probe'\$reason");
+        "'syntila-effort-probe'\$reason");
     exitCode = 1;
     return;
   }
@@ -116,7 +116,7 @@ void main(List<String> args) async {
   final process = await Process.start(
     Platform.resolvedExecutable,
     [
-      '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+      '$repository/engines/cli_worker/bin/syntila_cli_worker.dart',
       '--profile',
       profileFile.path,
       '--engine-version',

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -12,7 +12,7 @@ void main() {
     () async {
       final repository = Directory.current.parent.parent.path;
       final root = await Directory.systemTemp.createTemp(
-        'conclave-codex-passive-probe-',
+        'syntila-codex-passive-probe-',
       );
       final profile =
           jsonDecode(
@@ -80,7 +80,7 @@ void main(List<String> args) {
       final process = await Process.start(
         Platform.resolvedExecutable,
         [
-          '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+          '$repository/engines/cli_worker/bin/syntila_cli_worker.dart',
           '--profile',
           profileFile.path,
           '--engine-version',
@@ -169,7 +169,7 @@ void main(List<String> args) {
   test('Gemini passive readiness is bounded and never invokes a model', () async {
     final repository = Directory.current.parent.parent.path;
     final root = await Directory.systemTemp.createTemp(
-      'conclave-passive-probe-',
+      'syntila-passive-probe-',
     );
     final home = await Directory('${root.path}/home').create();
     final profile =
@@ -219,7 +219,7 @@ void main(List<String> args) {
     final process = await Process.start(
       Platform.resolvedExecutable,
       [
-        '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+        '$repository/engines/cli_worker/bin/syntila_cli_worker.dart',
         '--profile',
         profileFile.path,
         '--engine-version',

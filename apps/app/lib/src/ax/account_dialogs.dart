@@ -138,7 +138,7 @@ class _EmailChangeDialogState extends State<EmailChangeDialog> {
               child: Text(
                 _error!,
                 style: TextStyle(
-                    color: ConclaveColors.errorText(
+                    color: SyntilaColors.errorText(
                         Theme.of(context).brightness == Brightness.dark)),
               ),
             ),
@@ -220,7 +220,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: ConclaveDialogStyle.destructiveButton(),
+            style: SyntilaDialogStyle.destructiveButton(),
             onPressed: _matches
                 ? () => Navigator.of(context).pop(_controller.text.trim())
                 : null,

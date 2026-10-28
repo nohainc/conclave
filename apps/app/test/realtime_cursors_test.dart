@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/realtime/realtime_cursors.dart';
+import 'package:syntila_app/src/realtime/realtime_cursors.dart';
 
 void main() {
   test('same ID has independent Space, user and execution cursors', () {

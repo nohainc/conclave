@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { BUILTIN_WORKFLOWS } from "@conclave/core";
+import { BUILTIN_WORKFLOWS } from "@syntila/core";
 import { resolveWorkflowStepExecutionConfig } from "../src/routes/workflow-step-execution-config.js";
 it.each(["chat", "direct", "implement_verify"] as const)(
   "snapshots %s execution without guessing Auto model/effort",

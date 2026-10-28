@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_query_builder.dart';
-import 'package:conclave_app/src/ax/sync/ax_lifecycle_sync.dart';
-import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_query_builder.dart';
+import 'package:syntila_app/src/ax/sync/ax_lifecycle_sync.dart';
+import 'package:syntila_app/src/ax/sync/ax_discussion_cache.dart';
 
 void main() {
   late DateTime now;

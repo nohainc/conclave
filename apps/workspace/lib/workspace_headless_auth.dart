@@ -290,7 +290,7 @@ class WorkspaceHeadlessAuth {
           'phase': 'failed',
           'stage': 'session',
           'code': 'not_signed_in',
-          'message': 'Not signed in. Run: conclave-workspace login',
+          'message': 'Not signed in. Run: syntila-workspace login',
         };
       }
       final DesktopHumanSession session;
@@ -303,7 +303,7 @@ class WorkspaceHeadlessAuth {
           'stage': 'session',
           'code': 'session_invalid',
           'message': 'The stored sign-in is unreadable. '
-              'Run: conclave-workspace login',
+              'Run: syntila-workspace login',
         };
       }
       if (!session.expiresAt.isAfter(DateTime.now())) {
@@ -311,7 +311,7 @@ class WorkspaceHeadlessAuth {
           'phase': 'failed',
           'stage': 'session',
           'code': 'session_expired',
-          'message': 'The sign-in has expired. Run: conclave-workspace login',
+          'message': 'The sign-in has expired. Run: syntila-workspace login',
         };
       }
       await client.validateSession(session);
@@ -323,7 +323,7 @@ class WorkspaceHeadlessAuth {
       return _failure(stage, error,
           fallback: 'Registration failed. Check Cloud access and existing '
               'ownership. If the sign-in is no longer valid, run: '
-              'conclave-workspace login');
+              'syntila-workspace login');
     } finally {
       _committing = false;
       client.close();

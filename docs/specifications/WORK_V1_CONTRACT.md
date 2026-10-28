@@ -630,7 +630,7 @@ Settings expose independent Chat and Work bindings followed by Research, Plan,
 Implement, Test and Verify, using dynamically registered Workers. AI Chat is a
 Work Request Workflow, separate from the human/team Chat discussion tab and its
 Discussion message storage. Both AI Chat and Work responses use the shared
-`ConclaveMarkdownBody`; authored Markdown source remains unchanged.
+`SyntilaMarkdownBody`; authored Markdown source remains unchanged.
 
 History and Run details space the Workflow name from the immutable saved
 snapshot, falling back to the exact versioned catalog entry when necessary.

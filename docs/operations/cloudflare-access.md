@@ -25,7 +25,7 @@ production application-auth path.
 ## Local development
 
 Local manual development can use the explicit `/api/dev/sign-in` helper. It is
-available only when `CONCLAVE_ENVIRONMENT=development` and redirects into the
+available only when `SYNTILA_ENVIRONMENT=development` and redirects into the
 normal Better Auth GitHub or Google flow; it does not synthesize a user or
 session. Automated tests inject a test authentication function instead.
 
@@ -36,5 +36,5 @@ use it as a substitute for Better Auth in production.
 ## Deployment checks
 
 The app deployment scans the compiled Flutter web directory and fails if server
-authentication names are present. Flutter receives only `CONCLAVE_API_URL`;
+authentication names are present. Flutter receives only `SYNTILA_API_URL`;
 human session credentials are never passed through `--dart-define`.

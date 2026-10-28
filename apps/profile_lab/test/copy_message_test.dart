@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_profile_lab/widgets/lab_components.dart';
+import 'package:syntila_profile_lab/widgets/lab_components.dart';
 
 void main() {
   for (final message in [

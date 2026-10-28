@@ -28,14 +28,14 @@ class WindowsWorkspaceServiceManager implements WorkspaceServiceManager {
     final id = await _identity();
     final script = r'''
 $ErrorActionPreference = 'Stop'
-$name = 'Workspace ' + $env:CONCLAVE_WORKSPACE_TASK_ID
+$name = 'Workspace ' + $env:SYNTILA_WORKSPACE_TASK_ID
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
-switch ($env:CONCLAVE_WORKSPACE_TASK_OPERATION) {
+switch ($env:SYNTILA_WORKSPACE_TASK_OPERATION) {
   'register' {
-    if ($task -and $task.Actions.Execute -ne $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE) { throw 'Existing task points to a different service; preserve state and unregister it explicitly first.' }
-    $arguments = 'run --data-dir "' + $env:CONCLAVE_WORKSPACE_TASK_DATA + '"'
-    $action = New-ScheduledTaskAction -Execute $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE -Argument $arguments -WorkingDirectory (Split-Path $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE)
+    if ($task -and $task.Actions.Execute -ne $env:SYNTILA_WORKSPACE_TASK_EXECUTABLE) { throw 'Existing task points to a different service; preserve state and unregister it explicitly first.' }
+    $arguments = 'run --data-dir "' + $env:SYNTILA_WORKSPACE_TASK_DATA + '"'
+    $action = New-ScheduledTaskAction -Execute $env:SYNTILA_WORKSPACE_TASK_EXECUTABLE -Argument $arguments -WorkingDirectory (Split-Path $env:SYNTILA_WORKSPACE_TASK_EXECUTABLE)
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
@@ -43,7 +43,7 @@ switch ($env:CONCLAVE_WORKSPACE_TASK_OPERATION) {
   }
   'start' {
     if (-not $task) { throw 'Workspace service is not registered.' }
-    if ($task.Actions.Execute -ne $env:CONCLAVE_WORKSPACE_TASK_EXECUTABLE) { throw 'Registered service path differs from this application.' }
+    if ($task.Actions.Execute -ne $env:SYNTILA_WORKSPACE_TASK_EXECUTABLE) { throw 'Registered service path differs from this application.' }
     Start-ScheduledTask -TaskName $name
   }
   'force-stop' { if ($task) { Stop-ScheduledTask -TaskName $name } }
@@ -62,10 +62,10 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', base64Encode(bytes)],
       environment: {
-        'CONCLAVE_WORKSPACE_TASK_ID': id,
-        'CONCLAVE_WORKSPACE_TASK_OPERATION': operation,
-        'CONCLAVE_WORKSPACE_TASK_EXECUTABLE': executable.absolute.path,
-        'CONCLAVE_WORKSPACE_TASK_DATA': dataDirectory.absolute.path,
+        'SYNTILA_WORKSPACE_TASK_ID': id,
+        'SYNTILA_WORKSPACE_TASK_OPERATION': operation,
+        'SYNTILA_WORKSPACE_TASK_EXECUTABLE': executable.absolute.path,
+        'SYNTILA_WORKSPACE_TASK_DATA': dataDirectory.absolute.path,
       },
     ).timeout(const Duration(seconds: 30));
     if (result.exitCode != 0) {
@@ -84,10 +84,10 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
       helperPresent: executable.existsSync(),
       plistPresent: true,
       enginePresent: File(
-            '${executable.parent.path}/assets/engines/conclave-agent.exe',
+            '${executable.parent.path}/assets/engines/syntila-agent.exe',
           ).existsSync() ||
           File(
-            '${executable.parent.path}/assets/engines/conclave_cli_worker_engine.exe',
+            '${executable.parent.path}/assets/engines/syntila_cli_worker_engine.exe',
           ).existsSync(),
       registration: result['registered'] == true
           ? ServiceInstallationState.registered

@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/sleep_inhibitor.dart';
-import 'package:conclave_workspace/workspace_lifecycle_store.dart';
+import 'package:syntila_workspace/sleep_inhibitor.dart';
+import 'package:syntila_workspace/workspace_lifecycle_store.dart';
 import 'package:test/test.dart';
 
 void main() {

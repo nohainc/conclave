@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 
 import 'utils/profile_lab_security.dart';
 import 'utils/profile_activity_mapping_fixtures.dart';
@@ -908,7 +908,7 @@ class ProfileLabTestSandbox {
 }
 
 /// The host PATH plus the directories the Workspace Service launch agent puts
-/// on PATH (`com.conclaveax.workspace.service.plist`). A Finder-launched
+/// on PATH (`com.syntila.workspace.service.plist`). A Finder-launched
 /// Profile Lab only gets `/usr/bin:/bin:/usr/sbin:/sbin`, so provider CLIs
 /// that call helpers such as `gh` for login (Copilot `--headless`) would
 /// otherwise behave differently in Profile Lab than in Workspace.

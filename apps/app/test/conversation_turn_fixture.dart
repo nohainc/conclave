@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
 
 AxConversationTurn turnFixture(
         {String id = 'turn-A',

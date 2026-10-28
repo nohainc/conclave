@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/local_worker_permissions.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/local_worker_permissions.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
 
 import 'support/logical_worker_catalog_fixture.dart';
 
@@ -18,7 +18,7 @@ void main() {
   setUp(() async {
     id = 0;
     directory = await Directory.systemTemp.createTemp(
-      'conclave-worker-registry-',
+      'syntila-worker-registry-',
     );
     registry = LocalWorkerRegistry(
       dataDirectory: directory,

@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -63,7 +63,7 @@ void main() {
         ..writeAsBytesSync(profileBytes);
       final stateDirectory = await Directory('${temp.path}/state').create();
       final enginePath =
-          '${repository.path}/engines/cli_worker/bin/conclave_cli_worker.dart';
+          '${repository.path}/engines/cli_worker/bin/syntila_cli_worker.dart';
       final dartDirectory = File(Platform.resolvedExecutable).parent.path;
       final process = await Process.start(
         Platform.resolvedExecutable,

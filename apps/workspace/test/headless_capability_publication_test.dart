@@ -2,15 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show WorkerProfileSnapshotAdmission;
 import 'package:test/test.dart';
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
-import 'package:conclave_workspace/worker_catalog_coordinator.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/worker_catalog_coordinator.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
 import 'support/ed25519_release_fixture.dart';
 import 'support/logical_worker_catalog_fixture.dart';
 import 'support/worker_profile_snapshot_fixture.dart';
@@ -83,7 +83,7 @@ Future<void> main(List<String> args) async {
     }
     final engine = CliWorkerEngineSupervisor(
         engineExecutable:
-            File('assets/engines/conclave_cli_worker_engine').absolute.path,
+            File('assets/engines/syntila_cli_worker_engine').absolute.path,
         environmentOverrides: {
           'PATH':
               '${File(_dartExecutable()).parent.path}:${Platform.environment['PATH'] ?? ''}'

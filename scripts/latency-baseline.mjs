@@ -117,7 +117,7 @@ export function eventsFromText(content) {
 export function webRecordsFromText(content) {
   const records = [];
   for (const line of content.split(/\r?\n/)) {
-    const at = line.indexOf("[conclave.latency]");
+    const at = line.indexOf("[syntila.latency]");
     if (at < 0) continue;
     try {
       records.push(JSON.parse(line.slice(line.indexOf("{", at))));

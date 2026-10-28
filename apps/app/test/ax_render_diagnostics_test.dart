@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_render_diagnostics.dart';
+import 'package:syntila_app/src/ax/ax_render_diagnostics.dart';
 
 void main() {
   test('captures framework exceptions with lifecycle and request context', () {

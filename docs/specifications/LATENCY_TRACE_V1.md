@@ -86,7 +86,7 @@ stamped when the terminal `work_request.completed|failed|cancelled` event
 arrives, before the cache is patched, so UI work is excluded. Marks are
 milliseconds from a monotonic stopwatch on the device; the wall-clock submit
 time is used for ordering only. One line per finished request is printed to
-the browser console as `[conclave.latency] {json}`. Prompts, attachments and
+the browser console as `[syntila.latency] {json}`. Prompts, attachments and
 Idempotency-Keys are never recorded. A request whose terminal state is only
 seen through the polling fallback has no T12.
 

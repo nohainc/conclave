@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_snapshot.dart';
 
@@ -120,7 +120,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(ConclaveAppShell(
+    await tester.pumpWidget(SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: SelectiveSource(),
         initialUri: Uri.parse('/')));
@@ -176,12 +176,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ConclaveAppShell(
+    await tester.pumpWidget(SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: SelectiveSource(),
         initialUri: Uri.parse(route)));
     await tester.pumpAndSettle();
-    final dynamic state = tester.state(find.byType(ConclaveAppShell));
+    final dynamic state = tester.state(find.byType(SyntilaAppShell));
     return state.store as AxStore;
   }
 
@@ -213,7 +213,7 @@ void main() {
               ]);
       await tester.pumpAndSettle();
       for (final type in [
-        'ConclaveAppShell',
+        'SyntilaAppShell',
         'MaterialApp',
         'AxSidebar',
         'SpaceTree',
@@ -262,7 +262,7 @@ void main() {
         builds['ValueListenableBuilder<ThreadWorkPresentationSnapshot?>'] ?? 0,
         greaterThan(0));
     expect(builds['ThreadPage'] ?? 0, 0);
-    expect(builds['ConclaveAppShell'] ?? 0, 0);
+    expect(builds['SyntilaAppShell'] ?? 0, 0);
     // The Thread shows one pane at a time; return to the Conversation.
     await tester.tap(find.byKey(const ValueKey('ai-history-conversation')));
     await tester.pumpAndSettle();
@@ -287,7 +287,7 @@ void main() {
     store.spaces.replace([space.copyWith(name: 'Updated in background')]);
     await tester.pumpAndSettle();
     expect(find.text('Updated in background'), findsOneWidget);
-    expect(builds['ConclaveAppShell'] ?? 0, 0);
+    expect(builds['SyntilaAppShell'] ?? 0, 0);
     expect(builds['AxSidebar'] ?? 0, 0);
     expect(builds['SpacePage'] ?? 0, 0);
     expect(
@@ -308,7 +308,7 @@ void main() {
             ]);
     await tester.pumpAndSettle();
     expect(builds['WorkspacesPage'] ?? 0, greaterThan(0));
-    expect(builds['ConclaveAppShell'] ?? 0, 0);
+    expect(builds['SyntilaAppShell'] ?? 0, 0);
     expect(builds['SpaceTree'] ?? 0, 0);
     await tester.pumpWidget(const SizedBox());
   });
@@ -335,7 +335,7 @@ void main() {
             0,
         greaterThan(0));
     for (final type in [
-      'ConclaveAppShell',
+      'SyntilaAppShell',
       'AxSidebar',
       'conversation-timeline',
       'ThreadPage',
@@ -357,7 +357,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     expect(find.text('Reconnecting selected resources'), findsOneWidget);
     for (final type in [
-      'ConclaveAppShell',
+      'SyntilaAppShell',
       'AxSidebar',
       'SpaceTree',
       'SpacePage'

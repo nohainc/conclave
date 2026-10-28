@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/platform_runtime.dart';
-import 'package:conclave_workspace/workspace_paths.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
+import 'package:syntila_workspace/workspace_paths.dart';
 import 'package:test/test.dart';
 
 class _FakeMacRuntime implements PlatformRuntime {
@@ -59,7 +59,7 @@ void main() {
     expect(paths.updatesDirectory.path,
         '${home.path}/Library/Application Support/Conclave/Workspace/Updates');
     expect(paths.logsFile.path,
-        '${home.path}/Library/Logs/Syntila Workspace/workspace.log');
+        '${home.path}/Library/Logs/Conclave Workspace/workspace.log');
     expect(
         () => paths.validateWorkRootSeparation(
               Directory('${home.path}/Documents/Conclave'),

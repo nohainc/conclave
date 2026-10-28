@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/home/home_page.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/home/home_page.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/navigation/ax_browser_navigation.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_realtime.dart';
 
@@ -162,7 +162,7 @@ void main() {
     final realtime = TestRealtime();
 
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         dataSource: dataSource,
         services: const DefaultPlatformServices(),
         browserNavigation: browser,
@@ -218,7 +218,7 @@ void main() {
     final realtime = TestRealtime();
 
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         dataSource: dataSource,
         services: const DefaultPlatformServices(),
         browserNavigation: browser,

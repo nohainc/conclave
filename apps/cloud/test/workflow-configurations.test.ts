@@ -14,7 +14,7 @@ const inventory = vi.hoisted(() => ({
   workers: [{ id: "offline", workspaceId: "ws", executionOptions: null }] as {
     id: string;
     workspaceId: string;
-    executionOptions: import("@conclave/core").WorkerExecutionOptions | null;
+    executionOptions: import("@syntila/core").WorkerExecutionOptions | null;
   }[],
 }));
 vi.mock("../src/routes/profiles.js", () => ({
@@ -29,7 +29,7 @@ it("persists only user overrides, isolates users, retains offline choices, reset
     sqlite.exec(
       "INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('ws','U','Workspace','now','now'); INSERT INTO user_workflow_settings VALUES('U','ws','now');",
     );
-    const env = { CONCLAVE_DB: db } as SecurityEnv;
+    const env = { SYNTILA_DB: db } as SecurityEnv;
     const configuration = {
       schemaVersion: 1,
       workflowId: "chat",

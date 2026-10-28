@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show
         CliWorkerEngineProbeException,
         SafeProviderDiagnostics,
         WorkerAssignmentCancelledException;
-import 'package:conclave_protocol/conclave_protocol.dart'
+import 'package:syntila_protocol/syntila_protocol.dart'
     show canonicalExecutionErrorCode, executionErrorMessage;
 
 /// A normalized assignment failure safe to report across the runtime link.

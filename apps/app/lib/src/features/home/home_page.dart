@@ -486,11 +486,11 @@ class _JoinSpacePriorityCard extends StatelessWidget {
 
     return Card(
       elevation: 0,
-      color: ConclaveColors.primarySoftColor(isDark),
+      color: SyntilaColors.primarySoftColor(isDark),
       shape: RoundedRectangleBorder(
         side: BorderSide(
           color:
-              ConclaveColors.primaryForeground(isDark).withValues(alpha: 0.3),
+              SyntilaColors.primaryForeground(isDark).withValues(alpha: 0.3),
           width: 1.5,
         ),
         borderRadius: BorderRadius.circular(12),
@@ -505,12 +505,12 @@ class _JoinSpacePriorityCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: ConclaveColors.primarySoftColor(isDark),
+                    color: SyntilaColors.primarySoftColor(isDark),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     Icons.mail_outline,
-                    color: ConclaveColors.primaryForeground(isDark),
+                    color: SyntilaColors.primaryForeground(isDark),
                     size: 24,
                   ),
                 ),
@@ -524,7 +524,7 @@ class _JoinSpacePriorityCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: ConclaveColors.primaryForeground(isDark),
+                          color: SyntilaColors.primaryForeground(isDark),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -533,7 +533,7 @@ class _JoinSpacePriorityCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: ConclaveColors.primaryForeground(isDark)
+                          color: SyntilaColors.primaryForeground(isDark)
                               .withValues(alpha: 0.9),
                         ),
                       ),
@@ -1050,11 +1050,11 @@ class _OfflineConnectivityIndicator extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: ConclaveColors.warningSoft(
+        color: SyntilaColors.warningSoft(
             Theme.of(context).brightness == Brightness.dark),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: ConclaveColors.warning.withValues(alpha: 0.35),
+          color: SyntilaColors.warning.withValues(alpha: 0.35),
           width: 1,
         ),
       ),
@@ -1065,7 +1065,7 @@ class _OfflineConnectivityIndicator extends StatelessWidget {
             width: 7,
             height: 7,
             decoration: const BoxDecoration(
-              color: ConclaveColors.warning,
+              color: SyntilaColors.warning,
               shape: BoxShape.circle,
             ),
           ),
@@ -1075,7 +1075,7 @@ class _OfflineConnectivityIndicator extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: ConclaveColors.warningText(
+              color: SyntilaColors.warningText(
                   Theme.of(context).brightness == Brightness.dark),
               letterSpacing: 0.2,
             ),
@@ -1437,7 +1437,7 @@ class _ForYouItemTile extends StatelessWidget {
   Color _deriveCategoryColor(ColorScheme colorScheme, bool isDark) {
     return switch (item.effectiveType) {
       AxHomeAttentionType.spaceInvitation =>
-        ConclaveColors.primaryForeground(isDark),
+        SyntilaColors.primaryForeground(isDark),
       AxHomeAttentionType.needsInput ||
       AxHomeAttentionType.approvalRequired =>
         isDark ? Colors.orangeAccent : Colors.orange.shade800,
@@ -1576,7 +1576,7 @@ class _ContinueWorkCard extends StatelessWidget {
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                   color:
-                                      ConclaveColors.primaryForeground(isDark)),
+                                      SyntilaColors.primaryForeground(isDark)),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             )),
@@ -2404,11 +2404,11 @@ class _UpdatesPageFrame extends StatelessWidget {
         body: SafeArea(
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              ConclaveBrand.isDesktop(MediaQuery.sizeOf(context).width)
+              SyntilaBrand.isDesktop(MediaQuery.sizeOf(context).width)
                   ? 34
                   : 18,
               26,
-              ConclaveBrand.isDesktop(MediaQuery.sizeOf(context).width)
+              SyntilaBrand.isDesktop(MediaQuery.sizeOf(context).width)
                   ? 34
                   : 18,
               40,

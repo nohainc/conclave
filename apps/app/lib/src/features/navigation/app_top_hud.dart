@@ -100,13 +100,13 @@ class _AppTopHudState extends State<AppTopHud> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderColor =
-        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
-    final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+        isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
+    final inkColor = isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk;
     final mutedInk =
-        isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+        isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
 
     final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = ConclaveBrand.isDesktop(screenWidth) && !widget.compact;
+    final isDesktop = SyntilaBrand.isDesktop(screenWidth) && !widget.compact;
 
     final controller = widget.searchController ?? _fallbackController;
 
@@ -123,7 +123,7 @@ class _AppTopHudState extends State<AppTopHud> {
           padding: EdgeInsets.symmetric(horizontal: widget.compact ? 12 : 24),
           decoration: BoxDecoration(
             color:
-                isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+                isDark ? SyntilaBrand.darkSurface : SyntilaBrand.lightSurface,
             border: Border(bottom: BorderSide(color: borderColor)),
           ),
           child: IconButtonTheme(
@@ -143,7 +143,7 @@ class _AppTopHudState extends State<AppTopHud> {
                     tooltip: 'Syntila — Spaces',
                     onPressed: () =>
                         widget.onNavigateTo(const AxNavigation.spaces()),
-                    icon: ConclaveBrand.logoMark(size: 28),
+                    icon: SyntilaBrand.logoMark(size: 28),
                   ),
                 if (widget.compact) const SizedBox(width: 8),
 
@@ -154,10 +154,10 @@ class _AppTopHudState extends State<AppTopHud> {
                       height: 34,
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       decoration: BoxDecoration(
-                        color: ConclaveColors.navigationRaised(isDark),
+                        color: SyntilaColors.navigationRaised(isDark),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: ConclaveColors.navigationBorder(isDark),
+                          color: SyntilaColors.navigationBorder(isDark),
                         ),
                       ),
                       child: Row(
@@ -191,7 +191,7 @@ class _AppTopHudState extends State<AppTopHud> {
                                   fontSize: 13,
                                   color: inkColor,
                                 ),
-                                cursorColor: ConclaveBrand.accent,
+                                cursorColor: SyntilaBrand.accent,
                                 cursorHeight: 14,
                                 decoration: InputDecoration(
                                   filled: true,
@@ -258,8 +258,8 @@ class _AppTopHudState extends State<AppTopHud> {
                             horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? ConclaveBrand.darkPaper
-                              : ConclaveBrand.lightPaper,
+                              ? SyntilaBrand.darkPaper
+                              : SyntilaBrand.lightPaper,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: borderColor),
                         ),
@@ -358,7 +358,7 @@ class _AppTopHudState extends State<AppTopHud> {
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 4),
                                 decoration: const BoxDecoration(
-                                  color: ConclaveBrand.accent,
+                                  color: SyntilaBrand.accent,
                                   shape: BoxShape.circle,
                                 ),
                                 alignment: Alignment.center,

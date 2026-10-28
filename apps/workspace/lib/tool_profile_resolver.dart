@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 import 'worker_profile_store.dart';
 
-export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+export 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show
         ToolProfileResolutionSource,
         ToolProfileUnavailableReason,

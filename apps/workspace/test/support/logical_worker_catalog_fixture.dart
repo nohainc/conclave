@@ -1,4 +1,4 @@
-import 'package:conclave_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
 
 WorkerDescriptor logicalWorkerCatalogFixture(
   String workerTypeId, {

@@ -7,14 +7,14 @@ cd "$ROOT"
 
 dart_packages=(
   packages/dart/protocol
-  packages/conclave_worker_protocol
-  packages/conclave_cli_worker_runtime
+  packages/syntila_worker_protocol
+  packages/syntila_cli_worker_runtime
   packages/tool_profile_v1
   engines/cli_worker
 )
 
 flutter_packages=(
-  packages/conclave_design
+  packages/syntila_design
 )
 
 resolve_dart_package_dependencies() {

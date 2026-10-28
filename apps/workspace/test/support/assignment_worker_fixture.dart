@@ -1,4 +1,4 @@
-import 'package:conclave_workspace/worker_executor.dart';
+import 'package:syntila_workspace/worker_executor.dart';
 
 AssignmentLogicalWorker assignmentWorker(
   String id, {

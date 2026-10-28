@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_protocol/conclave_protocol.dart';
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+import 'package:syntila_protocol/syntila_protocol.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show SafeProviderDiagnostics;
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 
 import 'assignment_execution_failure.dart';
 import 'assignment_journal.dart';
@@ -169,7 +169,7 @@ class WorkspaceCloudConnection {
     Set<String>? authorizedWorkspaceIds,
     this.name = 'Syntila Workspace',
     String? hostname,
-    this.workspaceVersion = conclaveWorkspaceAppVersion,
+    this.workspaceVersion = syntilaWorkspaceAppVersion,
     Map<String, Object?>? capabilities,
     this.activeWorkerIds = const [],
     this.unreconciledAssignmentIds = const [],
@@ -1208,7 +1208,7 @@ class WorkspaceCloudConnection {
     return {
       'os': operatingSystem,
       'arch': _architecture(),
-      'workspaceVersion': conclaveWorkspaceAppVersion,
+      'workspaceVersion': syntilaWorkspaceAppVersion,
       'supportedRuntimes': <String>['dart'],
       'customCapabilities': <String>[
         startPermitCapability,

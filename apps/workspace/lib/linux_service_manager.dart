@@ -153,10 +153,10 @@ WantedBy=default.target
       helperPresent: executable.existsSync(),
       plistPresent: unit.existsSync(),
       enginePresent: File(
-            '${executable.parent.path}/assets/engines/conclave-agent',
+            '${executable.parent.path}/assets/engines/syntila-agent',
           ).existsSync() ||
           File(
-            '${executable.parent.path}/assets/engines/conclave_cli_worker_engine',
+            '${executable.parent.path}/assets/engines/syntila_cli_worker_engine',
           ).existsSync(),
       registration: unit.existsSync() && values['UnitFileState'] == 'enabled'
           ? ServiceInstallationState.registered

@@ -49,7 +49,7 @@ class AxWorkLatencyTrace {
 
   final int maxRecords;
 
-  /// Receives one `[conclave.latency] {json}` line per completed request.
+  /// Receives one `[syntila.latency] {json}` line per completed request.
   final void Function(String line)? sink;
 
   final Map<String, AxWorkLatencyRecord> _bySubmission = {};
@@ -125,7 +125,7 @@ class AxWorkLatencyTrace {
       _completed.removeAt(0);
     }
     final emit = sink;
-    if (emit != null) emit('[conclave.latency] ${_encode(record.toJson())}');
+    if (emit != null) emit('[syntila.latency] ${_encode(record.toJson())}');
   }
 
   void _evict(Map<String, AxWorkLatencyRecord> map) {

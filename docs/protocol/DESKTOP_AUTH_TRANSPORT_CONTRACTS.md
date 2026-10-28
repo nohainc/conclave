@@ -1,8 +1,8 @@
 # Desktop Authentication and Runtime Transport Contracts
 
-> **Updated (2026-10).** The credential and transport contracts below are current. The lifecycle sections were written for the Flutter `Workspace.app`; the GUI-only management-lock and launch-at-login dimensions were removed, and Workspace is now a headless Dart service plus the `conclave-workspace` CLI configured by `workspace.nano` (see [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md)).
+> **Updated (2026-10).** The credential and transport contracts below are current. The lifecycle sections were written for the Flutter `Workspace.app`; the GUI-only management-lock and launch-at-login dimensions were removed, and Workspace is now a headless Dart service plus the `syntila-workspace` CLI configured by `workspace.nano` (see [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md)).
 
-**Contract:** `conclave.desktop-auth-transport` **1.0**
+**Contract:** `syntila.desktop-auth-transport` **1.0**
 **Canonical validators/types:** `packages/workspace-runtime-protocol/src/desktop-auth-transport.ts`
 
 This contract freezes the shared Cloud/desktop shapes for ADR-013 Phase 0.
@@ -10,7 +10,7 @@ It defines payloads and state projection only; it does not implement endpoints,
 credential storage, or transport behavior. Request and response schemas are
 strict so unknown fields (including accidental credential forwarding) fail
 validation. Runtime messages inside transport envelopes remain the existing
-`conclave.workspace-runtime-protocol` messages.
+`syntila.workspace-runtime-protocol` messages.
 
 ## Credential boundaries
 
@@ -188,7 +188,7 @@ also preserves its non-secret registration and cached owner metadata so the
 owner can choose Release later; `desiredRuntimeState = disconnected` prevents
 that retained record from starting the runtime. It preserves the human session.
 Host service registration (login startup) is managed separately with
-`conclave-workspace service install|uninstall`.
+`syntila-workspace service install|uninstall`.
 
 ## Runtime transport abstraction
 
@@ -241,7 +241,7 @@ the reason WebSocket became unavailable.
 
 Desktop auth intents use version `1.1`; runtime registration, transport
 requests, and event envelopes use the independently versioned
-`conclave.desktop-auth-transport` contract `1.0`. Changes to the frozen
+`syntila.desktop-auth-transport` contract `1.0`. Changes to the frozen
 transport shapes require a separately versioned contract.
 
 ## Desktop lifecycle semantics

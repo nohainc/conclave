@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Applies repository protection for the public nohainc/conclave repository.
+# Applies repository protection for the public nohainc/syntila repository.
 #
 # The repository stays public. Outside contributors can open pull requests, but
 # nothing from a fork runs in CI without approval, no fork ever receives secrets,
@@ -9,7 +9,7 @@
 # Dry run by default. Pass --apply to change GitHub. Safe to re-run.
 #
 # Requirements: gh authenticated as a repository admin.
-# Optional env: REPO (default nohainc/conclave), REVIEWER (GitHub login that
+# Optional env: REPO (default nohainc/syntila), REVIEWER (GitHub login that
 # approves deployments, default: the authenticated user), REQUIRED_APPROVALS
 # (default 1; set 0 if you are the only maintainer).
 set -euo pipefail
@@ -17,7 +17,7 @@ set -euo pipefail
 apply=false
 [[ "${1:-}" == "--apply" ]] && apply=true
 
-repo="${REPO:-nohainc/conclave}"
+repo="${REPO:-nohainc/syntila}"
 required_approvals="${REQUIRED_APPROVALS:-1}"
 reviewer="${REVIEWER:-$(gh api user --jq .login)}"
 reviewer_id="$(gh api "users/${reviewer}" --jq .id)"

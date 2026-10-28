@@ -7,8 +7,8 @@ extension _AxAppShellViews on _AxAppStateMixin {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       scaffoldMessengerKey: messengerKey,
-      theme: ConclaveBrand.lightTheme(),
-      darkTheme: ConclaveBrand.darkTheme(),
+      theme: SyntilaBrand.lightTheme(),
+      darkTheme: SyntilaBrand.darkTheme(),
       themeMode: _themeMode,
       home: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{
@@ -33,7 +33,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                     return _desktopAuthApprovalView();
                   }
                   final isDesktop =
-                      ConclaveBrand.isDesktop(constraints.maxWidth);
+                      SyntilaBrand.isDesktop(constraints.maxWidth);
                   final shell = _shellContext;
                   return Scaffold(
                     body: Row(
@@ -57,7 +57,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   onSetThemeMode: _setThemeMode,
                                   onLogout: () => unawaited(_logout()),
                                   onOpenAbout: () =>
-                                      unawaited(_showAboutConclave()),
+                                      unawaited(_showAboutSyntila()),
                                   onOpenExternal: (uri) =>
                                       browserNavigation.openExternal(uri),
                                   onOpenArchivedSpaces: _openArchivedSpaces,
@@ -101,7 +101,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onSetThemeMode: _setThemeMode,
                                     onLogout: () => unawaited(_logout()),
                                     onOpenAbout: () =>
-                                        unawaited(_showAboutConclave()),
+                                        unawaited(_showAboutSyntila()),
                                     onOpenExternal: (uri) =>
                                         browserNavigation.openExternal(uri),
                                     onOpenArchivedSpaces: _openArchivedSpaces,
@@ -183,7 +183,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ConclaveBrand.logoMark(size: 52),
+          SyntilaBrand.logoMark(size: 52),
           const SizedBox(height: 16),
           Text(title,
               textAlign: TextAlign.center,
@@ -328,7 +328,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
               child: Text(authError!,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: ConclaveColors.errorText(
+                      color: SyntilaColors.errorText(
                           Theme.of(context).brightness == Brightness.dark))),
             ),
           ],
@@ -339,7 +339,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
               child: Text(oauthError,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                      color: ConclaveColors.errorText(
+                      color: SyntilaColors.errorText(
                           Theme.of(context).brightness == Brightness.dark))),
             ),
           ],
@@ -736,7 +736,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                           onToggleTheme: _toggleTheme,
                           onSetThemeMode: _setThemeMode,
                           onOpenArchivedSpaces: _openArchivedSpaces,
-                          onOpenAbout: () => unawaited(_showAboutConclave()),
+                          onOpenAbout: () => unawaited(_showAboutSyntila()),
                           onLogout: () => unawaited(_logout()),
                           onOpenExternal: (uri) =>
                               browserNavigation.openExternal(uri),
@@ -1044,7 +1044,7 @@ class _FloatingRealtimeStatusBannerState
               child: Material(
                 elevation: 6,
                 borderRadius: BorderRadius.circular(8),
-                color: ConclaveColors.surface(
+                color: SyntilaColors.surface(
                     Theme.of(context).brightness == Brightness.dark),
                 child: Container(
                   padding:
@@ -1063,14 +1063,14 @@ class _FloatingRealtimeStatusBannerState
                       const Icon(
                         Icons.cloud_off_outlined,
                         size: 16,
-                        color: ConclaveColors.warning,
+                        color: SyntilaColors.warning,
                       ),
                       const SizedBox(width: 8),
                       Flexible(
                         child: Text(
                           noticeText,
                           style: const TextStyle(
-                            color: ConclaveColors.warning,
+                            color: SyntilaColors.warning,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -1084,7 +1084,7 @@ class _FloatingRealtimeStatusBannerState
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                              ConclaveColors.warning),
+                              SyntilaColors.warning),
                         ),
                       ),
                     ],

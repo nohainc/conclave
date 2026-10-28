@@ -1,4 +1,4 @@
-name: conclave_app
+name: syntila_app
 description: Syntila web application.
 publish_to: none
 version: 0.1.0+1
@@ -10,9 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  conclave_design:
-    path: ../../packages/conclave_design
-  conclave_protocol:
+  syntila_design:
+    path: ../../packages/syntila_design
+  syntila_protocol:
     path: ../../packages/dart/protocol
   http: ^1.2.2
   http_parser: ^4.0.2

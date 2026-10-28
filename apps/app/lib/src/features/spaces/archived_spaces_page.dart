@@ -1,7 +1,7 @@
 import 'dart:async';
 import '../common/quiet_notices.dart';
 
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
@@ -128,10 +128,10 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
       enabled: !_busy.contains(space.id),
       padding: EdgeInsets.zero,
       borderRadius: BorderRadius.circular(24),
-      color: ConclaveMenuStyle.background(isDark),
+      color: SyntilaMenuStyle.background(isDark),
       surfaceTintColor: Colors.transparent,
-      shape: ConclaveMenuStyle.shape(isDark),
-      menuPadding: ConclaveMenuStyle.padding,
+      shape: SyntilaMenuStyle.shape(isDark),
+      menuPadding: SyntilaMenuStyle.padding,
       onSelected: (action) {
         if (action == 'restore') unawaited(_restore(space));
         if (action == 'delete') unawaited(_confirmDelete(space));
@@ -143,7 +143,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
           child: Row(children: [
             Icon(Icons.unarchive_outlined, size: 16),
             SizedBox(width: 8),
-            Text('Restore', style: ConclaveMenuStyle.textStyle),
+            Text('Restore', style: SyntilaMenuStyle.textStyle),
           ]),
         ),
         PopupMenuItem<String>(
@@ -154,7 +154,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
                 size: 16, color: Theme.of(context).colorScheme.error),
             const SizedBox(width: 8),
             Text('Delete',
-                style: ConclaveMenuStyle.textStyle
+                style: SyntilaMenuStyle.textStyle
                     .copyWith(color: Theme.of(context).colorScheme.error)),
           ]),
         ),
@@ -202,7 +202,7 @@ class _ArchivedSpacesPageState extends State<ArchivedSpacesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: Text('Delete ${space.name}?'),
         content: const Text(
             'This permanently deletes the Space and its archived record.'),

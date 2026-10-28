@@ -2,9 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:conclave_protocol/worker_descriptor.dart';
+import 'package:syntila_protocol/worker_descriptor.dart';
 
-export 'package:conclave_protocol/worker_descriptor.dart';
+export 'package:syntila_protocol/worker_descriptor.dart';
 
 import 'self_update.dart';
 import 'worker_profile_store.dart';

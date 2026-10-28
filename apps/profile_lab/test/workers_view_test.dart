@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
-import 'package:conclave_profile_lab/profile_admin_api_client.dart';
-import 'package:conclave_profile_lab/profile_lab_auth.dart';
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
-import 'package:conclave_profile_lab/profile_lab_session_store.dart';
-import 'package:conclave_profile_lab/views/workers_view.dart';
+import 'package:syntila_profile_lab/controllers/profile_lab_controller.dart';
+import 'package:syntila_profile_lab/profile_admin_api_client.dart';
+import 'package:syntila_profile_lab/profile_lab_auth.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_session_store.dart';
+import 'package:syntila_profile_lab/views/workers_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

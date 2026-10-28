@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/features/files/files_page.dart';
-import 'package:conclave_app/src/features/navigation/app_menu.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/features/files/files_page.dart';
+import 'package:syntila_app/src/features/navigation/app_menu.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
 
 class _FakeFiles implements AxUserFilesDataSource {
   _FakeFiles(this.files);

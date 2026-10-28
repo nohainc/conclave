@@ -8,7 +8,7 @@ AxThreadViewStateStore createAxThreadViewStateStore() =>
 
 /// Browser-local persistence for Thread view state. Cloud never sees this.
 class LocalStorageAxThreadViewStateStore implements AxThreadViewStateStore {
-  static const _prefix = 'conclave-ax-thread-view-v1:';
+  static const _prefix = 'syntila-thread-view-v1:';
 
   String _key(String userId, String threadId) =>
       '$_prefix${Uri.encodeComponent(userId)}:${Uri.encodeComponent(threadId)}';

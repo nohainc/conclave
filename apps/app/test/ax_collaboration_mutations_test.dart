@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
 import 'ax_fixture_data.dart';
 
 AxSpace space(String id, String name) =>

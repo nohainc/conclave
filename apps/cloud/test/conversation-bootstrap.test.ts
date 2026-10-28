@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { CONVERSATION_WORKFLOWS } from "@conclave/core";
+import { CONVERSATION_WORKFLOWS } from "@syntila/core";
 import { conversationFixture } from "./helpers/conversation.js";
 import {
   conversationSubmissionStatements,

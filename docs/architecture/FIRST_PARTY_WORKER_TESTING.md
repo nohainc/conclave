@@ -25,12 +25,12 @@ timeout, and process-tree cancellation. Set only the corresponding opt-in
 variable and an evidence directory when an operator is ready to run it:
 
 ~~~sh
-CONCLAVE_TEST_REAL_PROFILE_CHATGPT=1 \
-CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
+SYNTILA_TEST_REAL_PROFILE_CHATGPT=1 \
+SYNTILA_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
   dart test test/tool_profile_real_acceptance_test.dart
 
-CONCLAVE_TEST_REAL_PROFILE_GEMINI=1 \
-CONCLAVE_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
+SYNTILA_TEST_REAL_PROFILE_GEMINI=1 \
+SYNTILA_PROFILE_ACCEPTANCE_EVIDENCE_DIR=/path/to/evidence \
   dart test test/tool_profile_real_acceptance_test.dart
 ~~~
 
@@ -46,8 +46,8 @@ it does not replace live-provider sandbox qualification. Historical evidence
 continues to use the Workflow names and versions that were tested.
 
 ~~~sh
-CONCLAVE_TEST_ASSIGNMENT_PROFILE_CHATGPT=1 \
-CONCLAVE_TEST_ASSIGNMENT_PROFILE_GEMINI=1 \
+SYNTILA_TEST_ASSIGNMENT_PROFILE_CHATGPT=1 \
+SYNTILA_TEST_ASSIGNMENT_PROFILE_GEMINI=1 \
   dart test test/tool_profile_assignment_acceptance_test.dart
 ~~~
 

@@ -85,7 +85,7 @@ jobs:
         run: bash scripts/check-flutter-app.sh app
       - name: Build web bundle
         working-directory: apps/app
-        run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+        run: flutter build web --release --dart-define=SYNTILA_API_URL=/api
 
   workspace:
     name: Workspace

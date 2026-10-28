@@ -351,11 +351,11 @@ no Workspace/Engine behavior or native packaging changed in this phase.
 
 ## Phase 6: shared Flutter Model/Effort selection
 
-`conclave_protocol/worker_execution_options.dart` contains the provider-neutral
+`syntila_protocol/worker_execution_options.dart` contains the provider-neutral
 public capability projection and pure selection rules. It adapts the existing
 v1/v2 public contract; it does not introduce another wire catalog. Native IDs,
 argument templates and signed payloads are absent from these presentation types.
-`conclave_design/ModelEffortSelector` supplies the shared Flutter controls.
+`syntila_design/ModelEffortSelector` supplies the shared Flutter controls.
 
 AX workflow defaults and step overrides, AX transient request settings, Workspace
 Service-catalog inspection, and Profile Lab's trusted proposal dialog use this

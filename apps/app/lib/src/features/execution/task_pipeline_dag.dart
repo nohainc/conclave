@@ -27,10 +27,10 @@ class TaskPipelineDAG extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? ConclaveBrand.darkSurface : ConclaveBrand.lightSurface,
+        color: isDark ? SyntilaBrand.darkSurface : SyntilaBrand.lightSurface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine),
+            color: isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,25 +45,25 @@ class TaskPipelineDAG extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
                   color: isDark
-                      ? ConclaveBrand.darkInkMuted
-                      : ConclaveBrand.lightInkMuted,
+                      ? SyntilaBrand.darkInkMuted
+                      : SyntilaBrand.lightInkMuted,
                 ),
               ),
               Row(
                 children: [
                   const _StatusLegend(
-                      color: ConclaveBrand.success, label: 'Completed'),
+                      color: SyntilaBrand.success, label: 'Completed'),
                   const SizedBox(width: 12),
                   const _StatusLegend(
-                      color: ConclaveBrand.info, label: 'Running'),
+                      color: SyntilaBrand.info, label: 'Running'),
                   const SizedBox(width: 12),
                   const _StatusLegend(
-                      color: ConclaveBrand.error, label: 'Failed'),
+                      color: SyntilaBrand.error, label: 'Failed'),
                   const SizedBox(width: 12),
                   _StatusLegend(
                       color: isDark
-                          ? ConclaveBrand.darkLine
-                          : ConclaveBrand.lightLine,
+                          ? SyntilaBrand.darkLine
+                          : SyntilaBrand.lightLine,
                       label: 'Pending'),
                 ],
               ),
@@ -91,19 +91,19 @@ class TaskPipelineDAG extends StatelessWidget {
                         width: 28,
                         height: 2,
                         color: task.isCompleted
-                            ? ConclaveBrand.success
+                            ? SyntilaBrand.success
                             : (isDark
-                                ? ConclaveBrand.darkLine
-                                : ConclaveBrand.lightLine),
+                                ? SyntilaBrand.darkLine
+                                : SyntilaBrand.lightLine),
                       ),
                       Icon(
                         Icons.chevron_right_rounded,
                         size: 16,
                         color: task.isCompleted
-                            ? ConclaveBrand.success
+                            ? SyntilaBrand.success
                             : (isDark
-                                ? ConclaveBrand.darkInkMuted
-                                : ConclaveBrand.lightInkMuted),
+                                ? SyntilaBrand.darkInkMuted
+                                : SyntilaBrand.lightInkMuted),
                       ),
                     ],
                   ],
@@ -139,8 +139,8 @@ class _StatusLegend extends StatelessWidget {
           style: TextStyle(
             fontSize: 11.5,
             color: Theme.of(context).brightness == Brightness.dark
-                ? ConclaveBrand.darkInkMuted
-                : ConclaveBrand.lightInkMuted,
+                ? SyntilaBrand.darkInkMuted
+                : SyntilaBrand.lightInkMuted,
           ),
         ),
       ],
@@ -169,34 +169,34 @@ class _TaskNodeCard extends StatelessWidget {
     Color statusColor;
 
     if (task.isCompleted) {
-      statusColor = ConclaveBrand.success;
+      statusColor = SyntilaBrand.success;
       statusBgColor =
-          isDark ? ConclaveBrand.successWashDark : ConclaveBrand.successWash;
+          isDark ? SyntilaBrand.successWashDark : SyntilaBrand.successWash;
       statusIcon = Icons.check_circle_rounded;
       borderColor = isSelected
-          ? ConclaveBrand.accent
-          : ConclaveBrand.success.withValues(alpha: 0.5);
+          ? SyntilaBrand.accent
+          : SyntilaBrand.success.withValues(alpha: 0.5);
     } else if (task.isRunning) {
-      statusColor = ConclaveBrand.info;
+      statusColor = SyntilaBrand.info;
       statusBgColor =
-          isDark ? ConclaveBrand.infoWashDark : ConclaveBrand.infoWash;
+          isDark ? SyntilaBrand.infoWashDark : SyntilaBrand.infoWash;
       statusIcon = Icons.sync_rounded;
-      borderColor = isSelected ? ConclaveBrand.accent : ConclaveBrand.info;
+      borderColor = isSelected ? SyntilaBrand.accent : SyntilaBrand.info;
     } else if (task.isFailed) {
-      statusColor = ConclaveBrand.error;
+      statusColor = SyntilaBrand.error;
       statusBgColor =
-          isDark ? ConclaveBrand.errorWashDark : ConclaveBrand.errorWash;
+          isDark ? SyntilaBrand.errorWashDark : SyntilaBrand.errorWash;
       statusIcon = Icons.error_rounded;
-      borderColor = isSelected ? ConclaveBrand.accent : ConclaveBrand.error;
+      borderColor = isSelected ? SyntilaBrand.accent : SyntilaBrand.error;
     } else {
       statusColor =
-          isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+          isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
       statusBgColor =
-          isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper;
+          isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper;
       statusIcon = Icons.schedule_rounded;
       borderColor = isSelected
-          ? ConclaveBrand.accent
-          : (isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine);
+          ? SyntilaBrand.accent
+          : (isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine);
     }
 
     return InkWell(
@@ -209,9 +209,9 @@ class _TaskNodeCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: isSelected
               ? (isDark
-                  ? ConclaveBrand.accentWashDark
-                  : ConclaveBrand.accentWash.withValues(alpha: 0.5))
-              : (isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightSurface),
+                  ? SyntilaBrand.accentWashDark
+                  : SyntilaBrand.accentWash.withValues(alpha: 0.5))
+              : (isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightSurface),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: borderColor,
@@ -220,7 +220,7 @@ class _TaskNodeCard extends StatelessWidget {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: ConclaveBrand.accent.withValues(alpha: 0.2),
+                    color: SyntilaBrand.accent.withValues(alpha: 0.2),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -228,7 +228,7 @@ class _TaskNodeCard extends StatelessWidget {
               : (task.isRunning
                   ? [
                       BoxShadow(
-                        color: ConclaveBrand.info.withValues(alpha: 0.15),
+                        color: SyntilaBrand.info.withValues(alpha: 0.15),
                         blurRadius: 6,
                         spreadRadius: 1,
                       ),
@@ -274,8 +274,8 @@ class _TaskNodeCard extends StatelessWidget {
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: isDark
-                          ? ConclaveBrand.darkInkMuted
-                          : ConclaveBrand.lightInkMuted,
+                          ? SyntilaBrand.darkInkMuted
+                          : SyntilaBrand.lightInkMuted,
                     ),
                   ),
                 ),
@@ -289,7 +289,7 @@ class _TaskNodeCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
-                color: isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                color: isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk,
               ),
             ),
             const SizedBox(height: 6),
@@ -299,8 +299,8 @@ class _TaskNodeCard extends StatelessWidget {
                   Icons.smart_toy_outlined,
                   size: 12,
                   color: isDark
-                      ? ConclaveBrand.darkInkMuted
-                      : ConclaveBrand.lightInkMuted,
+                      ? SyntilaBrand.darkInkMuted
+                      : SyntilaBrand.lightInkMuted,
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -311,8 +311,8 @@ class _TaskNodeCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11.5,
                       color: isDark
-                          ? ConclaveBrand.darkInkMuted
-                          : ConclaveBrand.lightInkMuted,
+                          ? SyntilaBrand.darkInkMuted
+                          : SyntilaBrand.lightInkMuted,
                     ),
                   ),
                 ),

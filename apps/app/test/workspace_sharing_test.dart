@@ -1,8 +1,8 @@
-import 'package:conclave_app/src/ax/ax_people.dart';
-import 'package:conclave_app/src/ax/ax_workspace_member_access.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/workspace/workspace_sharing_section.dart';
-import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
+import 'package:syntila_app/src/ax/ax_people.dart';
+import 'package:syntila_app/src/ax/ax_workspace_member_access.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/workspace/workspace_sharing_section.dart';
+import 'package:syntila_app/src/features/workspace/workspaces_page.dart';
 import 'package:flutter/material.dart';
 import 'workflow_editor_test.dart' show worker;
 import 'package:flutter_test/flutter_test.dart';

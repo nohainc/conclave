@@ -1,20 +1,20 @@
 import 'dart:async';
-import 'package:conclave_app/src/features/invitations/space_invitation_dialog.dart';
-import 'package:conclave_app/src/ax/sync/ax_space_invitations.dart';
-import 'package:conclave_app/src/features/navigation/app_menu.dart';
-import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/features/invitations/space_invitation_dialog.dart';
+import 'package:syntila_app/src/ax/sync/ax_space_invitations.dart';
+import 'package:syntila_app/src/features/navigation/app_menu.dart';
+import 'package:syntila_app/src/features/navigation/app_sidebar.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_people.dart';
-import 'package:conclave_app/src/ax/sync/ax_people.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
-import 'package:conclave_app/src/features/people/people_page.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/ax/ax_people.dart';
+import 'package:syntila_app/src/ax/sync/ax_people.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_realtime_cache_router.dart';
+import 'package:syntila_app/src/features/people/people_page.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
 import 'ax_fixture_data.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 class PeopleSource extends AxFixtureDataSource {
   int loads = 0;

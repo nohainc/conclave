@@ -1,6 +1,6 @@
-import 'package:conclave_app/src/features/home/home_page.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/notifications/notification_models.dart';
+import 'package:syntila_app/src/features/home/home_page.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/notifications/notification_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -246,7 +246,7 @@ void main() {
         .widget<Text>(find.byKey(const ValueKey('continue-work-last-message')));
     expect(
         text.textSpan!.toPlainText(), 'Alex: ${List.filled(199, 'a').join()}…');
-    expect(find.text('CONCLAVE'), findsNothing);
+    expect(find.text('SYNTILA'), findsNothing);
   });
 
   const space = AxSpace(
@@ -1033,7 +1033,7 @@ void main() {
 
     final continueItems = [
       const AxContinueWorkItem(
-        spaceId: 'proj-conclave',
+        spaceId: 'proj-syntila',
         spaceName: 'Syntila Development',
         threadId: 'ws-sessions',
         threadTitle: 'Worker Sessions',
@@ -1092,7 +1092,7 @@ void main() {
     await tester.pumpWidget(scaffold(HomePage(
       spaces: const [
         AxSpace(
-          id: 'proj-conclave',
+          id: 'proj-syntila',
           name: 'Syntila Development',
           branch: 'main',
           lastActivity: 'Today',
@@ -1147,7 +1147,7 @@ void main() {
     expect(find.text('Continue working'), findsOneWidget);
 
     // Card 1
-    expect(find.text('CONCLAVE DEVELOPMENT'), findsNothing);
+    expect(find.text('SYNTILA DEVELOPMENT'), findsNothing);
     expect(find.text('Worker Sessions'), findsOneWidget);
     expect(find.text('23 min ago'), findsOneWidget);
     // The last message is a one-line preview prefixed with its sender.
@@ -1188,7 +1188,7 @@ void main() {
         find.byKey(const ValueKey('continue-work-last-message')).first);
     await tester
         .tap(find.byKey(const ValueKey('continue-work-last-message')).first);
-    expect(openedSpace, 'proj-conclave');
+    expect(openedSpace, 'proj-syntila');
     expect(openedThread, 'ws-sessions');
   });
 
@@ -3122,11 +3122,11 @@ void main() {
             id: 'inv-rt',
             spaceId: 'proj-100',
             spaceName: 'Super Space',
-            email: 'user@conclave.dev',
+            email: 'user@syntila.dev',
             role: 'member',
             status: 'pending',
             invitedByUserId: 'u-1',
-            invitedByUserEmail: 'julia@conclave.dev',
+            invitedByUserEmail: 'julia@syntila.dev',
             invitedByUserName: 'Julia',
             createdAt: '2026-10-08T08:00:00Z',
           ),

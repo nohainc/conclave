@@ -124,10 +124,10 @@ export function parseWorkspaceMemberAccessPolicy(
 }
 
 export async function loadWorkspaceMemberAccess(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   workspaceId: string,
 ): Promise<WorkspaceMemberAccessPolicy | null> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT policy_json AS policyJson FROM workspace_member_access WHERE workspace_id = ?1",
   )
     .bind(workspaceId)
@@ -142,11 +142,11 @@ export async function loadWorkspaceMemberAccess(
  * one, otherwise the Workspace default. Overrides replace, never merge.
  */
 export async function loadEffectiveMemberAccess(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   workspaceId: string,
   userId: string,
 ): Promise<WorkspaceMemberAccessPolicy | null> {
-  const override = await env.CONCLAVE_DB.prepare(
+  const override = await env.SYNTILA_DB.prepare(
     "SELECT policy_json AS policyJson FROM workspace_member_overrides WHERE workspace_id = ?1 AND user_id = ?2",
   )
     .bind(workspaceId, userId)
@@ -289,7 +289,7 @@ export async function handleWorkspaceMemberAccess(
   personId?: string,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  const workspace = await env.CONCLAVE_DB.prepare(
+  const workspace = await env.SYNTILA_DB.prepare(
     "SELECT id FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status != 'revoked'",
   )
     .bind(workspaceId, context.userId)
@@ -315,7 +315,7 @@ export async function handleWorkspaceMemberAccess(
   )
     throw new HttpError(400, "Invalid member access request");
   if (!body.restricted) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM workspace_member_access WHERE workspace_id = ?1",
     )
       .bind(workspaceId)
@@ -327,7 +327,7 @@ export async function handleWorkspaceMemberAccess(
     mode: body.mode,
   });
   await assertWorkersInWorkspace(env, workspaceId, policy);
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_member_access(workspace_id,policy_json,updated_at) VALUES(?1,?2,?3)
      ON CONFLICT(workspace_id) DO UPDATE SET policy_json=excluded.policy_json,updated_at=excluded.updated_at`,
   )
@@ -341,7 +341,7 @@ async function assertWorkersInWorkspace(
   workspaceId: string,
   policy: WorkspaceMemberAccessPolicy,
 ) {
-  const inventory = await env.CONCLAVE_DB.prepare(
+  const inventory = await env.SYNTILA_DB.prepare(
     "SELECT worker_id AS workerId FROM workspace_worker_inventory WHERE workspace_id = ?1",
   )
     .bind(workspaceId)
@@ -362,7 +362,7 @@ async function handlePersonOverride(
   workspaceId: string,
   personId: string,
 ): Promise<Response> {
-  const person = await env.CONCLAVE_DB.prepare(
+  const person = await env.SYNTILA_DB.prepare(
     "SELECT id FROM users WHERE id = ?1",
   )
     .bind(personId)
@@ -370,7 +370,7 @@ async function handlePersonOverride(
   if (!person) throw new HttpError(404, "Person not found");
   const read = async () => {
     const policy = await loadEffectiveMemberAccess(env, workspaceId, personId);
-    const override = await env.CONCLAVE_DB.prepare(
+    const override = await env.SYNTILA_DB.prepare(
       "SELECT 1 AS found FROM workspace_member_overrides WHERE workspace_id = ?1 AND user_id = ?2",
     )
       .bind(workspaceId, personId)
@@ -379,7 +379,7 @@ async function handlePersonOverride(
   };
   if (request.method === "GET") return read();
   if (request.method === "DELETE") {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM workspace_member_overrides WHERE workspace_id = ?1 AND user_id = ?2",
     )
       .bind(workspaceId, personId)
@@ -398,7 +398,7 @@ async function handlePersonOverride(
     throw new HttpError(400, "Invalid member access request");
   const policy = parseWorkspaceMemberAccessPolicy(body);
   await assertWorkersInWorkspace(env, workspaceId, policy);
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_member_overrides(workspace_id,user_id,policy_json,updated_at) VALUES(?1,?2,?3,?4)
      ON CONFLICT(workspace_id,user_id) DO UPDATE SET policy_json=excluded.policy_json,updated_at=excluded.updated_at`,
   )

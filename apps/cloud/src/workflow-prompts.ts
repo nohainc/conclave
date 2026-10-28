@@ -3,7 +3,7 @@ import type {
   BuiltinWorkflowStep,
   StepResult,
   StepKind,
-} from "@conclave/core";
+} from "@syntila/core";
 
 export interface WorkPromptAttachment {
   readonly kind?: "file" | "url" | "text";

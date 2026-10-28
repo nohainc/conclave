@@ -196,9 +196,9 @@ final class WorkspaceSettings {
       serviceEnabled: true,
       // Local builds are pinned to the local Cloud; write that so the file
       // reflects what the service actually uses.
-      cloudUrl: conclaveWorkspaceIsLocalBuild
-          ? conclaveLocalCloudUrl
-          : conclaveProductionCloudUrl,
+      cloudUrl: syntilaWorkspaceIsLocalBuild
+          ? syntilaLocalCloudUrl
+          : syntilaProductionCloudUrl,
       connectOnStart: false,
       workspaceName: workspaceName ?? 'Workspace',
       parallelSlots: initialParallelSlots,

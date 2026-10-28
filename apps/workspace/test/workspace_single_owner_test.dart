@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace.dart';
 import 'package:test/test.dart';
 
 void main() {

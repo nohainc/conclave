@@ -1,7 +1,7 @@
 # Syntila Branding
 
 The approved logo supplied on October 7, 2026 is preserved byte-for-byte in
-`assets/branding/conclave_source.png` (1268 × 1240, transparent RGBA).
+`assets/branding/syntila_source.png` (1268 × 1240, transparent RGBA).
 It is the canonical product identity across all apps and the public site.
 
 ## Asset generation

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/platform_runtime.dart';
-import 'package:conclave_workspace/work_root.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
+import 'package:syntila_workspace/work_root.dart';
 import 'package:test/test.dart';
 
 class FakePlatform implements PlatformRuntime {
@@ -70,7 +70,7 @@ void main() {
 
   test('creates and canonicalizes a custom root with hardened permissions',
       () async {
-    final parent = await Directory.systemTemp.createTemp('conclave-work-root-');
+    final parent = await Directory.systemTemp.createTemp('syntila-work-root-');
     addTearDown(() => parent.delete(recursive: true));
     final platform = FakePlatform('linux', parent.path);
     final requested = Directory('${parent.path}/nested/../work');
@@ -85,7 +85,7 @@ void main() {
   });
 
   test('rejects a root change while active Thread work exists', () async {
-    final parent = await Directory.systemTemp.createTemp('conclave-work-root-');
+    final parent = await Directory.systemTemp.createTemp('syntila-work-root-');
     addTearDown(() => parent.delete(recursive: true));
     await expectLater(
       WorkRootResolver(
@@ -98,7 +98,7 @@ void main() {
 
   test('uses no Workspace enrollment identity and survives re-enrollment',
       () async {
-    final parent = await Directory.systemTemp.createTemp('conclave-work-root-');
+    final parent = await Directory.systemTemp.createTemp('syntila-work-root-');
     addTearDown(() => parent.delete(recursive: true));
     final first = await WorkRootResolver(
       platform: FakePlatform('linux', parent.path),
@@ -115,7 +115,7 @@ void main() {
   });
 
   test('fails when the configured root is an existing file', () async {
-    final parent = await Directory.systemTemp.createTemp('conclave-work-root-');
+    final parent = await Directory.systemTemp.createTemp('syntila-work-root-');
     addTearDown(() => parent.delete(recursive: true));
     final file = File('${parent.path}/not-a-directory');
     await file.writeAsString('occupied');
@@ -130,7 +130,7 @@ void main() {
   });
 
   test('fails closed when the root cannot be permission-hardened', () async {
-    final parent = await Directory.systemTemp.createTemp('conclave-work-root-');
+    final parent = await Directory.systemTemp.createTemp('syntila-work-root-');
     addTearDown(() => parent.delete(recursive: true));
 
     await expectLater(

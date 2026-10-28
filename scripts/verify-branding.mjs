@@ -4,23 +4,23 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const CANONICAL_SVG_MASTERS = [
-  "conclave_mark.svg",
-  "conclave_mark_dark.svg",
-  "conclave_mark_monochrome.svg",
-  "conclave_mark_twotone.svg",
-  "conclave_wordmark.svg",
-  "conclave_wordmark_dark.svg",
-  "conclave_logo.svg",
+  "syntila_mark.svg",
+  "syntila_mark_dark.svg",
+  "syntila_mark_monochrome.svg",
+  "syntila_mark_twotone.svg",
+  "syntila_wordmark.svg",
+  "syntila_wordmark_dark.svg",
+  "syntila_logo.svg",
 ];
 
 export const REQUIRED_CANONICAL_PNGS = [
-  "conclave_logo.png",
-  "conclave_logo_512.png",
-  "conclave_logo_192.png",
-  "conclave_logo_128.png",
-  "conclave_email_logo.png",
-  "conclave_logo_64.png",
-  "conclave_logo_32.png",
+  "syntila_logo.png",
+  "syntila_logo_512.png",
+  "syntila_logo_192.png",
+  "syntila_logo_128.png",
+  "syntila_email_logo.png",
+  "syntila_logo_64.png",
+  "syntila_logo_32.png",
 ];
 
 export const MACOS_APP_ICON_SIZES = [16, 32, 64, 128, 256, 512, 1024];
@@ -89,7 +89,7 @@ export function verifyCanonicalSvgMasters(rootDir) {
 
     const content = readFileSync(svgPath, "utf8");
 
-    const sourcePath = join(canonicalDir, "conclave_source.png");
+    const sourcePath = join(canonicalDir, "syntila_source.png");
     const approvedRaster =
       existsSync(sourcePath) &&
       content.includes(
@@ -157,7 +157,7 @@ export function verifyRequiredGeneratedIcons(rootDir) {
   // Web PWA icons in apps/app/web
   const webDir = join(rootDir, "apps/app/web");
   const requiredWebFiles = [
-    "conclave_logo.svg",
+    "syntila_logo.svg",
     "favicon.png",
     "icons/Icon-192.png",
     "icons/Icon-512.png",
@@ -176,14 +176,14 @@ export function verifyRequiredGeneratedIcons(rootDir) {
   // Landing site public branding
   const sitePublicDir = join(rootDir, "apps/site/public");
   const requiredSiteFiles = [
-    "conclave_mark.svg",
-    "conclave_mark_dark.svg",
-    "conclave_mark_monochrome.svg",
-    "conclave_logo.svg",
-    "conclave_wordmark.svg",
-    "conclave_wordmark_dark.svg",
-    "conclave_logo.png",
-    "conclave_email_logo.png",
+    "syntila_mark.svg",
+    "syntila_mark_dark.svg",
+    "syntila_mark_monochrome.svg",
+    "syntila_logo.svg",
+    "syntila_wordmark.svg",
+    "syntila_wordmark_dark.svg",
+    "syntila_logo.png",
+    "syntila_email_logo.png",
     "favicon.png",
     "favicon.svg",
   ];
@@ -244,48 +244,48 @@ export function verifyBrandingHashSync(rootDir) {
   // Web & site aliases
   syncPairs.push(
     {
-      source: join(canonicalDir, "conclave_logo.svg"),
-      target: join(rootDir, "apps/app/web/conclave_logo.svg"),
+      source: join(canonicalDir, "syntila_logo.svg"),
+      target: join(rootDir, "apps/app/web/syntila_logo.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_logo.svg"),
+      source: join(canonicalDir, "syntila_logo.svg"),
       target: join(rootDir, "apps/site/public/favicon.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_logo.svg"),
-      target: join(rootDir, "apps/site/public/conclave_logo.svg"),
+      source: join(canonicalDir, "syntila_logo.svg"),
+      target: join(rootDir, "apps/site/public/syntila_logo.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_mark.svg"),
-      target: join(rootDir, "apps/site/public/conclave_mark.svg"),
+      source: join(canonicalDir, "syntila_mark.svg"),
+      target: join(rootDir, "apps/site/public/syntila_mark.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_mark_dark.svg"),
-      target: join(rootDir, "apps/site/public/conclave_mark_dark.svg"),
+      source: join(canonicalDir, "syntila_mark_dark.svg"),
+      target: join(rootDir, "apps/site/public/syntila_mark_dark.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_mark_monochrome.svg"),
-      target: join(rootDir, "apps/site/public/conclave_mark_monochrome.svg"),
+      source: join(canonicalDir, "syntila_mark_monochrome.svg"),
+      target: join(rootDir, "apps/site/public/syntila_mark_monochrome.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_wordmark.svg"),
-      target: join(rootDir, "apps/site/public/conclave_wordmark.svg"),
+      source: join(canonicalDir, "syntila_wordmark.svg"),
+      target: join(rootDir, "apps/site/public/syntila_wordmark.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_wordmark_dark.svg"),
-      target: join(rootDir, "apps/site/public/conclave_wordmark_dark.svg"),
+      source: join(canonicalDir, "syntila_wordmark_dark.svg"),
+      target: join(rootDir, "apps/site/public/syntila_wordmark_dark.svg"),
     },
     {
-      source: join(canonicalDir, "conclave_logo_32.png"),
+      source: join(canonicalDir, "syntila_logo_32.png"),
       target: join(rootDir, "apps/app/web/favicon.png"),
     },
     {
-      source: join(canonicalDir, "conclave_logo_32.png"),
+      source: join(canonicalDir, "syntila_logo_32.png"),
       target: join(rootDir, "apps/site/public/favicon.png"),
     },
     {
-      source: join(canonicalDir, "conclave_logo.png"),
-      target: join(rootDir, "apps/site/public/conclave_logo.png"),
+      source: join(canonicalDir, "syntila_logo.png"),
+      target: join(rootDir, "apps/site/public/syntila_logo.png"),
     },
   );
 
@@ -323,7 +323,7 @@ export function verify3DArtworkIsolation(rootDir) {
   for (const dir of prohibitedDirs) {
     if (!existsSync(dir)) continue;
     const files = findFilesRecursive(dir, (f) =>
-      /3d|conclave_mark_3d/i.test(f),
+      /3d|syntila_mark_3d/i.test(f),
     );
     for (const f of files) {
       violations.push(
@@ -340,7 +340,7 @@ export function verify3DArtworkIsolation(rootDir) {
 
 /**
  * 5. Verify no direct hardcoded brand purple colors in Dart client application code.
- * (Components must consume ConclaveColors / ConclaveBrand tokens or Theme.of(context)).
+ * (Components must consume SyntilaColors / SyntilaBrand tokens or Theme.of(context)).
  */
 export function verifyNoHardcodedBrandColors(rootDir) {
   const violations = [];
@@ -369,7 +369,7 @@ export function verifyNoHardcodedBrandColors(rootDir) {
               `Hardcoded brand color detected in ${relative(
                 rootDir,
                 file,
-              )}:${i + 1} (${name}). Use ConclaveColors tokens or Theme.of(context) instead of raw Color literal.`,
+              )}:${i + 1} (${name}). Use SyntilaColors tokens or Theme.of(context) instead of raw Color literal.`,
             );
           }
         }

@@ -18,7 +18,7 @@ export async function handleListWorkspaces(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT execution_workspaces.id, name, status,
             CASE WHEN owner_user_id = ?1 THEN 'owner' ELSE 'member' END AS role,
             CASE WHEN owner_user_id = ?1 THEN 0 ELSE 1 END AS shared,
@@ -63,10 +63,10 @@ export async function handleListWorkspaces(
       if (
         workspaceId &&
         row.hasRuntimeIdentity &&
-        env.CONCLAVE_WORKSPACE_GATEWAY
+        env.SYNTILA_WORKSPACE_GATEWAY
       ) {
         try {
-          const response = await env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+          const response = await env.SYNTILA_WORKSPACE_GATEWAY.getByName(
             workspaceId,
           ).fetch("https://workspace-gateway/status");
           if (response.ok) {
@@ -111,7 +111,7 @@ export async function handleGetWorkspace(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   await requireWorkspaceContext(context, env, workspaceId);
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT id, name, status, created_at AS createdAt, updated_at AS updatedAt FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2",
   )
     .bind(workspaceId, context.userId)
@@ -148,12 +148,12 @@ export async function handleUpdateWorkspace(
     throw new HttpError(400, "Workspace name must be 1 to 120 characters");
   }
   if (
-    await workspaceNameTaken(env.CONCLAVE_DB, context.userId, name, workspaceId)
+    await workspaceNameTaken(env.SYNTILA_DB, context.userId, name, workspaceId)
   ) {
     throw new HttpError(409, `You already have a Workspace named "${name}"`);
   }
   const now = new Date().toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     "UPDATE execution_workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND owner_user_id = ?4 AND status <> 'revoked'",
   )
     .bind(name, now, workspaceId, context.userId)
@@ -182,7 +182,7 @@ export async function handleRevokeWorkspace(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  const workspace = await env.CONCLAVE_DB.prepare(
+  const workspace = await env.SYNTILA_DB.prepare(
     "SELECT id, status FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2",
   )
     .bind(workspaceId, context.userId)
@@ -192,7 +192,7 @@ export async function handleRevokeWorkspace(
   const now = new Date().toISOString();
   const alreadyRevoked = workspace.status === "revoked";
   if (!alreadyRevoked) {
-    const workspaceUpdate = await env.CONCLAVE_DB.prepare(
+    const workspaceUpdate = await env.SYNTILA_DB.prepare(
       "UPDATE execution_workspaces SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND owner_user_id = ?3",
     )
       .bind(now, workspaceId, context.userId)
@@ -202,26 +202,26 @@ export async function handleRevokeWorkspace(
     }
   }
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1 WHERE workspace_id = ?2 AND status IN ('active', 'suspended')",
   )
     .bind(now, workspaceId)
     .run();
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE workspace_runtime_identities SET revoked_at = ?1 WHERE workspace_id = ?2 AND revoked_at IS NULL",
   )
     .bind(now, workspaceId)
     .run();
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE workspace_installations SET status = 'released', released_at = ?1, updated_at = ?1 WHERE workspace_id = ?2 AND status = 'active'",
   )
     .bind(now, workspaceId)
     .run();
 
-  await env.CONCLAVE_DB.batch(
-    releasedWorkspaceCleanup(env.CONCLAVE_DB, workspaceId),
+  await env.SYNTILA_DB.batch(
+    releasedWorkspaceCleanup(env.SYNTILA_DB, workspaceId),
   );
 
   if (!alreadyRevoked) {
@@ -259,7 +259,7 @@ export async function handleExportWorkspaceAudit(
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(Math.max(requestedLimit, 1), 500)
     : 100;
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT id, workspace_id AS workspaceId, actor_type AS actorType,
             actor_id AS actorId, action, target_type AS targetType,
             target_id AS targetId, details_json AS detailsJson,
@@ -282,7 +282,7 @@ export async function handleExportWorkspaceAudit(
       createdAt: string;
     }>();
   return json({
-    format: "conclave-audit-log-v1",
+    format: "syntila-audit-log-v1",
     workspaceId,
     exportedAt: new Date().toISOString(),
     entries: (rows.results ?? []).map((row) => ({
@@ -318,12 +318,12 @@ export async function handleWorkerUsage(
     "workspace:manage",
     accessContext,
   );
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY)
+  if (!env.SYNTILA_WORKSPACE_GATEWAY)
     return json(
       { error: "Workspace Gateway is not configured" },
       { status: 503 },
     );
-  const response = await env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+  const response = await env.SYNTILA_WORKSPACE_GATEWAY.getByName(
     workspaceId,
   ).fetch("https://workspace-gateway/worker-usage", {
     method: "POST",
@@ -353,12 +353,12 @@ export async function handleWorkspaceDeliveryProbe(
     "workspace:manage",
     accessContext,
   );
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY)
+  if (!env.SYNTILA_WORKSPACE_GATEWAY)
     return json(
       { error: "Workspace Gateway is not configured" },
       { status: 503 },
     );
-  const response = await env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+  const response = await env.SYNTILA_WORKSPACE_GATEWAY.getByName(
     workspaceId,
   ).fetch("https://workspace-gateway/diagnostic-probe", { method: "POST" });
   const body = await response.json().catch(() => ({

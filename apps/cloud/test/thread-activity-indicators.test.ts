@@ -40,8 +40,8 @@ function fixture() {
       )
       .run(id, id, joined, joined);
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
     TEST_AUTHENTICATION: async (request: Request) => {
       const userId = request.headers.get("test-user")!;
       return {

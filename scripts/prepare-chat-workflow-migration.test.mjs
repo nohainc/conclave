@@ -117,7 +117,7 @@ it("aborts before mutation when inspected schema changes", () => {
 });
 
 it("prepares JSONC production config and never regenerates an applied migration", () => {
-  const directory = mkdtempSync(join(tmpdir(), "conclave-migration-test-"));
+  const directory = mkdtempSync(join(tmpdir(), "syntila-migration-test-"));
   const db = new DatabaseSync(":memory:");
   try {
     db.exec(

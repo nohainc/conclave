@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
-import 'package:conclave_workspace/worker_trust_policy.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart';
+import 'package:syntila_workspace/worker_trust_policy.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
@@ -10,7 +10,7 @@ import 'support/ed25519_release_fixture.dart';
 void main() {
   test('verifies Ed25519 signatures and rejects revoked digests', () async {
     final fixture = await Ed25519ReleaseFixture.create();
-    final message = 'conclave-workspace-release-v1\nsha256:abc';
+    final message = 'syntila-workspace-release-v1\nsha256:abc';
     // The fixture signer signs with its private key. The production policy
     // receives only the corresponding public key.
     final signed =

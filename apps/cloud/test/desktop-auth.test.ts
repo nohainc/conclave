@@ -122,8 +122,8 @@ describe("desktop human authentication", () => {
     }
     const db = new TestD1(sqlite);
     const env = {
-      CONCLAVE_DB: db,
-      CONCLAVE_WORKSPACE_GATEWAY: {
+      SYNTILA_DB: db,
+      SYNTILA_WORKSPACE_GATEWAY: {
         getByName: () => ({
           fetch: async () => Response.json({ online: false }),
         }),
@@ -168,7 +168,7 @@ describe("desktop human authentication", () => {
         );
       });
     const response = await handleDesktopPasswordSignIn(
-      new Request("https://app.conclave.test/api/desktop-auth/password", {
+      new Request("https://app.syntila.test/api/desktop-auth/password", {
         method: "POST",
         body: JSON.stringify({
           email: "person@example.test",
@@ -196,7 +196,7 @@ describe("desktop human authentication", () => {
     const { env } = await setup();
     const verifier = vi.spyOn(authModule, "handleBetterAuthRequest");
     const request = () =>
-      new Request("https://app.conclave.test/api/desktop-auth/password", {
+      new Request("https://app.syntila.test/api/desktop-auth/password", {
         method: "POST",
         body: JSON.stringify({
           email: "person@example.test",
@@ -228,7 +228,7 @@ describe("desktop human authentication", () => {
     it(`Profile Lab browser approval requires the configured owner: ${email}, verified=${verified}`, async () => {
       const { env: baseEnv, sqlite } = await setup();
       const env = Object.assign(baseEnv, {
-        CONCLAVE_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
+        SYNTILA_PROFILE_LAB_OWNER_EMAIL: "vitalii@nohainc.com",
       });
       vi.mocked(identityService.resolve).mockResolvedValue({
         userId: "human-1",
@@ -249,7 +249,7 @@ describe("desktop human authentication", () => {
           verified,
         );
       const response = await handleCreateDesktopAuthIntent(
-        new Request("https://app.conclave.test/api/desktop-auth/intents", {
+        new Request("https://app.syntila.test/api/desktop-auth/intents", {
           method: "POST",
           body: JSON.stringify({
             clientName: "Syntila Profile Lab",
@@ -265,7 +265,7 @@ describe("desktop human authentication", () => {
       };
       const approve = () =>
         handleApproveDesktopAuthIntent(
-          new Request("https://app.conclave.test/approve", { method: "POST" }),
+          new Request("https://app.syntila.test/approve", { method: "POST" }),
           env,
           intent.intentId,
         );
@@ -281,7 +281,7 @@ describe("desktop human authentication", () => {
       } else {
         expect((await approve()).status).toBe(200);
         const claimRequest = () =>
-          new Request("https://app.conclave.test/claim", {
+          new Request("https://app.syntila.test/claim", {
             method: "POST",
             body: JSON.stringify({ pollToken: intent.pollToken }),
           });
@@ -293,7 +293,7 @@ describe("desktop human authentication", () => {
         expect(claimed.status).toBe(200);
         const session = (await claimed.json()) as { credential: string };
         const sessionRequest = () =>
-          new Request("https://app.conclave.test/api/desktop-auth/session", {
+          new Request("https://app.syntila.test/api/desktop-auth/session", {
             headers: { authorization: `Bearer ${session.credential}` },
           });
         expect(
@@ -318,7 +318,7 @@ describe("desktop human authentication", () => {
   it("exchanges a browser-approved 1.1 intent without a comparison code for an independently revocable desktop session", async () => {
     const { env, sqlite } = await setup();
     const create = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+      new Request("https://app.syntila.test/api/desktop-auth/intents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -339,7 +339,7 @@ describe("desktop human authentication", () => {
     );
     const pending = await handleDesktopAuthIntentStatus(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${intent.intentId}`,
+        `https://app.syntila.test/api/desktop-auth/intents/${intent.intentId}`,
         {
           headers: { authorization: `Bearer ${intent.pollToken}` },
         },
@@ -352,7 +352,7 @@ describe("desktop human authentication", () => {
     );
 
     const approval = await handleApproveDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/approve", {
+      new Request("https://app.syntila.test/api/desktop-auth/approve", {
         method: "POST",
         headers: {
           cookie: "better-auth-session=opaque",
@@ -366,7 +366,7 @@ describe("desktop human authentication", () => {
     expect(approval.status).toBe(200);
 
     const claim = await handleClaimDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/claim", {
+      new Request("https://app.syntila.test/api/desktop-auth/claim", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ pollToken: intent.pollToken }),
@@ -389,7 +389,7 @@ describe("desktop human authentication", () => {
     expect(savedHash.token_hash).toBe(await hashToken(session.credential));
 
     const duplicateClaim = await handleClaimDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/claim", {
+      new Request("https://app.syntila.test/api/desktop-auth/claim", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ pollToken: intent.pollToken }),
@@ -403,7 +403,7 @@ describe("desktop human authentication", () => {
     expect(duplicateClaim?.message).toMatch(/already claimed/);
 
     const humanSession = await handleGetDesktopHumanSession(
-      new Request("https://app.conclave.test/api/desktop-auth/session", {
+      new Request("https://app.syntila.test/api/desktop-auth/session", {
         headers: { authorization: `Bearer ${session.credential}` },
       }),
       env,
@@ -414,8 +414,8 @@ describe("desktop human authentication", () => {
 
     await expect(
       handleGetDesktopHumanSession(
-        new Request("https://app.conclave.test/api/desktop-auth/session", {
-          headers: { authorization: "Bearer conclave_workspace_tok_runtime" },
+        new Request("https://app.syntila.test/api/desktop-auth/session", {
+          headers: { authorization: "Bearer syntila_workspace_tok_runtime" },
         }),
         env,
       ),
@@ -423,7 +423,7 @@ describe("desktop human authentication", () => {
 
     const revoked = await handleRevokeDesktopHumanSession(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/sessions/${session.sessionId}/revoke`,
+        `https://app.syntila.test/api/desktop-auth/sessions/${session.sessionId}/revoke`,
         {
           method: "POST",
           headers: { authorization: `Bearer ${session.credential}` },
@@ -435,7 +435,7 @@ describe("desktop human authentication", () => {
     expect(((await revoked.json()) as { revoked: boolean }).revoked).toBe(true);
     await expect(
       handleGetDesktopHumanSession(
-        new Request("https://app.conclave.test/api/desktop-auth/session", {
+        new Request("https://app.syntila.test/api/desktop-auth/session", {
           headers: { authorization: `Bearer ${session.credential}` },
         }),
         env,
@@ -445,7 +445,7 @@ describe("desktop human authentication", () => {
 
   it("uses the configured browser application origin for desktop approval", async () => {
     const { env } = await setup();
-    (env as Record<string, unknown>).CONCLAVE_APP_URL =
+    (env as Record<string, unknown>).SYNTILA_APP_URL =
       "http://localhost:3000/";
     const response = await handleCreateDesktopAuthIntent(
       new Request("http://localhost:8787/api/desktop-auth/intents", {
@@ -469,7 +469,7 @@ describe("desktop human authentication", () => {
   it("lets only the intent poll credential cancel and expose terminal browser status", async () => {
     const { env } = await setup();
     const create = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+      new Request("https://app.syntila.test/api/desktop-auth/intents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -485,14 +485,14 @@ describe("desktop human authentication", () => {
     };
     await expect(
       handleCancelDesktopAuthIntent(
-        new Request("https://app.conclave.test/cancel", { method: "POST" }),
+        new Request("https://app.syntila.test/cancel", { method: "POST" }),
         env,
         intent.intentId,
       ),
     ).rejects.toThrow(/credential required/);
 
     const canceled = await handleCancelDesktopAuthIntent(
-      new Request("https://app.conclave.test/cancel", {
+      new Request("https://app.syntila.test/cancel", {
         method: "POST",
         headers: { authorization: `Bearer ${intent.pollToken}` },
       }),
@@ -502,7 +502,7 @@ describe("desktop human authentication", () => {
     expect(canceled.status).toBe(200);
     const status = await handleDesktopAuthIntentBrowserStatus(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${intent.intentId}/browser-status`,
+        `https://app.syntila.test/api/desktop-auth/intents/${intent.intentId}/browser-status`,
       ),
       env,
       intent.intentId,
@@ -513,7 +513,7 @@ describe("desktop human authentication", () => {
   it("allows an authenticated browser user to cancel a pending intent", async () => {
     const { env } = await setup();
     const create = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+      new Request("https://app.syntila.test/api/desktop-auth/intents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -525,7 +525,7 @@ describe("desktop human authentication", () => {
     );
     const intent = (await create.json()) as { intentId: string };
     const response = await handleDenyDesktopAuthIntent(
-      new Request("https://app.conclave.test/cancel", {
+      new Request("https://app.syntila.test/cancel", {
         method: "POST",
         headers: { cookie: "better-auth-session=opaque" },
       }),
@@ -534,7 +534,7 @@ describe("desktop human authentication", () => {
     );
     expect(response.status).toBe(200);
     const status = await handleDesktopAuthIntentBrowserStatus(
-      new Request("https://app.conclave.test/status"),
+      new Request("https://app.syntila.test/status"),
       env,
       intent.intentId,
     );
@@ -567,7 +567,7 @@ describe("desktop human authentication", () => {
 
     await expect(
       handleGetDesktopHumanSession(
-        new Request("https://app.conclave.test/api/desktop-auth/session", {
+        new Request("https://app.syntila.test/api/desktop-auth/session", {
           headers: { authorization: "Bearer runtime-only-secret" },
         }),
         env,
@@ -625,7 +625,7 @@ describe("desktop human authentication", () => {
     const register = (userId: string, extra: Record<string, unknown> = {}) =>
       handleRegisterWorkspaceFromDesktop(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/register",
+          "https://app.syntila.test/api/workspace-runtime/register",
           {
             method: "POST",
             headers: {
@@ -644,7 +644,7 @@ describe("desktop human authentication", () => {
     ) =>
       handleCheckWorkspaceOwnership(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/ownership",
+          "https://app.syntila.test/api/workspace-runtime/ownership",
           {
             method: "POST",
             headers: {
@@ -692,7 +692,7 @@ describe("desktop human authentication", () => {
 
     const disconnected = await handleDisconnectDesktopWorkspace(
       new Request(
-        "https://app.conclave.test/api/workspace-runtime/disconnect",
+        "https://app.syntila.test/api/workspace-runtime/disconnect",
         {
           method: "POST",
           headers: {
@@ -766,7 +766,7 @@ describe("desktop human authentication", () => {
     });
 
     const released = await handleReleaseDesktopWorkspace(
-      new Request("https://app.conclave.test/api/workspace-runtime/release", {
+      new Request("https://app.syntila.test/api/workspace-runtime/release", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -863,7 +863,7 @@ describe("desktop human authentication", () => {
     const register = (userId: string, installationId: string) =>
       handleRegisterWorkspaceFromDesktop(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/register",
+          "https://app.syntila.test/api/workspace-runtime/register",
           {
             method: "POST",
             headers: {
@@ -883,7 +883,7 @@ describe("desktop human authentication", () => {
     ) =>
       handleCheckWorkspaceOwnership(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/ownership",
+          "https://app.syntila.test/api/workspace-runtime/ownership",
           {
             method: "POST",
             headers: {
@@ -907,7 +907,7 @@ describe("desktop human authentication", () => {
     ) =>
       handleDisconnectDesktopWorkspace(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/disconnect",
+          "https://app.syntila.test/api/workspace-runtime/disconnect",
           {
             method: "POST",
             headers: {
@@ -925,7 +925,7 @@ describe("desktop human authentication", () => {
       runtimeId: string,
     ) =>
       handleReleaseDesktopWorkspace(
-        new Request("https://app.conclave.test/api/workspace-runtime/release", {
+        new Request("https://app.syntila.test/api/workspace-runtime/release", {
           method: "POST",
           headers: {
             authorization: "Bearer human-a-secret",
@@ -1201,7 +1201,7 @@ describe("desktop human authentication", () => {
     const registration = (name = "A's Workspace") =>
       handleRegisterWorkspaceFromDesktop(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/register",
+          "https://app.syntila.test/api/workspace-runtime/register",
           {
             method: "POST",
             headers: {
@@ -1322,7 +1322,7 @@ describe("desktop human authentication", () => {
       );
 
     const response = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: "Bearer current-owner-secret",
@@ -1430,7 +1430,7 @@ describe("desktop human authentication", () => {
       requestInstallationId: string,
       runtimeId: string,
     ) =>
-      new Request(`https://app.conclave.test/api/workspace-runtime/${path}`, {
+      new Request(`https://app.syntila.test/api/workspace-runtime/${path}`, {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -1465,7 +1465,7 @@ describe("desktop human authentication", () => {
   it("hashes the short-lived poll token at rest", async () => {
     const { env, sqlite } = await setup();
     const response = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+      new Request("https://app.syntila.test/api/desktop-auth/intents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -1491,7 +1491,7 @@ describe("desktop human authentication", () => {
   it("does not let another signed-in User claim an owned installation", async () => {
     const { env, sqlite } = await setup();
     const humanCredential = "conclave_dhs_user-b";
-    const runtimeCredential = "conclave_workspace_tok_user-a";
+    const runtimeCredential = "syntila_workspace_tok_user-a";
     const installationId = "install_12345678-1234-4234-8234-123456789abc";
     const now = new Date().toISOString();
     sqlite
@@ -1543,7 +1543,7 @@ describe("desktop human authentication", () => {
       );
 
     const response = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: `Bearer ${humanCredential}`,
@@ -1654,7 +1654,7 @@ describe("desktop human authentication", () => {
     await addSession("session-b", "human-b", "human-b-secret");
     await addSession("session-a", "human-a", "human-a-secret");
     const request = (credential: string) =>
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: `Bearer ${credential}`,
@@ -1683,7 +1683,7 @@ describe("desktop human authentication", () => {
     ).toMatchObject({ installation_id: installationId });
 
     const connectDenied = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: "Bearer human-b-secret",
@@ -1747,7 +1747,7 @@ describe("desktop human authentication", () => {
     ).toMatchObject({ installation_id: installationId });
 
     const mismatchedInstallation = await handleCheckWorkspaceOwnership(
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -1797,7 +1797,7 @@ describe("desktop human authentication", () => {
       .prepare("UPDATE execution_workspaces SET owner_user_id = ? WHERE id = ?")
       .run("human-b", "workspace-other");
     const mismatchedWorkspace = await handleCheckWorkspaceOwnership(
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -1831,7 +1831,7 @@ describe("desktop human authentication", () => {
     });
 
     const staleLocalRegistration = await handleCheckWorkspaceOwnership(
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -1879,7 +1879,7 @@ describe("desktop human authentication", () => {
       .run("runtime-a");
 
     const canonicalWithoutLocalIds = await handleCheckWorkspaceOwnership(
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -1942,7 +1942,7 @@ describe("desktop human authentication", () => {
         new Date(Date.now() + 60_000).toISOString(),
       );
     const request = () =>
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -1994,7 +1994,7 @@ describe("desktop human authentication", () => {
         now,
       );
     const releasedWithLocalIds = await handleCheckWorkspaceOwnership(
-      new Request("https://app.conclave.test/api/workspace-runtime/ownership", {
+      new Request("https://app.syntila.test/api/workspace-runtime/ownership", {
         method: "POST",
         headers: {
           authorization: "Bearer human-a-secret",
@@ -2084,7 +2084,7 @@ describe("desktop human authentication", () => {
     const reconcile = () =>
       handleReconcileWorkspaceOwnership(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/ownership/reconcile",
+          "https://app.syntila.test/api/workspace-runtime/ownership/reconcile",
           {
             method: "POST",
             headers: {
@@ -2184,7 +2184,7 @@ describe("desktop human authentication", () => {
       );
     const request = () =>
       new Request(
-        "https://app.conclave.test/api/workspace-runtime/ownership/reconcile",
+        "https://app.syntila.test/api/workspace-runtime/ownership/reconcile",
         {
           method: "POST",
           headers: {
@@ -2301,7 +2301,7 @@ describe("desktop human authentication", () => {
     await addSession("session-a", "human-a", "human-a-secret");
     await addSession("session-b", "human-b", "human-b-secret");
     const request = (credential: string) =>
-      new Request("https://app.conclave.test/api/workspace-runtime/release", {
+      new Request("https://app.syntila.test/api/workspace-runtime/release", {
         method: "POST",
         headers: {
           authorization: `Bearer ${credential}`,
@@ -2475,13 +2475,13 @@ describe("desktop human authentication", () => {
       return Response.json({ disconnected: true });
     });
     (
-      env as unknown as { CONCLAVE_WORKSPACE_GATEWAY: unknown }
-    ).CONCLAVE_WORKSPACE_GATEWAY = {
+      env as unknown as { SYNTILA_WORKSPACE_GATEWAY: unknown }
+    ).SYNTILA_WORKSPACE_GATEWAY = {
       getByName: () => ({ fetch: gatewayFetch }),
     };
     const response = await handleDisconnectDesktopWorkspace(
       new Request(
-        "https://app.conclave.test/api/workspace-runtime/disconnect",
+        "https://app.syntila.test/api/workspace-runtime/disconnect",
         {
           method: "POST",
           headers: {
@@ -2559,7 +2559,7 @@ describe("desktop human authentication", () => {
 
     const response = await handleRotateDesktopHumanSession(
       new Request(
-        "https://app.conclave.test/api/desktop-auth/sessions/session-a/rotate",
+        "https://app.syntila.test/api/desktop-auth/sessions/session-a/rotate",
         {
           method: "POST",
           headers: { authorization: `Bearer ${oldCredential}` },
@@ -2588,7 +2588,7 @@ describe("desktop human authentication", () => {
     ).toMatchObject({ token_hash: await hashToken(rotated.credential) });
     await expect(
       handleGetDesktopHumanSession(
-        new Request("https://app.conclave.test/api/desktop-auth/session", {
+        new Request("https://app.syntila.test/api/desktop-auth/session", {
           headers: { authorization: `Bearer ${oldCredential}` },
         }),
         env,
@@ -2620,7 +2620,7 @@ describe("desktop human authentication", () => {
       );
 
     const response = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: `Bearer ${humanCredential}`,
@@ -2654,7 +2654,7 @@ describe("desktop human authentication", () => {
     });
 
     const updateResponse = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: `Bearer ${humanCredential}`,
@@ -2696,14 +2696,14 @@ describe("desktop human authentication", () => {
   it("authenticates Profile Lab with dedicated audience and enforces mutual exclusion with Workspace operations", async () => {
     const { env } = await setup();
     // Configure Profile admin user
-    (env as Record<string, unknown>).CONCLAVE_PROFILE_ADMIN_USER_IDS =
+    (env as Record<string, unknown>).SYNTILA_PROFILE_ADMIN_USER_IDS =
       "human-1";
-    (env as Record<string, unknown>).CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS =
+    (env as Record<string, unknown>).SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS =
       "human-1";
 
     // 1. Create Profile Lab auth intent
     const createRes = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+      new Request("https://app.syntila.test/api/desktop-auth/intents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -2726,7 +2726,7 @@ describe("desktop human authentication", () => {
     // 2. Check browser status reflects the Profile Lab audience
     const browserStatusRes = await handleDesktopAuthIntentBrowserStatus(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${intentData.intentId}/browser-status`,
+        `https://app.syntila.test/api/desktop-auth/intents/${intentData.intentId}/browser-status`,
       ),
       env,
       intentData.intentId,
@@ -2744,7 +2744,7 @@ describe("desktop human authentication", () => {
     // 3. Approve intent
     const approveRes = await handleApproveDesktopAuthIntent(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${intentData.intentId}/approve`,
+        `https://app.syntila.test/api/desktop-auth/intents/${intentData.intentId}/approve`,
         { method: "POST" },
       ),
       env,
@@ -2755,7 +2755,7 @@ describe("desktop human authentication", () => {
     // 4. Claim intent and verify session audience
     const claimRes = await handleClaimDesktopAuthIntent(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${intentData.intentId}/claim`,
+        `https://app.syntila.test/api/desktop-auth/intents/${intentData.intentId}/claim`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -2777,7 +2777,7 @@ describe("desktop human authentication", () => {
 
     // 5. Verify Profile Lab session CAN access profile admin routes
     const adminReq = new Request(
-      "https://app.conclave.test/api/profile-admin/profiles",
+      "https://app.syntila.test/api/profile-admin/profiles",
       {
         headers: {
           authorization: `Bearer ${profileLabSession.credential}`,
@@ -2791,7 +2791,7 @@ describe("desktop human authentication", () => {
 
     // 6. Verify Profile Lab session CANNOT register or manipulate workspaces (mutual exclusion)
     const wsRegisterRes = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: `Bearer ${profileLabSession.credential}`,
@@ -2823,7 +2823,7 @@ describe("desktop human authentication", () => {
 
     // 7. Create a normal Workspace session (conclave.desktop.management)
     const wsIntentRes = await handleCreateDesktopAuthIntent(
-      new Request("https://app.conclave.test/api/desktop-auth/intents", {
+      new Request("https://app.syntila.test/api/desktop-auth/intents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -2841,7 +2841,7 @@ describe("desktop human authentication", () => {
     expect(wsIntent.audience).toBe("conclave.desktop.management");
     await handleApproveDesktopAuthIntent(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${wsIntent.intentId}/approve`,
+        `https://app.syntila.test/api/desktop-auth/intents/${wsIntent.intentId}/approve`,
         { method: "POST" },
       ),
       env,
@@ -2849,7 +2849,7 @@ describe("desktop human authentication", () => {
     );
     const wsClaimRes = await handleClaimDesktopAuthIntent(
       new Request(
-        `https://app.conclave.test/api/desktop-auth/intents/${wsIntent.intentId}/claim`,
+        `https://app.syntila.test/api/desktop-auth/intents/${wsIntent.intentId}/claim`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -2863,7 +2863,7 @@ describe("desktop human authentication", () => {
 
     // 8. Verify Workspace session CANNOT access profile admin routes (mutual exclusion)
     const wsAdminReq = new Request(
-      "https://app.conclave.test/api/profile-admin/profiles",
+      "https://app.syntila.test/api/profile-admin/profiles",
       {
         headers: {
           authorization: `Bearer ${wsSession.credential}`,

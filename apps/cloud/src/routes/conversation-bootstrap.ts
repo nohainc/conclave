@@ -6,7 +6,7 @@ import {
   type ContextHistoryFact,
   type ContextWorkflowState,
   type WorkflowExecutionContext,
-} from "@conclave/core";
+} from "@syntila/core";
 /** Syntila canonical history only. This contains no provider-native state. */
 export interface ConversationBootstrap {
   readonly schemaVersion: 1;

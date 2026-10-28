@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:conclave_workspace/worker_trust_policy.dart';
+import 'package:syntila_workspace/worker_trust_policy.dart';
 
 const fixturePublisher = 'Syntila Test';
 const fixtureKeyId = 'test-ed25519-v1';
@@ -49,7 +49,7 @@ class Ed25519ReleaseFixture {
     };
     final signature = await Ed25519().sign(
       utf8.encode(
-          'conclave-workspace-release-metadata-v1\n${canonicalJson(payload)}'),
+          'syntila-workspace-release-metadata-v1\n${canonicalJson(payload)}'),
       keyPair: pair,
     );
     return base64.encode(signature.bytes);

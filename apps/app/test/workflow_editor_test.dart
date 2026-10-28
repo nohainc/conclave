@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
-import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
-import 'package:conclave_app/src/ax/workflow_configuration_options.dart';
-import 'package:conclave_app/src/features/workflows/workflow_editor.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_session_catalogs.dart';
+import 'package:syntila_app/src/ax/sync/ax_workflow_configurations.dart';
+import 'package:syntila_app/src/ax/workflow_configuration_options.dart';
+import 'package:syntila_app/src/features/workflows/workflow_editor.dart';
 import 'workflows_page_test.dart' show WorkflowSource, workflow;
 
 AxWorker worker(String id,

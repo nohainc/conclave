@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
-import 'package:conclave_profile_lab/profile_lab_session_store.dart';
-import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
-import 'package:conclave_profile_lab/utils/profile_domain_diff.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_profile_lab/controllers/profile_lab_controller.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_session_store.dart';
+import 'package:syntila_profile_lab/profile_lab_test_sandbox.dart';
+import 'package:syntila_profile_lab/utils/profile_domain_diff.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

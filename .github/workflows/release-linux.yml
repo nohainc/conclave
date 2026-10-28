@@ -56,9 +56,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     env:
-      CONCLAVE_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
+      SYNTILA_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
       # Public releases may never fall back to a fixture trust anchor.
-      CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || (!inputs.publish && '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}') || '' }}
+      SYNTILA_RELEASE_TRUST_KEYS_JSON: ${{ vars.SYNTILA_RELEASE_TRUST_KEYS_JSON || (!inputs.publish && '{"syntila-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}') || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-flutter
@@ -79,14 +79,14 @@ jobs:
       - name: Test actual APT install and upgrade
         run: bash scripts/test-workspace-linux-package.sh '${{ matrix.arch }}'
       - name: Test headless setup without a keyring or Workers
-        run: bash scripts/test-workspace-headless-candidate.sh 'dist/conclave-workspace/linux-${{ matrix.arch }}'
+        run: bash scripts/test-workspace-headless-candidate.sh 'dist/syntila-workspace/linux-${{ matrix.arch }}'
       - name: Retain tested candidates
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-workspace-${{ matrix.arch }}
           path: |
-            dist/conclave-workspace/deb/conclave-workspace_${{ needs.preflight.outputs.version }}_*.deb
-            dist/conclave-workspace/conclave-workspace-headless-linux-${{ matrix.arch }}.tar.gz
+            dist/syntila-workspace/deb/syntila-workspace_${{ needs.preflight.outputs.version }}_*.deb
+            dist/syntila-workspace/syntila-workspace-headless-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   publish:
@@ -104,7 +104,7 @@ jobs:
       - name: Export public signing identity
         id: signing
         env:
-          FINGERPRINT: ${{ vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
+          FINGERPRINT: ${{ vars.SYNTILA_APT_SIGNING_FINGERPRINT }}
         run: echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
       - name: Download tested packages
         env:
@@ -112,9 +112,9 @@ jobs:
         run: gh run download "$GITHUB_RUN_ID" --pattern 'linux-workspace-*' --dir candidates
       - name: Sign and publish the static APT repository
         env:
-          CONCLAVE_APT_PRIVATE_KEY: ${{ secrets.CONCLAVE_APT_PRIVATE_KEY }}
-          CONCLAVE_APT_SIGNING_FINGERPRINT: ${{ vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
-          CONCLAVE_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
+          SYNTILA_APT_PRIVATE_KEY: ${{ secrets.SYNTILA_APT_PRIVATE_KEY }}
+          SYNTILA_APT_SIGNING_FINGERPRINT: ${{ vars.SYNTILA_APT_SIGNING_FINGERPRINT }}
+          SYNTILA_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/release/publish-apt-repository.sh candidates
       - name: Upload signed APT site
@@ -152,7 +152,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Verify installation from public HTTPS APT
         env:
-          CONCLAVE_APT_URL: ${{ needs.deploy.outputs.page_url }}
-          CONCLAVE_APT_SIGNING_FINGERPRINT: ${{ needs.publish.outputs.fingerprint }}
-          CONCLAVE_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
+          SYNTILA_APT_URL: ${{ needs.deploy.outputs.page_url }}
+          SYNTILA_APT_SIGNING_FINGERPRINT: ${{ needs.publish.outputs.fingerprint }}
+          SYNTILA_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
         run: bash scripts/test-workspace-public-apt.sh

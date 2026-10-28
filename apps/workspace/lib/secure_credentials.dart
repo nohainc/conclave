@@ -40,9 +40,9 @@ abstract interface class CredentialStorePreflight {
 class PlatformSecureCredentialStore
     implements SecureCredentialStore, CredentialStorePreflight {
   const PlatformSecureCredentialStore({
-    this.service = conclaveWorkspaceIsLocalBuild
-        ? 'com.conclaveax.workspace.local'
-        : 'com.conclaveax.workspace',
+    this.service = syntilaWorkspaceIsLocalBuild
+        ? 'com.syntila.workspace.local'
+        : 'com.syntila.workspace',
     String? platform,
     this.nativeKeychain,
     this.credentialDirectory,
@@ -63,7 +63,7 @@ class PlatformSecureCredentialStore
   Directory get _credentialDirectory {
     final selected = credentialDirectory;
     if (selected != null) return selected;
-    final root = Platform.environment['CONCLAVE_WORKSPACE_DATA_DIR'] ??
+    final root = Platform.environment['SYNTILA_WORKSPACE_DATA_DIR'] ??
         WorkspacePaths.defaultStateDirectory().path;
     return Directory('$root/Credentials');
   }

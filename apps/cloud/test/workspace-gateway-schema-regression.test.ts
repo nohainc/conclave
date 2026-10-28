@@ -230,11 +230,11 @@ describe("Workspace Gateway active-schema regression", () => {
           acceptedSocket = socket as TestSocket;
         },
       } as never,
-      { CONCLAVE_DB: new LocalD1(database) as never },
+      { SYNTILA_DB: new LocalD1(database) as never },
     );
     const response = (await gateway.fetch(
       new Request(
-        `https://app.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=${runtimeId}`,
+        `https://app.syntila.test/api/workspace-gateway/connect?workspaceRuntimeId=${runtimeId}`,
         {
           headers: {
             upgrade: "websocket",
@@ -275,7 +275,7 @@ describe("Workspace Gateway active-schema regression", () => {
     gateway.webSocketMessage(
       acceptedSocket as unknown as WebSocket,
       JSON.stringify({
-        protocol: "conclave.workspace-runtime-protocol",
+        protocol: "syntila.workspace-runtime-protocol",
         protocolVersion: "5.1",
         messageId: "heartbeat-schema-regression",
         timestamp: new Date().toISOString(),
@@ -366,11 +366,11 @@ describe("Workspace Gateway active-schema regression", () => {
       },
     };
     const failureGateway = new WorkspaceGateway(failureState as never, {
-      CONCLAVE_DB: new LocalD1(database) as never,
+      SYNTILA_DB: new LocalD1(database) as never,
     });
     const failureResponse = (await failureGateway.fetch(
       new Request(
-        `https://app.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=${failedRuntimeId}`,
+        `https://app.syntila.test/api/workspace-gateway/connect?workspaceRuntimeId=${failedRuntimeId}`,
         {
           headers: {
             upgrade: "websocket",
@@ -389,10 +389,10 @@ describe("Workspace Gateway active-schema regression", () => {
       ).status,
     ).toBe("offline");
     const rehydratedGateway = new WorkspaceGateway(failureState as never, {
-      CONCLAVE_DB: new LocalD1(database) as never,
+      SYNTILA_DB: new LocalD1(database) as never,
     });
     const liveStatus = (await rehydratedGateway.fetch(
-      new Request("https://app.conclave.test/status"),
+      new Request("https://app.syntila.test/status"),
     )) as unknown as TestResponse;
     expect(liveStatus.value).toMatchObject({
       online: true,
@@ -408,14 +408,14 @@ describe("Workspace Gateway active-schema regression", () => {
     // the socket already CLOSING; it must still be recognised as the current
     // connection so liveness and readiness are cleared.
     const wokenGateway = new WorkspaceGateway(failureState as never, {
-      CONCLAVE_DB: new LocalD1(database) as never,
+      SYNTILA_DB: new LocalD1(database) as never,
     });
     (failureSocket as unknown as { readyState: number }).readyState = 2;
     wokenGateway.webSocketClose(failureSocket as unknown as WebSocket);
     let afterClose: TestResponse | undefined;
     for (let attempt = 0; attempt < 50; attempt += 1) {
       afterClose = (await wokenGateway.fetch(
-        new Request("https://app.conclave.test/status"),
+        new Request("https://app.syntila.test/status"),
       )) as unknown as TestResponse;
       if ((afterClose.value as { online?: boolean }).online === false) break;
       await Promise.resolve();

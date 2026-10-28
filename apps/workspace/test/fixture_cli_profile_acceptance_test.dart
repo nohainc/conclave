@@ -1,18 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/space_directory.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
-import 'package:conclave_workspace/worker_diagnostic_store.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
-import 'package:conclave_workspace/worker_catalog_coordinator.dart';
-import 'package:conclave_workspace/local_worker_setup.dart';
-import 'package:conclave_workspace/workspace_worker_view.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/space_directory.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/worker_diagnostic_store.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/worker_catalog_coordinator.dart';
+import 'package:syntila_workspace/local_worker_setup.dart';
+import 'package:syntila_workspace/workspace_worker_view.dart';
 import 'package:test/test.dart';
 
 import 'support/ed25519_release_fixture.dart';
@@ -221,7 +221,7 @@ void main() {
       expect(providerBuild.exitCode, 0, reason: '${providerBuild.stderr}');
       final bundledEngine = File(
         '$repository/apps/workspace/assets/engines/'
-        'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+        'syntila_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
       );
       final dartDirectory = File(_dartExecutable()).parent.path;
       final inheritedPath = Platform.environment['PATH'] ?? '';
@@ -230,7 +230,7 @@ void main() {
             bundledEngine.existsSync() ? bundledEngine.path : _dartExecutable(),
         engineArgumentsPrefix: bundledEngine.existsSync()
             ? const []
-            : ['$repository/engines/cli_worker/bin/conclave_cli_worker.dart'],
+            : ['$repository/engines/cli_worker/bin/syntila_cli_worker.dart'],
         environmentOverrides: {
           'PATH': '${providerDirectory.path}${Platform.isWindows ? ';' : ':'}'
               '$dartDirectory${Platform.isWindows ? ';' : ':'}$inheritedPath',

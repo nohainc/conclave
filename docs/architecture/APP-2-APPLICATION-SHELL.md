@@ -4,7 +4,7 @@ The Syntila application has an app-level shell boundary at
 `apps/app/lib/src/app_shell.dart` and an app routing boundary at
 `apps/app/lib/src/router.dart`.
 
-`ConclaveAppShell` owns application lifecycle, authentication, shared stores,
+`SyntilaAppShell` owns application lifecycle, authentication, shared stores,
 browser history, and cross-feature coordination. Feature pages receive domain
 models and callbacks instead of reaching into shell state directly.
 

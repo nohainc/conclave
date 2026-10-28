@@ -13,7 +13,7 @@ it("packaging rejects missing, mismatched and altered build output", () => {
   const root = mkdtempSync(join(tmpdir(), "workspace-manifest-"));
   roots.push(root);
   mkdirSync(join(root, "assets/engines"), { recursive: true });
-  for (const name of ["conclave-workspace", "assets/engines/conclave-agent"]) {
+  for (const name of ["syntila-workspace", "assets/engines/syntila-agent"]) {
     writeFileSync(join(root, name), "fixture");
   }
   const run = (mode, version = "1.0.4") =>
@@ -26,6 +26,6 @@ it("packaging rejects missing, mismatched and altered build output", () => {
   run("record");
   expect(() => run("verify")).not.toThrow();
   expect(() => run("verify", "1.0.5")).toThrow();
-  writeFileSync(join(root, "conclave-workspace"), "stale");
+  writeFileSync(join(root, "syntila-workspace"), "stale");
   expect(() => run("verify")).toThrow();
 });

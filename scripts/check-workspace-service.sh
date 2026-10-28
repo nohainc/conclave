@@ -19,7 +19,7 @@ if [[ ! -f "$WORKSPACE_DIR/.dart_tool/package_config.json" ]]; then
   echo "Workspace dependencies are not resolved; run dart pub get first." >&2
   exit 1
 fi
-if [[ ! -x "$WORKSPACE_DIR/assets/engines/conclave-agent" && ! -x "$WORKSPACE_DIR/assets/engines/conclave_cli_worker_engine" ]]; then
+if [[ ! -x "$WORKSPACE_DIR/assets/engines/syntila-agent" && ! -x "$WORKSPACE_DIR/assets/engines/syntila_cli_worker_engine" ]]; then
   echo "The generic CLI Worker Engine is missing; build it first." >&2
   exit 1
 fi
@@ -32,7 +32,7 @@ trap 'rm -rf "$TEMP_ROOT"' EXIT
 cd "$WORKSPACE_DIR"
 "$DART" compile exe \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
-  bin/conclave_workspace_service.dart \
+  bin/syntila_workspace_service.dart \
   -o "$TEMP_ROOT/workspace"
 "$TEMP_ROOT/workspace" \
   --once \

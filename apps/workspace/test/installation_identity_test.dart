@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/workspace_runtime.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/workspace_runtime.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -11,7 +11,7 @@ void main() {
 
     setUp(() async {
       tempDir =
-          await Directory.systemTemp.createTemp('conclave-install-id-test-');
+          await Directory.systemTemp.createTemp('syntila-install-id-test-');
     });
 
     tearDown(() async {
@@ -91,7 +91,7 @@ void main() {
 
     test('generates unique IDs across separate installations', () async {
       final tempDir2 =
-          await Directory.systemTemp.createTemp('conclave-install-id-test2-');
+          await Directory.systemTemp.createTemp('syntila-install-id-test2-');
       addTearDown(() => tempDir2.delete(recursive: true));
 
       final store1 = InstallationIdentityStore(tempDir);

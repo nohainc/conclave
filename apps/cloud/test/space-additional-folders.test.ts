@@ -38,7 +38,7 @@ function fixture() {
        ('m3','T','V','owner','now','now'),('m4','T','U','collaborator','now','now');
      INSERT INTO space_workflow_settings VALUES('S','A','now'),('T','F','now');`,
   );
-  const env = { CONCLAVE_DB: db } as SecurityEnv;
+  const env = { SYNTILA_DB: db } as SecurityEnv;
   const call = async (user: string, space: string, body?: unknown) => {
     let response: Response;
     try {

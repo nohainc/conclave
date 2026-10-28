@@ -68,7 +68,7 @@ final class _WebAxBrowserNavigation
     // Worker and this app run on different ports, so a bare '/api' path would
     // hit the app's own dev server. The return target is an absolute URL of
     // this app; Cloud accepts only its own or the configured app origin.
-    const configuredApi = String.fromEnvironment('CONCLAVE_API_URL');
+    const configuredApi = String.fromEnvironment('SYNTILA_API_URL');
     final apiBase = configuredApi.isNotEmpty ? configuredApi : '/api';
     final uri = Uri.parse('$apiBase/auth/sign-in/$provider').replace(
       queryParameters: {'returnTo': Uri.base.resolveUri(returnTo).toString()},

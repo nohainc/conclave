@@ -6,11 +6,11 @@ import 'src/ax/ax_data.dart';
 import 'src/ax/ax_render_diagnostics.dart';
 
 void main() {
-  runConclaveApp(() => runApp(const ConclaveApp()));
+  runSyntilaApp(() => runApp(const SyntilaApp()));
 }
 
-class ConclaveApp extends StatelessWidget {
-  const ConclaveApp({
+class SyntilaApp extends StatelessWidget {
+  const SyntilaApp({
     super.key,
     this.services = const DefaultPlatformServices(),
     this.dataSource,
@@ -23,7 +23,7 @@ class ConclaveApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConclaveAppShell(
+    return SyntilaAppShell(
       services: services,
       dataSource: dataSource ?? AxApiClient(),
       initialUri: initialUri,

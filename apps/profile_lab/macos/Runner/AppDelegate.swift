@@ -4,8 +4,8 @@ import Security
 
 @main
 class AppDelegate: FlutterAppDelegate {
-  private let profileLabKeychainChannel = "com.conclaveax.profile-lab/keychain"
-  private let profileLabKeychainService = "com.conclaveax.profile-lab"
+  private let profileLabKeychainChannel = "com.syntila.profile-lab/keychain"
+  private let profileLabKeychainService = "com.syntila.profile-lab"
 
   override func applicationDidFinishLaunching(_ notification: Notification) {
     guard let controller = mainFlutterWindow?.contentViewController as? FlutterViewController else {

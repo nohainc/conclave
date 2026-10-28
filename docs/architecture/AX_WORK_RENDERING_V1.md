@@ -33,7 +33,7 @@ its source text changes.
 ## Acceptance evidence
 
 The existing Work rendering regression verifies that previously rendered
-responses retain their `ConclaveMarkdownBody` element and content key while
+responses retain their `SyntilaMarkdownBody` element and content key while
 optimistic requests and live progress are inserted around them. Focused AX
 activity, presentation-controller and Work history tests cover selector
 isolation, bounded activity behavior and lifecycle updates.

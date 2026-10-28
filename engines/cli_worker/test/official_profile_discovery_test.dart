@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/src/cli_executable_locator.dart';
+import 'package:syntila_cli_worker_runtime/src/cli_executable_locator.dart';
 import 'package:test/test.dart';
 
 void main() {

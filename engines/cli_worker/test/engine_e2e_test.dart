@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -21,7 +21,7 @@ void main() {
         'jsonl';
     final profileBytes = utf8.encode(jsonEncode(profile));
     final root = await Directory.systemTemp.createTemp(
-      'conclave-malformed-jsonl-',
+      'syntila-malformed-jsonl-',
     );
     final profileFile = File('${root.path}/profile.json')
       ..writeAsBytesSync(profileBytes);
@@ -29,7 +29,7 @@ void main() {
     final process = await Process.start(
       Platform.resolvedExecutable,
       [
-        '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+        '$repository/engines/cli_worker/bin/syntila_cli_worker.dart',
         '--profile',
         profileFile.path,
         '--engine-version',
@@ -90,10 +90,10 @@ void main() {
       final profilePath =
           '$repository/packages/tool-profile/test/fixtures/fixture-cli.v1.json';
       final enginePath =
-          '$repository/engines/cli_worker/bin/conclave_cli_worker.dart';
+          '$repository/engines/cli_worker/bin/syntila_cli_worker.dart';
       final profileBytes = await File(profilePath).readAsBytes();
       final stateDirectory = await Directory.systemTemp.createTemp(
-        'conclave-engine-state-',
+        'syntila-engine-state-',
       );
       final providerDirectory = Directory('${stateDirectory.path}/provider-bin')
         ..createSync();

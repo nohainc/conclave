@@ -22,14 +22,14 @@ describe("Repository Branding CI Enforcement", () => {
 
   describe("Canonical Vector Masters Verification", () => {
     it("accepts only wrappers embedding the exact approved source", () => {
-      const tempDir = join(tmpdir(), `conclave-approved-source-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-approved-source-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
         const source = readFileSync(
-          join(rootDir, "assets/branding/conclave_source.png"),
+          join(rootDir, "assets/branding/syntila_source.png"),
         );
         writeFileSync(
-          join(tempDir, "assets/branding/conclave_source.png"),
+          join(tempDir, "assets/branding/syntila_source.png"),
           source,
         );
         for (const svg of CANONICAL_SVG_MASTERS) {
@@ -40,7 +40,7 @@ describe("Repository Branding CI Enforcement", () => {
         }
         expect(verifyCanonicalSvgMasters(tempDir)).toEqual([]);
         writeFileSync(
-          join(tempDir, "assets/branding/conclave_source.png"),
+          join(tempDir, "assets/branding/syntila_source.png"),
           "different source",
         );
         expect(verifyCanonicalSvgMasters(tempDir).length).toBeGreaterThan(0);
@@ -55,11 +55,11 @@ describe("Repository Branding CI Enforcement", () => {
     });
 
     it("rejects SVGs with embedded rasters or base64 data URIs", () => {
-      const tempDir = join(tmpdir(), `conclave-test-raster-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-raster-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
         for (const svg of CANONICAL_SVG_MASTERS) {
-          if (svg === "conclave_mark.svg") {
+          if (svg === "syntila_mark.svg") {
             writeFileSync(
               join(tempDir, "assets/branding", svg),
               `<svg><path d="M0 0"/><image href="data:image/png;base64,iVBORw0KGgo="/></svg>`,
@@ -81,11 +81,11 @@ describe("Repository Branding CI Enforcement", () => {
     });
 
     it("rejects SVGs without path or vector geometry definitions", () => {
-      const tempDir = join(tmpdir(), `conclave-test-nopath-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-nopath-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
         for (const svg of CANONICAL_SVG_MASTERS) {
-          if (svg === "conclave_mark.svg") {
+          if (svg === "syntila_mark.svg") {
             writeFileSync(
               join(tempDir, "assets/branding", svg),
               `<svg viewBox="0 0 100 100"><rect width="10" height="10"/></svg>`,
@@ -114,12 +114,12 @@ describe("Repository Branding CI Enforcement", () => {
     });
 
     it("flags missing generated icon files", () => {
-      const tempDir = join(tmpdir(), `conclave-test-missing-png-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-missing-png-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
         // Only create 1 png
         writeFileSync(
-          join(tempDir, "assets/branding/conclave_logo.png"),
+          join(tempDir, "assets/branding/syntila_logo.png"),
           "mock",
         );
 
@@ -141,7 +141,7 @@ describe("Repository Branding CI Enforcement", () => {
     });
 
     it("flags drift when target file content diverges from canonical master", () => {
-      const tempDir = join(tmpdir(), `conclave-test-drift-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-drift-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
         mkdirSync(join(tempDir, "apps/app/assets/branding"), {
@@ -152,11 +152,11 @@ describe("Repository Branding CI Enforcement", () => {
         const modifiedContent = '<svg><path d="M20 20"/></svg>';
 
         writeFileSync(
-          join(tempDir, "assets/branding/conclave_mark.svg"),
+          join(tempDir, "assets/branding/syntila_mark.svg"),
           canonicalContent,
         );
         writeFileSync(
-          join(tempDir, "apps/app/assets/branding/conclave_mark.svg"),
+          join(tempDir, "apps/app/assets/branding/syntila_mark.svg"),
           modifiedContent,
         );
 
@@ -178,11 +178,11 @@ describe("Repository Branding CI Enforcement", () => {
     });
 
     it("flags 3D artwork placed inside assets/branding/", () => {
-      const tempDir = join(tmpdir(), `conclave-test-3d-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-3d-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "assets/branding"), { recursive: true });
         writeFileSync(
-          join(tempDir, "assets/branding/conclave_mark_3d.png"),
+          join(tempDir, "assets/branding/syntila_mark_3d.png"),
           "fake-3d-bytes",
         );
 
@@ -202,7 +202,7 @@ describe("Repository Branding CI Enforcement", () => {
     });
 
     it("flags direct hardcoded Color(0xff5e4bd8) in application code", () => {
-      const tempDir = join(tmpdir(), `conclave-test-hardcolor-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-hardcolor-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "apps/app/lib"), { recursive: true });
         writeFileSync(
@@ -223,7 +223,7 @@ class MyWidget extends StatelessWidget {
     });
 
     it("flags direct hardcoded hex code #B8A9FE in application code", () => {
-      const tempDir = join(tmpdir(), `conclave-test-hardhex-${Date.now()}`);
+      const tempDir = join(tmpdir(), `syntila-test-hardhex-${Date.now()}`);
       try {
         mkdirSync(join(tempDir, "apps/workspace/lib"), { recursive: true });
         writeFileSync(

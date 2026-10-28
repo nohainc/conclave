@@ -1,6 +1,6 @@
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -55,7 +55,7 @@ for (const file of await htmlFiles(dist)) {
     errors.push(`${relative}: public architecture-version terminology found`);
   }
   const githubLinks = [
-    ...source.matchAll(/https:\/\/github\.com\/nohainc\/conclave[^"'\s]*/gi),
+    ...source.matchAll(/https:\/\/github\.com\/nohainc\/syntila[^"'\s]*/gi),
   ].map(([link]) => link);
   const approvedDownloads =
     relative === "downloads/index.html" &&
@@ -81,7 +81,7 @@ for (const content of requiredHomepageContent) {
   if (!home.includes(content))
     errors.push(`homepage: missing release content: ${content}`);
 }
-if ((home.match(/href="https:\/\/app\.conclaveax\.com/g) ?? []).length < 3) {
+if ((home.match(/href="https:\/\/app\.syntila\.com/g) ?? []).length < 3) {
   errors.push("homepage: expected direct app CTA links");
 }
 for (const link of ["/privacy/", "/terms/", "/security/", "/use-cases/"]) {

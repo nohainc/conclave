@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 45
     env:
       # Compile-only trust root; this workflow never publishes a release.
-      CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+      SYNTILA_RELEASE_TRUST_KEYS_JSON: ${{ vars.SYNTILA_RELEASE_TRUST_KEYS_JSON || '{"syntila-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Linux desktop toolchain
@@ -36,15 +36,15 @@ jobs:
       - name: Packaged service one-shot lifecycle
         run: |
           state="$(mktemp -d)"
-          CONCLAVE_WORKSPACE_SECRET_STORE=file \
-            dist/conclave-workspace/linux/release/workspace \
+          SYNTILA_WORKSPACE_SECRET_STORE=file \
+            dist/syntila-workspace/linux/release/workspace \
             --data-dir "$state/state" --once
           test -f "$state/state/installation-id"
       - name: Smoke test packaged UI startup
         run: |
-          bundle="$PWD/dist/conclave-workspace/linux/release"
+          bundle="$PWD/dist/syntila-workspace/linux/release"
           export HOME="$(mktemp -d)"
-          xvfb-run -a "$bundle/conclave_workspace" &
+          xvfb-run -a "$bundle/syntila_workspace" &
           app=$!
           sleep 10
           if ! kill -0 "$app" 2>/dev/null; then
@@ -55,6 +55,6 @@ jobs:
       - name: Retain bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: conclave-workspace-linux-x64
-          path: dist/conclave-workspace/*.tar.gz
+          name: syntila-workspace-linux-x64
+          path: dist/syntila-workspace/*.tar.gz
           if-no-files-found: error

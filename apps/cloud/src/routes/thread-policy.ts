@@ -1,6 +1,6 @@
 import { loadSpacePermissions } from "./space-permissions.js";
 import { spaceWorkerExecutionOptions } from "../worker-execution-options.js";
-import { type Permission, type SecurityContext } from "@conclave/security";
+import { type Permission, type SecurityContext } from "@syntila/security";
 import {
   validateWorkerExecutionSelection,
   canDiscussThread,
@@ -16,7 +16,7 @@ import {
   THREAD_BINDING_IDS,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
-} from "@conclave/core";
+} from "@syntila/core";
 
 import type { SecurityEnv } from "./http-security.js";
 import { authorizeRequest } from "./http-security.js";
@@ -271,7 +271,7 @@ export async function authorizeThreadAccess(
   thread: Thread;
   spaceId: string;
 }> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, name, status,
             access_policy_json AS accessPolicyJson, lead_user_id AS leadUserId,
             created_at AS createdAt, updated_at AS updatedAt
@@ -296,7 +296,7 @@ export async function authorizeThreadAccess(
     String(row.spaceId),
     accessContext,
   );
-  const membership = await env.CONCLAVE_DB.prepare(
+  const membership = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, user_id AS userId, role,
             created_at AS createdAt, updated_at AS updatedAt
      FROM space_memberships WHERE space_id = ?1 AND user_id = ?2`,
@@ -442,7 +442,7 @@ export async function validateWorkflowWorkerEligibility(
       });
       continue;
     }
-    const row = await env.CONCLAVE_DB.prepare(
+    const row = await env.SYNTILA_DB.prepare(
       `SELECT i.workspace_id AS workspaceId, i.worker_type_id AS workerTypeId,
               i.activation_state AS activationState, i.readiness_state AS readinessState,
               i.readiness_issue_code AS readinessIssueCode,

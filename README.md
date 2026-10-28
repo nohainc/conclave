@@ -35,7 +35,7 @@ are implementation details shown only in Advanced Diagnostics.
 - **Syntila Cloud** — TypeScript/Cloudflare collaboration, scheduling,
   Workspace Gateway, Worker catalog and Profile release control plane.
 - **Syntila Workspace** — headless Dart execution/security service and
-  management CLI (`conclave-workspace`) for macOS, Linux and Windows.
+  management CLI (`syntila-workspace`) for macOS, Linux and Windows.
 - **Syntila Profile Lab** — internal macOS Flutter/Dart engineering desktop
   application for Worker and Tool Profile authoring, testing, and lifecycle
   management.
@@ -46,13 +46,13 @@ are implementation details shown only in Advanced Diagnostics.
 ## Install Workspace on Ubuntu
 
 Headless Workspace packages for Ubuntu 22.04 and newer are available for amd64
-and ARM64 through the [signed APT repository](https://nohainc.github.io/conclave/).
+and ARM64 through the [signed APT repository](https://nohainc.github.io/syntila/).
 Follow the one-time repository setup there, then install with:
 
 ```bash
 sudo apt update
-sudo apt install conclave-workspace
-conclave-workspace setup
+sudo apt install syntila-workspace
+syntila-workspace setup
 # Existing Cloud email/password; no browser needed on the server.
 sudo loginctl enable-linger "$USER"
 ```
@@ -96,9 +96,9 @@ to its owner. Local email sign-in uses the local account database, so create a
 local account first if needed; hosted accounts are separate. If an already
 running backend reports “Authentication is not configured”, run
 `node scripts/setup-development-auth.mjs` and restart the local backend.
-To sign in with Google or GitHub locally, add `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` /
-`CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` or `CONCLAVE_AUTH_GITHUB_CLIENT_ID` /
-`CONCLAVE_AUTH_GITHUB_CLIENT_SECRET` to `apps/cloud/.dev.vars`; the OAuth setup is
+To sign in with Google or GitHub locally, add `SYNTILA_AUTH_GOOGLE_CLIENT_ID` /
+`SYNTILA_AUTH_GOOGLE_CLIENT_SECRET` or `SYNTILA_AUTH_GITHUB_CLIENT_ID` /
+`SYNTILA_AUTH_GITHUB_CLIENT_SECRET` to `apps/cloud/.dev.vars`; the OAuth setup is
 described in the [Cloudflare deployment guide](docs/deployment/CLOUDFLARE.md#github-sign-in).
 Neither mode runs migrations or deploys production code.
 
@@ -180,7 +180,7 @@ Provider secrets never enter Syntila Cloud.
 - [Architecture](ARCHITECTURE.md)
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
-- [ADR-019: Syntila Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
+- [ADR-019: Syntila Profile Lab Architecture Contract](docs/decisions/ADR-019-syntila-profile-lab.md)
 - [Tool Profile v1](docs/specifications/TOOL_PROFILE_V1.md)
 - [Architecture v8 implementation plan](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md)
 - [Work v1 contract](docs/specifications/WORK_V1_CONTRACT.md)

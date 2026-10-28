@@ -118,7 +118,7 @@ describe("desktop auth and runtime transport contracts", () => {
     const response = {
       intentId: "intent-a",
       pollToken: "p".repeat(32),
-      verificationUrl: "https://app.conclave.test/desktop-auth/approve",
+      verificationUrl: "https://app.syntila.test/desktop-auth/approve",
       expiresAt: timestamp,
       pollIntervalMs: 2000,
     };

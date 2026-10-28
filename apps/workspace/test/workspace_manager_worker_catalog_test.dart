@@ -1,9 +1,9 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/workspace_manager_worker_catalog.dart';
-import 'package:conclave_workspace/worker_check_progress.dart';
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/workspace_manager_worker_catalog.dart';
+import 'package:syntila_workspace/worker_check_progress.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
 
 void main() {
   test('per-Worker updates send one scoped command without a full refresh',

@@ -30,8 +30,8 @@ describe("Recipient Invitations API", () => {
     `);
 
     const env = {
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: db,
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: db,
       TEST_AUTHENTICATION: async (req: Request) => {
         const authHeader = req.headers.get("authorization");
         if (authHeader === "Bearer ulikoss") {
@@ -110,7 +110,7 @@ describe("Recipient Invitations API", () => {
         VALUES ('pinv-other', 'proj-1', 'other@example.com', 'collaborator', 'hash-other', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
-      const req = new Request("https://conclave.test/api/me/invitations", {
+      const req = new Request("https://syntila.test/api/me/invitations", {
         headers: { authorization: "Bearer ulikoss" },
       });
       const res = await handleListCurrentUserInvitations(req, env as never);
@@ -142,7 +142,7 @@ describe("Recipient Invitations API", () => {
         VALUES ('pinv-router', 'proj-1', 'ulikossnokia@gmail.com', 'collaborator', 'hash-r', 'user-vitalii', 'pending', '${future}', '${future}', '${future}');
       `);
 
-      const req = new Request("https://conclave.test/api/me/invitations", {
+      const req = new Request("https://syntila.test/api/me/invitations", {
         headers: { authorization: "Bearer ulikoss" },
       });
       const res = await worker.fetch(req, env as never);
@@ -163,7 +163,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/invitations/pinv-accept-1/accept",
+        "https://syntila.test/api/invitations/pinv-accept-1/accept",
         {
           method: "POST",
           headers: { authorization: "Bearer ulikoss" },
@@ -216,7 +216,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/invitations/pinv-wrong/accept",
+        "https://syntila.test/api/invitations/pinv-wrong/accept",
         {
           method: "POST",
           headers: { authorization: "Bearer other" },
@@ -237,7 +237,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/invitations/pinv-exp-acc/accept",
+        "https://syntila.test/api/invitations/pinv-exp-acc/accept",
         {
           method: "POST",
           headers: { authorization: "Bearer ulikoss" },
@@ -260,7 +260,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/invitations/pinv-dec-1/decline",
+        "https://syntila.test/api/invitations/pinv-dec-1/decline",
         {
           method: "POST",
           headers: { authorization: "Bearer ulikoss" },
@@ -308,7 +308,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/invitations/pinv-dec-wrong/decline",
+        "https://syntila.test/api/invitations/pinv-dec-wrong/decline",
         {
           method: "POST",
           headers: { authorization: "Bearer other" },
@@ -329,7 +329,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/invitations/pinv-rt-1/accept",
+        "https://syntila.test/api/invitations/pinv-rt-1/accept",
         {
           method: "POST",
           headers: { authorization: "Bearer ulikoss" },
@@ -372,7 +372,7 @@ describe("Recipient Invitations API", () => {
         VALUES ('user-new', 'newuser@example.com', 'New User', 'active', '${now}', '${now}');
       `);
 
-      const reqAuth = new Request("https://conclave.test/api/me/invitations", {
+      const reqAuth = new Request("https://syntila.test/api/me/invitations", {
         headers: { authorization: "Bearer newuser" },
       });
       const customEnv = {
@@ -404,7 +404,7 @@ describe("Recipient Invitations API", () => {
 
       // 2. Acceptance
       const acceptReq = new Request(
-        "https://conclave.test/api/invitations/pinv-newuser/accept",
+        "https://syntila.test/api/invitations/pinv-newuser/accept",
         {
           method: "POST",
           headers: { authorization: "Bearer newuser" },
@@ -436,7 +436,7 @@ describe("Recipient Invitations API", () => {
       `);
 
       const req = new Request(
-        "https://conclave.test/api/spaces/proj-1/invitations",
+        "https://syntila.test/api/spaces/proj-1/invitations",
         {
           method: "POST",
           headers: {
@@ -460,7 +460,7 @@ describe("Recipient Invitations API", () => {
     it("prevents self invitations", async () => {
       const { env } = createTestEnv();
       const req = new Request(
-        "https://conclave.test/api/spaces/proj-1/invitations",
+        "https://syntila.test/api/spaces/proj-1/invitations",
         {
           method: "POST",
           headers: {
@@ -495,7 +495,7 @@ describe("Recipient Invitations API", () => {
 
       // Case A: Revoke happens first
       const revokeReq = new Request(
-        "https://conclave.test/api/spaces/proj-1/invitations/pinv-race-1/expire",
+        "https://syntila.test/api/spaces/proj-1/invitations/pinv-race-1/expire",
         {
           method: "POST",
           headers: { authorization: "Bearer vitalii" },
@@ -511,7 +511,7 @@ describe("Recipient Invitations API", () => {
 
       // Subsequent accept attempt fails
       const acceptReq = new Request(
-        "https://conclave.test/api/invitations/pinv-race-1/accept",
+        "https://syntila.test/api/invitations/pinv-race-1/accept",
         {
           method: "POST",
           headers: { authorization: "Bearer ulikoss" },

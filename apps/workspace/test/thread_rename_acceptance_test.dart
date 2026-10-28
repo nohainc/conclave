@@ -1,17 +1,17 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_marker.dart';
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_marker.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
   test('renames during active work preserve CWD, marker, and files', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-rename-');
+    final root = await Directory.systemTemp.createTemp('syntila-rename-');
     addTearDown(() => root.delete(recursive: true));
     final lifecycle = ThreadDirectoryLifecycle(
       pathResolver: ThreadPathResolver(root),

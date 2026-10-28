@@ -44,7 +44,7 @@ function noteView(row: Record<string, unknown>) {
 }
 
 async function readNote(env: SecurityEnv, userId: string, noteId: string) {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT ${NOTE_COLUMNS} FROM ${NOTE_FROM} WHERE n.id = ?1 AND n.user_id = ?2`,
   )
     .bind(noteId, userId)
@@ -99,7 +99,7 @@ async function updateNote(
 ) {
   if (input.revision === undefined)
     throw new HttpError(400, "revision is required");
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE user_notes
         SET title = COALESCE(?1, title), body = COALESCE(?2, body),
             linked_title = COALESCE(?3, linked_title),
@@ -138,7 +138,7 @@ export async function handleListNotes(
     undefined,
     accessContext,
   );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT ${NOTE_COLUMNS} FROM ${NOTE_FROM}
       WHERE n.user_id = ?1 ORDER BY n.updated_at DESC, n.id DESC`,
   )
@@ -163,7 +163,7 @@ export async function handleCreateNote(
   const input = await noteInput(request);
   const id = `note-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO user_notes (id, user_id, title, body, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?5)`,
   )
@@ -198,7 +198,7 @@ export async function handleNote(
     });
   }
   if (request.method === "DELETE") {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM user_notes WHERE id = ?1 AND user_id = ?2",
     )
       .bind(noteId, context.userId)
@@ -224,7 +224,7 @@ export async function handleThreadNote(
     "view",
     accessContext,
   );
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     "SELECT id FROM user_notes WHERE user_id = ?1 AND thread_id = ?2",
   )
     .bind(context.userId, threadId)
@@ -237,7 +237,7 @@ export async function handleThreadNote(
   const input = await noteInput(request);
   // Saved names keep the note's Space and Thread path after the Thread is
   // deleted or the owner loses access.
-  const space = await env.CONCLAVE_DB.prepare(
+  const space = await env.SYNTILA_DB.prepare(
     "SELECT name FROM spaces WHERE id = ?1",
   )
     .bind(spaceId)
@@ -253,7 +253,7 @@ export async function handleThreadNote(
   const now = new Date().toISOString();
   // A concurrent first save from another device loses on the unique index.
   // A new Thread note is titled after its Thread; the owner can rename it.
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `INSERT OR IGNORE INTO user_notes
        (id, user_id, title, body, thread_id, space_id, linked_title,
         linked_space_title, created_at, updated_at)

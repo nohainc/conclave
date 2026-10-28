@@ -1,18 +1,18 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show CliWorkerEngineSupervisor, cliWorkerEngineVersion;
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart'
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart'
     show WorkerResult;
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/local_worker_setup.dart';
-import 'package:conclave_workspace/tool_profile_catalog.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
-import 'package:conclave_workspace/tool_profile_resolver.dart';
-import 'package:conclave_workspace/worker_catalog_coordinator.dart';
-import 'package:conclave_workspace/workspace_worker_view.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/local_worker_setup.dart';
+import 'package:syntila_workspace/tool_profile_catalog.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/tool_profile_resolver.dart';
+import 'package:syntila_workspace/worker_catalog_coordinator.dart';
+import 'package:syntila_workspace/workspace_worker_view.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -141,7 +141,7 @@ void main() {
 
       final engine = File(
         '$repository/apps/workspace/assets/engines/'
-        'conclave_cli_worker_engine',
+        'syntila_cli_worker_engine',
       );
       expect(engine.existsSync(), isTrue);
       final supervisor = CliWorkerEngineSupervisor(

@@ -21,18 +21,18 @@ it("resolves hosted or explicit application-release trust roots", () => {
     expect(
       JSON.parse(
         resolveBuildReleaseTrust(root, {
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: JSON.stringify(explicit),
+          SYNTILA_RELEASE_TRUST_KEYS_JSON: JSON.stringify(explicit),
         }),
       ),
     ).toEqual(explicit);
     expect(() =>
       resolveBuildReleaseTrust(root, {
-        CONCLAVE_RELEASE_TRUST_KEYS_JSON: "{}",
+        SYNTILA_RELEASE_TRUST_KEYS_JSON: "{}",
       }),
     ).toThrow("at least one");
     expect(() =>
       resolveBuildReleaseTrust(root, {
-        CONCLAVE_RELEASE_TRUST_KEYS_JSON: '{"p":{"k":"invalid"}}',
+        SYNTILA_RELEASE_TRUST_KEYS_JSON: '{"p":{"k":"invalid"}}',
       }),
     ).toThrow("Ed25519");
   } finally {

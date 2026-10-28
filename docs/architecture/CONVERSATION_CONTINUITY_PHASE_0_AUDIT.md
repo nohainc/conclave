@@ -38,7 +38,7 @@ Sources: [architecture](../../ARCHITECTURE.md), [v8 contract](ARCHITECTURE_V8.md
 | Orchestration | Stateless request coordination; read-only; durable provider session | Stateful Thread coordination; writable policy; durable provider session | [Workflow runner](../../apps/cloud/src/workflow.ts) |
 | Scheduling | Resolves logical Worker to authorized Workspace inventory and eligible Profile | Same, with mutation lease/fencing | [scheduler](../../apps/cloud/src/scheduler.ts), [dispatcher](../../apps/cloud/src/assignment-dispatcher.ts) |
 | Workspace | Validates assignment and local policy; supplies Thread directory and Worker state directory | Same, enforcing authorized filesystem policy | [assignment admission](../../apps/workspace/lib/cloud_connection/assignment_handlers.dart), [runtime](../../apps/workspace/lib/workspace_runtime.dart) |
-| Engine | Reads local session mapping, interprets signed Profile, starts CLI with structured arguments | Same | [supervisor](../../packages/conclave_cli_worker_runtime/lib/src/cli_worker_engine_supervisor.dart), [Engine](../../engines/cli_worker/lib/src/cli_worker_engine.dart) |
+| Engine | Reads local session mapping, interprets signed Profile, starts CLI with structured arguments | Same | [supervisor](../../packages/syntila_cli_worker_runtime/lib/src/cli_worker_engine_supervisor.dart), [Engine](../../engines/cli_worker/lib/src/cli_worker_engine.dart) |
 | Result | CLI output becomes WorkerResult, assignment output, StepResult and Work history | Same | [runner](../../apps/cloud/src/workflow.ts), [history projection](../../apps/cloud/src/routes/work-lifecycle.ts) |
 
 Workspace Runtime transport/authentication session IDs are separate from provider

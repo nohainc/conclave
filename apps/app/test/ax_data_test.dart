@@ -1,14 +1,14 @@
 import 'dart:convert';
 
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:conclave_app/src/ax/sync/ax_idempotency.dart';
+import 'package:syntila_app/src/ax/sync/ax_idempotency.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'ax_fixture_data.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
 
 class _JsonClient extends http.BaseClient {
   _JsonClient(this.body, {this.statusCode = 201});
@@ -317,7 +317,7 @@ void main() {
       'workRequest': {'id': 'request-default'}
     });
     final api =
-        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+        AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
     await api.createWorkRequest(
         threadId: 'stream', workflowId: 'chat', prompt: 'Hello');
     final body = jsonDecode(client.lastBody!) as Map;
@@ -333,7 +333,7 @@ void main() {
       final uploads = <http.Request>[];
       final submissions = <http.Request>[];
       final api = AxApiClient(
-        baseUrl: 'https://conclave.test/api',
+        baseUrl: 'https://syntila.test/api',
         client: MockClient((request) async {
           if (request.method == 'PUT') {
             uploads.add(request);
@@ -424,7 +424,7 @@ void main() {
     final client =
         _JsonClient({'error': 'Unsupported workflowId'}, statusCode: 400);
     final api =
-        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+        AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
     expect(
         () => api.createWorkRequest(
             threadId: 'stream', workflowId: 'chat', prompt: 'Hello'),
@@ -444,7 +444,7 @@ void main() {
       ]
     }, statusCode: 422);
     final api =
-        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+        AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
     expect(
         await api.validateWorkRequestEligibility(
             threadId: 'thread', workflowId: 'full_cycle'),
@@ -463,7 +463,7 @@ void main() {
       }
     });
     final api =
-        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+        AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
     final values = await api.loadWorkspaces();
     expect(values.map((w) => w.workerCount), [0, 0, 0]);
     expect(client.requests, ['/api/workspaces']);
@@ -570,7 +570,7 @@ void main() {
       'newestCursor': 'newest'
     }, statusCode: 200);
     final api =
-        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+        AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
     final page = await api.loadDiscussionPage(
         threadId: 'w', limit: 30, before: 'cursor+/=');
     expect(client.lastRequest!.url.path, '/api/threads/w/discussion-messages');
@@ -590,7 +590,7 @@ void main() {
       'Discussion envelope error identifies incompatible schema without message content',
       () async {
     final api = AxApiClient(
-        baseUrl: 'https://conclave.test/api',
+        baseUrl: 'https://syntila.test/api',
         client: _JsonClient({
           'messages': [
             {'body': 'Private Chat'}
@@ -621,7 +621,7 @@ void main() {
     test('Discussion paging rejects malformed or cross-Thread data $response',
         () async {
       final api = AxApiClient(
-          baseUrl: 'https://conclave.test/api',
+          baseUrl: 'https://syntila.test/api',
           client: _JsonClient(response, statusCode: 200));
       await expectLater(api.loadDiscussionPage(threadId: 'w'),
           throwsA(isA<AxApiException>()));
@@ -643,7 +643,7 @@ void main() {
       }
     });
     final api =
-        AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+        AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
     final space = await api.loadSpace(spaceId: 'p1');
     expect(space.instructions, 'Detailed instructions');
     expect(space.threads, isEmpty);
@@ -661,7 +661,7 @@ void main() {
         () async {
       final client = _ApiResponseClient({'/api/spaces/p1': response});
       final api =
-          AxApiClient(baseUrl: 'https://conclave.test/api', client: client);
+          AxApiClient(baseUrl: 'https://syntila.test/api', client: client);
       await expectLater(
           api.loadSpace(spaceId: 'p1'), throwsA(isA<AxApiException>()));
     });
@@ -728,7 +728,7 @@ void main() {
   test('approves desktop sign-in without a comparison code', () async {
     final client = _JsonClient(const <String, dynamic>{}, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -749,7 +749,7 @@ void main() {
       'audience': 'conclave.profile-lab.management',
     }, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -770,7 +770,7 @@ void main() {
   test('cancels desktop sign-in from the authenticated browser', () async {
     final client = _JsonClient(const <String, dynamic>{}, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -792,7 +792,7 @@ void main() {
       },
     }, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -814,7 +814,7 @@ void main() {
 
   test('failed logout preserves the session for retry', () async {
     final api = AxApiClient(
-        baseUrl: 'https://conclave.test/api',
+        baseUrl: 'https://syntila.test/api',
         client: _JsonClient({}, statusCode: 503));
     api.sessionToken = 'fixture-session';
     await expectLater(api.logout(), throwsA(isA<AxApiException>()));
@@ -857,7 +857,7 @@ void main() {
       },
     });
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -884,7 +884,7 @@ void main() {
       },
     }, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -939,7 +939,7 @@ void main() {
       },
     });
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -1011,7 +1011,7 @@ void main() {
       },
     }, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
@@ -1043,13 +1043,13 @@ void main() {
       'modelCalls': [],
     }, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 
     await api.loadBootstrapState();
 
-    expect(client.lastRequest?.headers.containsKey('x-conclave-workspace-id'),
+    expect(client.lastRequest?.headers.containsKey('x-syntila-workspace-id'),
         isFalse);
   });
 
@@ -1058,7 +1058,7 @@ void main() {
     final client =
         _JsonClient(const <String, dynamic>{'sent': true}, statusCode: 200);
     final api = AxApiClient(
-      baseUrl: 'https://conclave.test/api',
+      baseUrl: 'https://syntila.test/api',
       client: client,
     );
 

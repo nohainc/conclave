@@ -48,7 +48,7 @@ const violations = missingContractText.map(
 );
 
 const axRuntimeProtocolPattern =
-  /conclave\.workspace-runtime-protocol|workspaceRuntimeProtocol|WorkspaceRuntimeMessage|workspace-runtime\.ts|@conclave\/workspace-runtime-protocol/i;
+  /syntila\.workspace-runtime-protocol|workspaceRuntimeProtocol|WorkspaceRuntimeMessage|workspace-runtime\.ts|@syntila\/workspace-runtime-protocol/i;
 const firstPartyProviderPackagePattern = /\b(?:codex|antigravity)\b/i;
 
 for (const file of sourceFiles) {

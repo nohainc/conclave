@@ -185,7 +185,7 @@ class WorkspaceRuntime {
           logOutput ?? stdout,
           redact: redactLog ?? WorkspaceLogger._identity,
           context: {
-            'serviceVersion': conclaveWorkspaceAppVersion,
+            'serviceVersion': syntilaWorkspaceAppVersion,
             if (config.workspaceId != null) 'workspaceId': config.workspaceId,
           },
         ) {

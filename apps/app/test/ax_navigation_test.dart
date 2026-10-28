@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
 
 void main() {
   test('retired product deep links do not masquerade as renamed routes', () {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RealtimeGateway } from "../src/realtime-gateway.js";
 import { BoundedRealtimeQueue } from "../src/realtime-queue.js";
-import type { RealtimeEventEnvelope } from "@conclave/protocol";
+import type { RealtimeEventEnvelope } from "@syntila/protocol";
 
 function harness(member = true) {
   const frames: Record<string, unknown>[] = [];
@@ -37,7 +37,7 @@ function harness(member = true) {
   };
   const gateway = new RealtimeGateway(
     {} as never,
-    { CONCLAVE_DB: db } as never,
+    { SYNTILA_DB: db } as never,
   );
   const clients = Reflect.get(gateway, "clients") as Map<string, unknown>;
   clients.set("client", {
@@ -166,7 +166,7 @@ describe("durable stream delivery", () => {
     };
     const gateway = new RealtimeGateway(
       {} as never,
-      { CONCLAVE_DB: db } as never,
+      { SYNTILA_DB: db } as never,
     );
     const clients = Reflect.get(gateway, "clients") as Map<string, unknown>;
     clients.set("client", {

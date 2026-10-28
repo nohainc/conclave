@@ -11,8 +11,8 @@ function fixture() {
     ('mine','owner','Mine','now','now'), ('empty','owner','Empty','now','now'),
     ('private','other','Private','now','now');`);
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
     TEST_AUTHENTICATION: async () => ({
       userId: "owner",
       user: {

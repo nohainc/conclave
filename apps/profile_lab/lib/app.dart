@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'controllers/profile_lab_controller.dart';
@@ -73,11 +73,11 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                       ),
                       child: Row(
                         children: [
-                          ConclaveBrand.logoMark(size: 26),
+                          SyntilaBrand.logoMark(size: 26),
                           const SizedBox(width: 12),
                           Text(
                             'Syntila Profile Lab',
-                            style: ConclaveTypography.wordmark.copyWith(
+                            style: SyntilaTypography.wordmark.copyWith(
                               fontSize: 14,
                               color: Colors.white,
                             ),
@@ -300,7 +300,7 @@ class _LocalBuildBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-        color: ConclaveColors.warningTextLight,
+        color: SyntilaColors.warningTextLight,
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),

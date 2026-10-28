@@ -1,5 +1,5 @@
 {
-  "name": "@conclave/cloud",
+  "name": "@syntila/cloud",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,15 +8,15 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json",
     "types": "wrangler types --config wrangler.jsonc",
-    "types:check": "WRANGLER_LOG_PATH=${TMPDIR:-/tmp}/conclave-wrangler.log WRANGLER_WRITE_LOGS=false wrangler types --check --config wrangler.jsonc"
+    "types:check": "WRANGLER_LOG_PATH=${TMPDIR:-/tmp}/syntila-wrangler.log WRANGLER_WRITE_LOGS=false wrangler types --check --config wrangler.jsonc"
   },
   "dependencies": {
     "@better-auth/passkey": "^1.7.5",
-    "@conclave/workspace-runtime-protocol": "workspace:*",
-    "@conclave/core": "workspace:*",
-    "@conclave/protocol": "workspace:*",
-    "@conclave/security": "workspace:*",
-    "@conclave/tool-profile": "workspace:*",
+    "@syntila/workspace-runtime-protocol": "workspace:*",
+    "@syntila/core": "workspace:*",
+    "@syntila/protocol": "workspace:*",
+    "@syntila/security": "workspace:*",
+    "@syntila/tool-profile": "workspace:*",
     "better-auth": "^1.7.5"
   }
 }

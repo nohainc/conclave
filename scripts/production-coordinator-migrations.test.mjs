@@ -34,7 +34,7 @@ describe("production coordinator migration history", () => {
       },
     ]);
     expect(config.durable_objects.bindings).toContainEqual({
-      name: "CONCLAVE_THREAD_COORDINATOR",
+      name: "SYNTILA_THREAD_COORDINATOR",
       class_name: "ThreadExecutionCoordinator",
     });
   });

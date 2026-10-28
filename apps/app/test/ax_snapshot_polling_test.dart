@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'ax_fixture_realtime.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_snapshot.dart';
@@ -73,7 +73,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
             dataSource: source,
             services: const DefaultPlatformServices(),
             browserNavigation: HistoryNavigation(Uri.parse('/')),

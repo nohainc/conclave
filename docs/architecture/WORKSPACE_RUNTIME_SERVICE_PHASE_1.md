@@ -1,6 +1,6 @@
 # Workspace Runtime Service — Phase 1
 
-> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md). Read this document as history.
+> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `syntila-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md). Read this document as history.
 
 > **Historical implementation record.** The current architecture is defined
 > in [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
@@ -17,7 +17,7 @@
 | Worker catalog synchronization and readiness | `WorkerCatalogCoordinator` and `WorkerReadinessMonitor` |
 | Engine process lifecycle, assignment handling/cancellation, sessions and diagnostics | Workspace runtime and the separate CLI Worker Engine process |
 | Work Root and Space working-directory resolution | Workspace runtime configuration and `SpaceDirectoryLifecycle` |
-| Service process entry | `apps/workspace/bin/conclave_workspace_service.dart` |
+| Service process entry | `apps/workspace/bin/syntila_workspace_service.dart` |
 
 The Worker Engine remains a separate child process. It does not own the Cloud
 connection and does not receive the Workspace runtime credential.
@@ -125,7 +125,7 @@ Worker tests execute through IPC with a bounded response timeout. The local
 never an authority for Worker configuration or assignment admission. Cached
 controls are disabled while the service is stopped.
 
-Runtime executables are named `workspace` (formerly `conclave-service`) and `conclave-agent`. The
+Runtime executables are named `workspace` (formerly `syntila-service`) and `syntila-agent`. The
 service LaunchAgent label and installation identity are unchanged. Shared
 bundled Engine asset names are unchanged; Workspace materialization assigns
 the process name. Existing independent legacy daemons are not managed here.

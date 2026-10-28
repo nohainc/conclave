@@ -70,10 +70,10 @@ function envFor(
   options: { support?: boolean; bucket?: R2Bucket } = {},
 ) {
   return {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
-    CONCLAVE_ISSUE_SUPPORT_USER_IDS: options.support ? userId : "support",
-    CONCLAVE_ARTIFACTS: options.bucket,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
+    SYNTILA_ISSUE_SUPPORT_USER_IDS: options.support ? userId : "support",
+    SYNTILA_ARTIFACTS: options.bucket,
     TEST_AUTHENTICATION: async () => ({
       userId,
       user: {
@@ -104,7 +104,7 @@ describe("issue reports", () => {
     } as unknown as R2Bucket;
     const env = envFor(fixture.db, "owner", { bucket });
     const request = () =>
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -131,7 +131,7 @@ describe("issue reports", () => {
     ).toMatch(/^issue-reports\//);
     const persisted = await handleGetIssueReportForRequest(
       new Request(
-        "https://conclave.test/api/issue-reports?requestId=request-1&assignmentId=assignment-1",
+        "https://syntila.test/api/issue-reports?requestId=request-1&assignmentId=assignment-1",
       ),
       env,
     );
@@ -155,7 +155,7 @@ describe("issue reports", () => {
     ).toBe(1);
 
     const admin = await handleGetAdminIssueReport(
-      new Request("https://conclave.test/api/admin/issue-reports/x"),
+      new Request("https://syntila.test/api/admin/issue-reports/x"),
       envFor(fixture.db, "support", { support: true }),
       String(firstBody.report.id),
     );
@@ -220,7 +220,7 @@ describe("issue reports", () => {
         "assignment-1",
       );
     const created = await handleCreateIssueReport(
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -229,7 +229,7 @@ describe("issue reports", () => {
     );
     const createdBody = (await created.json()) as { report: { id: string } };
     const admin = await handleGetAdminIssueReport(
-      new Request("https://conclave.test/api/admin/issue-reports/x"),
+      new Request("https://syntila.test/api/admin/issue-reports/x"),
       envFor(fixture.db, "support", { support: true }),
       createdBody.report.id,
     );
@@ -257,7 +257,7 @@ describe("issue reports", () => {
     const outsiderEnv = envFor(fixture.db, "outsider");
     await expect(
       handleCreateIssueReport(
-        new Request("https://conclave.test/api/issue-reports", {
+        new Request("https://syntila.test/api/issue-reports", {
           method: "POST",
           body: JSON.stringify({
             requestId: "request-1",
@@ -270,7 +270,7 @@ describe("issue reports", () => {
     ).rejects.toMatchObject({ status: 400 });
 
     const ownerReport = await handleCreateIssueReport(
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -280,7 +280,7 @@ describe("issue reports", () => {
     const ownerBody = (await ownerReport.json()) as { report: { id: string } };
     await expect(
       handleGetIssueReport(
-        new Request("https://conclave.test/api/issue-reports/x"),
+        new Request("https://syntila.test/api/issue-reports/x"),
         outsiderEnv,
         ownerBody.report.id,
       ),
@@ -291,7 +291,7 @@ describe("issue reports", () => {
     const fixture = sqliteD1();
     seedExecution(fixture.sqlite);
     const create = await handleCreateIssueReport(
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -302,12 +302,12 @@ describe("issue reports", () => {
     const supportEnv = envFor(fixture.db, "support", { support: true });
     await expect(
       handleListAdminIssueReports(
-        new Request("https://conclave.test/api/admin/issue-reports"),
+        new Request("https://syntila.test/api/admin/issue-reports"),
         envFor(fixture.db, "owner"),
       ),
     ).rejects.toMatchObject({ status: 403 });
     const patch = await handlePatchAdminIssueReport(
-      new Request("https://conclave.test/api/admin/issue-reports/x", {
+      new Request("https://syntila.test/api/admin/issue-reports/x", {
         method: "PATCH",
         body: JSON.stringify({
           status: "investigating",
@@ -320,7 +320,7 @@ describe("issue reports", () => {
     );
     expect(patch.status).toBe(200);
     const list = await handleListAdminIssueReports(
-      new Request("https://conclave.test/api/admin/issue-reports"),
+      new Request("https://syntila.test/api/admin/issue-reports"),
       supportEnv,
     );
     const listed = (await list.json()) as {
@@ -342,7 +342,7 @@ describe("issue reports", () => {
     const fixture = sqliteD1();
     seedExecution(fixture.sqlite);
     const create = await handleCreateIssueReport(
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -375,7 +375,7 @@ describe("issue reports", () => {
     const owner = envFor(fixture.db, "owner");
     const support = envFor(fixture.db, "support", { support: true });
     const created = await handleCreateIssueReport(
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -385,7 +385,7 @@ describe("issue reports", () => {
     const reportId = ((await created.json()) as { report: { id: string } })
       .report.id;
     const groupResponse = await handleCreateAdminIssueReportGroup(
-      new Request("https://conclave.test/api/admin/issue-reports/groups", {
+      new Request("https://syntila.test/api/admin/issue-reports/groups", {
         method: "POST",
         body: JSON.stringify({
           label: "Provider authentication failures",
@@ -399,7 +399,7 @@ describe("issue reports", () => {
     const groupId = ((await groupResponse.json()) as { group: { id: string } })
       .group.id;
     const investigating = await handlePatchAdminIssueReport(
-      new Request("https://conclave.test/api/admin/issue-reports/x", {
+      new Request("https://syntila.test/api/admin/issue-reports/x", {
         method: "PATCH",
         body: JSON.stringify({
           status: "investigating",
@@ -414,7 +414,7 @@ describe("issue reports", () => {
     expect(investigating.status).toBe(200);
     const filtered = await handleListAdminIssueReports(
       new Request(
-        "https://conclave.test/api/admin/issue-reports?component=provider_cli&workerTypeId=gemini&status=investigating",
+        "https://syntila.test/api/admin/issue-reports?component=provider_cli&workerTypeId=gemini&status=investigating",
       ),
       support,
     );
@@ -429,7 +429,7 @@ describe("issue reports", () => {
       versions: { engine: "1.3.0", providerTool: "1.3.3" },
     });
     const detail = await handleGetAdminIssueReport(
-      new Request("https://conclave.test/api/admin/issue-reports/x"),
+      new Request("https://syntila.test/api/admin/issue-reports/x"),
       support,
       reportId,
     );
@@ -450,7 +450,7 @@ describe("issue reports", () => {
       errorCode: "provider_authentication_required",
     });
     const groups = await handleListAdminIssueReportGroups(
-      new Request("https://conclave.test/api/admin/issue-reports/groups"),
+      new Request("https://syntila.test/api/admin/issue-reports/groups"),
       support,
     );
     expect(
@@ -462,7 +462,7 @@ describe("issue reports", () => {
       affectedWorkerTypes: ["gemini"],
     });
     const groupDetail = await handleGetAdminIssueReportGroup(
-      new Request("https://conclave.test/api/admin/issue-reports/groups/x"),
+      new Request("https://syntila.test/api/admin/issue-reports/groups/x"),
       support,
       groupId,
     );
@@ -472,7 +472,7 @@ describe("issue reports", () => {
     ).toHaveLength(1);
     await expect(
       handlePatchAdminIssueReport(
-        new Request("https://conclave.test/api/admin/issue-reports/x", {
+        new Request("https://syntila.test/api/admin/issue-reports/x", {
           method: "PATCH",
           body: JSON.stringify({ status: "open" }),
           headers: { "content-type": "application/json" },
@@ -493,7 +493,7 @@ describe("issue reports", () => {
     } as unknown as R2Bucket;
     const env = envFor(fixture.db, "owner", { bucket: failingBucket });
     const created = await handleCreateIssueReport(
-      new Request("https://conclave.test/api/issue-reports", {
+      new Request("https://syntila.test/api/issue-reports", {
         method: "POST",
         body: JSON.stringify({ requestId: "request-1" }),
         headers: { "content-type": "application/json" },
@@ -542,7 +542,7 @@ describe("issue reports", () => {
     `);
     await expect(
       handleCreateIssueReport(
-        new Request("https://conclave.test/api/issue-reports", {
+        new Request("https://syntila.test/api/issue-reports", {
           method: "POST",
           body: JSON.stringify({ requestId: "request-1" }),
           headers: { "content-type": "application/json" },

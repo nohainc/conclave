@@ -86,7 +86,7 @@ The implementation lives under `apps/cloud/src/email/`:
   creating provider-specific delivery paths.
 - `email-config.ts` remains responsible for sender identity, controlled
   fallback, recipient validation, safe delivery metadata, and delivery error
-  classification. It is the only module that calls `CONCLAVE_EMAIL`.
+  classification. It is the only module that calls `SYNTILA_EMAIL`.
 
 The renderer accepts typed event data only. Dynamic names, email addresses and
 URLs are escaped or validated at the rendering boundary. URLs must be absolute
@@ -100,7 +100,7 @@ lifetime in minutes and state it in the message. The current configuration is
 fractional, or negative lifetime rather than inventing one.
 
 The shared layout renders a dark Syntila header, the approved
-`conclave_email_logo.png` asset, product name, event title, optional action
+`syntila_email_logo.png` asset, product name, event title, optional action
 button, copy-and-paste fallback link, security notice, and branded footer. The
 logo is served from the deployed Syntila app asset path and has an accessible
 text/alt fallback; disabling images does not remove the product identity or
@@ -139,7 +139,7 @@ review desktop and narrow-window behavior; the individual `.txt` files provide
 the plain-text review surface. Preview rendering does not require or invoke a
 Cloudflare binding.
 
-For a controlled delivery test, set `CONCLAVE_EMAIL_TEST_RECIPIENTS` to a
+For a controlled delivery test, set `SYNTILA_EMAIL_TEST_RECIPIENTS` to a
 comma-separated allowlist containing an address owned by the tester, provide
 `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, and run:
 

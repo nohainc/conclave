@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
-import 'package:conclave_app/src/ax/sync/ax_realtime_cache_router.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/sync/ax_realtime_cache_router.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
 import 'ax_fixture_data.dart';
 
 AxWorkRequest request(String id, {String status = 'running'}) => AxWorkRequest(
@@ -140,8 +140,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(cache.submitting('W'), isTrue);
     expect(
-        find.byType(ConclaveMarkdownBody).evaluate().any((element) =>
-            (element.widget as ConclaveMarkdownBody).data ==
+        find.byType(SyntilaMarkdownBody).evaluate().any((element) =>
+            (element.widget as SyntilaMarkdownBody).data ==
             'Persistent request'),
         isTrue);
     expect(posts, 1);

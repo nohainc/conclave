@@ -1,6 +1,6 @@
 part of 'ax_app.dart';
 
-mixin _AxAppStateMixin on State<ConclaveAppShell> {
+mixin _AxAppStateMixin on State<SyntilaAppShell> {
   AxSnapshot get executionSnapshot => store.execution;
   String? selectedSpaceId;
   RunStatus? optimisticRunStatus;
@@ -26,7 +26,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   void _updateNotifications(VoidCallback callback) {
     callback();
     AxRenderDiagnostics.instance.notifierDispatch(
-      component: 'ConclaveAppShell',
+      component: 'SyntilaAppShell',
       operation: 'notifications.changed',
     );
     store.unreadNotifications.value =
@@ -52,7 +52,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool get realtimeStale => store.realtimeStatus.value.$1;
   set realtimeStale(bool value) {
     AxRenderDiagnostics.instance.notifierDispatch(
-      component: 'ConclaveAppShell',
+      component: 'SyntilaAppShell',
       operation: 'realtime.stale.changed',
     );
     store.realtimeStatus.value = (value, realtimeNotice);
@@ -63,7 +63,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   String? get realtimeNotice => store.realtimeStatus.value.$2;
   set realtimeNotice(String? value) {
     AxRenderDiagnostics.instance.notifierDispatch(
-      component: 'ConclaveAppShell',
+      component: 'SyntilaAppShell',
       operation: 'realtime.notice.changed',
     );
     store.realtimeStatus.value = (realtimeStale, value);
@@ -112,7 +112,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   AxAccountSecurity? get accountSecurity => store.security.value;
   set accountSecurity(AxAccountSecurity? value) {
     AxRenderDiagnostics.instance.notifierDispatch(
-      component: 'ConclaveAppShell',
+      component: 'SyntilaAppShell',
       operation: 'account.security.changed',
     );
     store.security.value = value;
@@ -124,7 +124,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   bool get accountSecurityLoading => store.securityLoading.value;
   set accountSecurityLoading(bool value) {
     AxRenderDiagnostics.instance.notifierDispatch(
-      component: 'ConclaveAppShell',
+      component: 'SyntilaAppShell',
       operation: 'account.security.loading.changed',
     );
     store.securityLoading.value = value;
@@ -507,7 +507,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   @override
   Widget build(BuildContext context) {
     AxRenderDiagnostics.instance.widgetRebuild(
-      component: 'ConclaveAppShell',
+      component: 'SyntilaAppShell',
       threadId: navigation.threadId,
       tab: navigation.kind.name,
     );
@@ -870,7 +870,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     final result = await showDialog<bool>(
       context: navigatorKey.currentContext ?? context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: Text(title),
         content: Text(message),
         actions: [
@@ -879,7 +879,7 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: destructive ? ConclaveDialogStyle.destructiveButton() : null,
+            style: destructive ? SyntilaDialogStyle.destructiveButton() : null,
             onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(action),
           ),
@@ -890,4 +890,4 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
   }
 }
 
-class _AxAppState extends State<ConclaveAppShell> with _AxAppStateMixin {}
+class _AxAppState extends State<SyntilaAppShell> with _AxAppStateMixin {}

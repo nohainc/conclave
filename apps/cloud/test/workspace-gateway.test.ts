@@ -49,12 +49,12 @@ async function publishReady(
           sessionId: input.sessionId,
           events: [
             {
-              contract: "conclave.desktop-auth-transport",
+              contract: "syntila.desktop-auth-transport",
               version: "1.0",
               eventId: `ready-${input.sessionId}-${counter}`,
               occurredAt: at,
               message: {
-                protocol: "conclave.workspace-runtime-protocol",
+                protocol: "syntila.workspace-runtime-protocol",
                 protocolVersion: "5.1",
                 messageId: `ready-message-${input.sessionId}-${counter}`,
                 timestamp: at,
@@ -143,7 +143,7 @@ describe("Workspace runtime Gateway", () => {
       },
     };
     const gateway = new WorkspaceGateway(state as never, {
-      CONCLAVE_DB: db as never,
+      SYNTILA_DB: db as never,
     });
     const humanCredentialAttempt = await gateway.fetch(
       new Request("https://gateway.internal/runtime/sessions", {
@@ -343,7 +343,7 @@ describe("Workspace runtime Gateway", () => {
       },
     };
     const gateway = new WorkspaceGateway(state as never, {
-      CONCLAVE_DB: db as never,
+      SYNTILA_DB: db as never,
     });
     const createSession = async () => {
       const response = await gateway.fetch(
@@ -364,12 +364,12 @@ describe("Workspace runtime Gateway", () => {
     };
     const firstSession = await createSession();
     const replayedEvent = {
-      contract: "conclave.desktop-auth-transport",
+      contract: "syntila.desktop-auth-transport",
       version: "1.0",
       eventId: "stable-replay-event-id",
       occurredAt: new Date().toISOString(),
       message: {
-        protocol: "conclave.workspace-runtime-protocol",
+        protocol: "syntila.workspace-runtime-protocol",
         protocolVersion: "5.1",
         messageId: "stable-protocol-message-id",
         timestamp: new Date().toISOString(),
@@ -474,7 +474,7 @@ describe("Workspace runtime Gateway", () => {
       },
     };
     const gateway = new WorkspaceGateway(state as never, {
-      CONCLAVE_DB: db as never,
+      SYNTILA_DB: db as never,
     });
     const createSession = async (runtimeId: string) => {
       const response = await gateway.fetch(
@@ -646,7 +646,7 @@ describe("Workspace runtime Gateway", () => {
       },
     };
     const gateway = new WorkspaceGateway(state as never, {
-      CONCLAVE_DB: db as never,
+      SYNTILA_DB: db as never,
     });
     const logs: string[] = [];
     vi.spyOn(console, "log").mockImplementation((record) => {
@@ -661,7 +661,7 @@ describe("Workspace runtime Gateway", () => {
 
     const response = (await gateway.fetch(
       new Request(
-        `https://app.conclave.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-gateway-test`,
+        `https://app.syntila.test/api/workspace-gateway/connect?workspaceRuntimeId=runtime-gateway-test`,
         {
           headers: {
             upgrade: "websocket",
@@ -682,7 +682,7 @@ describe("Workspace runtime Gateway", () => {
     gateway.webSocketMessage(
       acceptedSocket as unknown as WebSocket,
       JSON.stringify({
-        protocol: "conclave.workspace-runtime-protocol",
+        protocol: "syntila.workspace-runtime-protocol",
         protocolVersion: "5.1",
         messageId: "gateway-hello-message",
         timestamp: new Date().toISOString(),
@@ -777,7 +777,7 @@ describe("Workspace runtime Gateway", () => {
         },
       };
       const gateway = new WorkspaceGateway(state as never, {
-        CONCLAVE_DB: db as never,
+        SYNTILA_DB: db as never,
       });
       const create = await gateway.fetch(
         new Request("https://gateway.internal/runtime/sessions", {
@@ -834,7 +834,7 @@ describe("Workspace runtime Gateway", () => {
             delete: async () => false,
           },
         } as never,
-        { CONCLAVE_DB: {} as never },
+        { SYNTILA_DB: {} as never },
       );
       const response = await gateway.fetch(probeRequest());
       expect(response.status).toBe(503);
@@ -889,12 +889,12 @@ describe("Workspace runtime Gateway", () => {
             sessionId: session.sessionId,
             events: [
               {
-                contract: "conclave.desktop-auth-transport",
+                contract: "syntila.desktop-auth-transport",
                 version: "1.0",
                 eventId: "probe-ack-event",
                 occurredAt: receivedAt,
                 message: {
-                  protocol: "conclave.workspace-runtime-protocol",
+                  protocol: "syntila.workspace-runtime-protocol",
                   protocolVersion: "5.1",
                   messageId: "probe-ack-message",
                   correlationId: queued!.messageId,

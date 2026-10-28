@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+  SYNTILA_RELEASE_TRUST_KEYS_JSON: ${{ vars.SYNTILA_RELEASE_TRUST_KEYS_JSON || '{"syntila-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
 
 jobs:
   workspace-macos:

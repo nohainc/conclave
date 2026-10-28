@@ -91,10 +91,10 @@ export async function handleUploadAvatar(
       413,
       "Original must be 1 byte–5 MB and thumbnail 1 byte–128 KB",
     );
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "Avatar storage is not configured");
 
-  const old = await env.CONCLAVE_DB.prepare(
+  const old = await env.SYNTILA_DB.prepare(
     "SELECT avatar_url AS avatarUrl FROM users WHERE id = ?1",
   )
     .bind(context.userId)
@@ -114,7 +114,7 @@ export async function handleUploadAvatar(
       httpMetadata: { contentType: thumbnail.type },
       customMetadata: { userId: context.userId },
     });
-    const updated = await env.CONCLAVE_DB.prepare(
+    const updated = await env.SYNTILA_DB.prepare(
       "UPDATE users SET avatar_url = ?1, updated_at = ?2 WHERE id = ?3 AND status = 'active' AND avatar_url IS ?4",
     )
       .bind(
@@ -148,7 +148,7 @@ export async function handleGetAvatar(
   const canView =
     context.userId === userId ||
     Boolean(
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `SELECT 1 FROM people_relationships
          WHERE (user_low_id = ?1 AND user_high_id = ?2)
             OR (user_low_id = ?2 AND user_high_id = ?1)
@@ -159,14 +159,14 @@ export async function handleGetAvatar(
     );
   if (!canView) throw new HttpError(404, "Avatar not found");
 
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT avatar_url AS avatarUrl FROM users WHERE id = ?1 AND status = 'active'",
   )
     .bind(userId)
     .first<{ avatarUrl: string | null }>();
   const key = avatarKey(row?.avatarUrl);
   if (!key) throw new HttpError(404, "Avatar not found");
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "Avatar storage is not configured");
   const object = await bucket.get(key);
   if (!object) throw new HttpError(404, "Avatar not found");

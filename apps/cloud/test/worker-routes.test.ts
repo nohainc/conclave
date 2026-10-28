@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@syntila/core";
 import { handleGetReleaseTrustState } from "../src/routes/releases.js";
 import {
   routeWorkerRequest,
@@ -25,7 +25,7 @@ const dependencies: WorkerRouteDependencies = {
 };
 
 function request(path: string, method = "GET"): Request {
-  return new Request(`https://conclave.test${path}`, { method });
+  return new Request(`https://syntila.test${path}`, { method });
 }
 
 describe("Worker API routes", () => {
@@ -124,7 +124,7 @@ describe("Worker API routes", () => {
     );
     expect((await first.text()).length).toBeGreaterThan(0);
     const next = await routeWorkerRequest(
-      new Request("https://conclave.test/api/workflows/catalog", {
+      new Request("https://syntila.test/api/workflows/catalog", {
         headers: { "if-none-match": first.headers.get("etag")! },
       }),
       {} as Env,
@@ -246,7 +246,7 @@ describe("Worker API routes", () => {
     const prepare = vi.fn(() => ({ all: async () => ({ results: [] }) }));
     const response = await routeWorkerRequest(
       request("/api/release-trust"),
-      { CONCLAVE_DB: { prepare } } as unknown as Parameters<
+      { SYNTILA_DB: { prepare } } as unknown as Parameters<
         typeof routeWorkerRequest
       >[1],
       undefined,

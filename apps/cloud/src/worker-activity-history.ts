@@ -1,7 +1,7 @@
 import {
   isReplayableWorkerActivityType,
   type RealtimeEventPayload,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 
 export const MAX_WORKER_ACTIVITY_HISTORY_PER_ASSIGNMENT = 256;
 

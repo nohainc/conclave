@@ -1,7 +1,7 @@
 import {
   spaceMemberPermissions,
   type SpaceMemberPermissions,
-} from "@conclave/security";
+} from "@syntila/security";
 import {
   securityContext,
   HttpError,
@@ -42,7 +42,7 @@ export async function handleListPeople(
       400,
       "People does not support global search or ownership parameters",
     );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `WITH peers AS (
     SELECT user_high_id AS user_id,established_at FROM people_relationships WHERE user_low_id=?1
     UNION ALL SELECT user_low_id AS user_id,established_at FROM people_relationships WHERE user_high_id=?1)
@@ -61,7 +61,7 @@ export async function handleListPeople(
   if (!rows.results.length) return json({ schemaVersion: 1, people: [] });
   // Only the caller's memberships and invitation rights contribute Space metadata.
   const [spaces, shared, pending] = await Promise.all([
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `SELECT s.id,s.name,COALESCE(json_extract(s.settings_json, '$.archived'), 0) AS archived,s.settings_json AS settingsJson,m.role
       FROM spaces s JOIN space_memberships m ON m.space_id=s.id WHERE m.user_id=?1 ORDER BY LOWER(s.name),s.id`,
     )
@@ -69,7 +69,7 @@ export async function handleListPeople(
       .all<
         PeopleSpace & { archived: number; settingsJson: string; role: string }
       >(),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `SELECT theirs.user_id AS userId,mine.space_id AS spaceId
       FROM space_memberships mine JOIN space_memberships theirs ON theirs.space_id=mine.space_id
       JOIN people_relationships p ON p.user_low_id=MIN(?1,theirs.user_id) AND p.user_high_id=MAX(?1,theirs.user_id)
@@ -77,7 +77,7 @@ export async function handleListPeople(
     )
       .bind(context.userId)
       .all<{ userId: string; spaceId: string }>(),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `SELECT i.space_id AS spaceId,LOWER(i.email) AS email,i.invitee_user_id AS inviteeUserId FROM space_invitations i
       JOIN space_memberships m ON m.space_id=i.space_id AND m.user_id=?1
       WHERE i.status='pending' AND i.expires_at>?2`,

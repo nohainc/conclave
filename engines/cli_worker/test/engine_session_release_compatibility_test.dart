@@ -5,9 +5,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
-import 'package:conclave_cli_worker_engine/src/engine_session_store.dart';
+import 'package:syntila_cli_worker_engine/src/engine_session_store.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -97,7 +97,7 @@ void main() {
         final process = await Process.start(
           Platform.resolvedExecutable,
           [
-            '$repository/engines/cli_worker/bin/conclave_cli_worker.dart',
+            '$repository/engines/cli_worker/bin/syntila_cli_worker.dart',
             '--profile',
             profileFile.path,
             '--engine-version',

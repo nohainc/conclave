@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { BUILTIN_WORKFLOWS } from "@conclave/core";
+import { BUILTIN_WORKFLOWS } from "@syntila/core";
 import type { SecurityEnv } from "../src/routes/http-security.js";
 const admission = vi.hoisted(() => vi.fn());
 vi.mock("../src/routes/handlers.js", () => ({
@@ -46,7 +46,7 @@ function fixture(
     stepOverrides,
   };
   const env = {
-    CONCLAVE_DB: {
+    SYNTILA_DB: {
       prepare(sql: string) {
         return {
           values: [] as unknown[],

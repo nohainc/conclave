@@ -48,8 +48,8 @@ part 'ax_app_views.dart';
 part 'ax_app_run_details.dart';
 part 'ax_app_controller.dart';
 
-class ConclaveAppShell extends StatefulWidget {
-  const ConclaveAppShell(
+class SyntilaAppShell extends StatefulWidget {
+  const SyntilaAppShell(
       {super.key,
       required this.services,
       required this.dataSource,
@@ -64,7 +64,7 @@ class ConclaveAppShell extends StatefulWidget {
   final AxBrowserNavigation? browserNavigation;
   final RealtimeClient? realtimeClient;
   @override
-  State<ConclaveAppShell> createState() => _AxAppState();
+  State<SyntilaAppShell> createState() => _AxAppState();
 }
 
 class _RecoveryPanel extends StatelessWidget {

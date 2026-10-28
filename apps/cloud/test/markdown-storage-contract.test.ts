@@ -37,7 +37,7 @@ import {
   handleGetWorkRequest,
   handleListWorkRequests,
 } from "../src/routes/work-lifecycle.js";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@syntila/core";
 
 it.each(
   [
@@ -149,9 +149,9 @@ it.each(
     try {
       const response = await handleListWorkRequests(
         new Request(
-          "https://conclave.test/api/threads/stream-test/work-requests",
+          "https://syntila.test/api/threads/stream-test/work-requests",
         ),
-        { CONCLAVE_DB: db } as unknown as Parameters<
+        { SYNTILA_DB: db } as unknown as Parameters<
           typeof handleListWorkRequests
         >[1],
         "stream-test",
@@ -170,8 +170,8 @@ it.each(
       expect(body.workRequests[0]?.workflowName).toBe(definition.name);
       expect(body.workRequests[0]?.workflowVersion).toBe(definition.version);
       const detail = await handleGetWorkRequest(
-        new Request("https://conclave.test/api/work-requests/request-test"),
-        { CONCLAVE_DB: db } as unknown as Parameters<
+        new Request("https://syntila.test/api/work-requests/request-test"),
+        { SYNTILA_DB: db } as unknown as Parameters<
           typeof handleGetWorkRequest
         >[1],
         "request-test",
@@ -223,11 +223,11 @@ it("persists and returns exact Markdown through Chat create, edit and list", asy
       };
     },
   };
-  const env = { CONCLAVE_DB: db } as unknown as Parameters<
+  const env = { SYNTILA_DB: db } as unknown as Parameters<
     typeof handleCreateDiscussionMessage
   >[1];
   const request = (body: string, method = "POST") =>
-    new Request("https://conclave.test/api/messages", {
+    new Request("https://syntila.test/api/messages", {
       method,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ body }),
@@ -257,7 +257,7 @@ it("persists and returns exact Markdown through Chat create, edit and list", asy
       ((await response.json()) as { message: { body: string } }).message.body,
     ).toBe(edited);
     const listed = await handleListDiscussionMessages(
-      new Request("https://conclave.test/api/messages"),
+      new Request("https://syntila.test/api/messages"),
       env,
       "stream-test",
     );

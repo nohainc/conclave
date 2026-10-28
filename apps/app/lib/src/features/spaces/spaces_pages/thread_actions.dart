@@ -124,7 +124,7 @@ extension _ThreadActions on _ThreadPageState {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          constraints: ConclaveDialogStyle.small,
+          constraints: SyntilaDialogStyle.small,
           title: const Text('Cancel previous request?'),
           content: Text(active.length == 1
               ? 'A request is still processing. Cancel it and send this request instead?'
@@ -490,7 +490,7 @@ extension _ThreadActions on _ThreadPageState {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          constraints: ConclaveDialogStyle.small,
+          constraints: SyntilaDialogStyle.small,
           title: Text(folderExists ? 'Use existing folder?' : 'Retry anyway?'),
           content: Text(
             folderExists
@@ -724,7 +724,7 @@ extension _ThreadActions on _ThreadPageState {
       }
       ScaffoldMessenger.of(context).showNotice(SnackBar(
           content: Text('Failed to save message: $error'),
-          backgroundColor: ConclaveColors.error));
+          backgroundColor: SyntilaColors.error));
     }
   }
 
@@ -737,7 +737,7 @@ extension _ThreadActions on _ThreadPageState {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showNotice(SnackBar(
           content: Text('Failed to update message: $error'),
-          backgroundColor: ConclaveColors.error));
+          backgroundColor: SyntilaColors.error));
     }
   }
 
@@ -753,7 +753,7 @@ extension _ThreadActions on _ThreadPageState {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showNotice(SnackBar(
           content: Text('Failed to delete message: $error'),
-          backgroundColor: ConclaveColors.error));
+          backgroundColor: SyntilaColors.error));
     }
   }
 

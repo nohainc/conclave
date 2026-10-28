@@ -1,4 +1,4 @@
-import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
 
 /// Product capabilities only; no provider invocation or credential data.
 class AxWorkerEffortOptions {

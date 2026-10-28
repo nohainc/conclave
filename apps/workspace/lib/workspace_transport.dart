@@ -106,7 +106,7 @@ class HttpLongPollWorkspaceTransport implements WorkspaceTransport {
           'Workspace transport message must be a JSON object');
     }
     final event = <String, Object?>{
-      'contract': 'conclave.desktop-auth-transport',
+      'contract': 'syntila.desktop-auth-transport',
       'version': '1.0',
       'eventId': _newRuntimeEventId(),
       'occurredAt': DateTime.now().toUtc().toIso8601String(),

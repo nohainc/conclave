@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/realtime/realtime_health.dart';
+import 'package:syntila_app/src/realtime/realtime_health.dart';
 
 void main() {
   testWidgets('idle healthy socket keeps pinging without marking Work stale',

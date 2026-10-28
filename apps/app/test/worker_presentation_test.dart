@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/ax/worker_presentation.dart';
+import 'package:syntila_app/src/ax/worker_presentation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

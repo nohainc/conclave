@@ -18,9 +18,9 @@ const parseJsonc = (source, filename) => {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LEGACY_SENDER = "auth@auth.earthuc.com";
 const EXPECTED_PRODUCTION = Object.freeze({
-  CONCLAVE_EMAIL_FROM: "conclave@conclaveax.com",
-  CONCLAVE_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
-  CONCLAVE_EMAIL_FROM_NAME: "Syntila",
+  SYNTILA_EMAIL_FROM: "syntila@conclaveax.com",
+  SYNTILA_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
+  SYNTILA_EMAIL_FROM_NAME: "Syntila",
 });
 
 function readJsonc(rootDir, relativePath) {
@@ -32,23 +32,23 @@ function readJsonc(rootDir, relativePath) {
 function addSenderErrors(errors, vars, label, expected = undefined) {
   for (const [name, value] of Object.entries(
     expected ?? {
-      CONCLAVE_EMAIL_FROM: vars?.CONCLAVE_EMAIL_FROM,
-      CONCLAVE_EMAIL_FALLBACK_FROM: vars?.CONCLAVE_EMAIL_FALLBACK_FROM,
-      CONCLAVE_EMAIL_FROM_NAME: vars?.CONCLAVE_EMAIL_FROM_NAME,
+      SYNTILA_EMAIL_FROM: vars?.SYNTILA_EMAIL_FROM,
+      SYNTILA_EMAIL_FALLBACK_FROM: vars?.SYNTILA_EMAIL_FALLBACK_FROM,
+      SYNTILA_EMAIL_FROM_NAME: vars?.SYNTILA_EMAIL_FROM_NAME,
     },
   )) {
     if (typeof value !== "string" || value.trim().length === 0) {
       errors.push(`${label}: ${name} is missing or empty`);
     }
   }
-  const primary = vars?.CONCLAVE_EMAIL_FROM?.trim().toLowerCase();
-  const fallback = vars?.CONCLAVE_EMAIL_FALLBACK_FROM?.trim().toLowerCase();
+  const primary = vars?.SYNTILA_EMAIL_FROM?.trim().toLowerCase();
+  const fallback = vars?.SYNTILA_EMAIL_FALLBACK_FROM?.trim().toLowerCase();
   if (primary && !EMAIL_PATTERN.test(primary)) {
-    errors.push(`${label}: CONCLAVE_EMAIL_FROM is not a valid email address`);
+    errors.push(`${label}: SYNTILA_EMAIL_FROM is not a valid email address`);
   }
   if (fallback && !EMAIL_PATTERN.test(fallback)) {
     errors.push(
-      `${label}: CONCLAVE_EMAIL_FALLBACK_FROM is not a valid email address`,
+      `${label}: SYNTILA_EMAIL_FALLBACK_FROM is not a valid email address`,
     );
   }
   if (primary === LEGACY_SENDER || fallback === LEGACY_SENDER) {
@@ -71,8 +71,8 @@ export function validateEmailDeploymentConfig(rootDir = process.cwd()) {
   const production = readJsonc(rootDir, "infra/cloudflare/app.wrangler.jsonc");
   const development = readJsonc(rootDir, "apps/cloud/wrangler.jsonc");
 
-  if (production.config.vars?.CONCLAVE_ENVIRONMENT !== "production") {
-    errors.push("production: CONCLAVE_ENVIRONMENT must be production");
+  if (production.config.vars?.SYNTILA_ENVIRONMENT !== "production") {
+    errors.push("production: SYNTILA_ENVIRONMENT must be production");
   }
   addSenderErrors(
     errors,
@@ -82,23 +82,23 @@ export function validateEmailDeploymentConfig(rootDir = process.cwd()) {
   );
 
   const binding = production.config.send_email?.some(
-    (entry) => entry?.name === "CONCLAVE_EMAIL",
+    (entry) => entry?.name === "SYNTILA_EMAIL",
   );
   if (!binding) {
-    errors.push("production: CONCLAVE_EMAIL send_email binding is missing");
+    errors.push("production: SYNTILA_EMAIL send_email binding is missing");
   }
   if (production.source.includes(LEGACY_SENDER)) {
     errors.push("production: retired sender appears in Wrangler configuration");
   }
 
-  if (development.config.vars?.CONCLAVE_ENVIRONMENT !== "development") {
-    errors.push("development: CONCLAVE_ENVIRONMENT must be development");
+  if (development.config.vars?.SYNTILA_ENVIRONMENT !== "development") {
+    errors.push("development: SYNTILA_ENVIRONMENT must be development");
   }
   const developmentBinding = development.config.send_email?.some(
-    (entry) => entry?.name === "CONCLAVE_EMAIL",
+    (entry) => entry?.name === "SYNTILA_EMAIL",
   );
   if (!developmentBinding) {
-    errors.push("development: CONCLAVE_EMAIL send_email binding is missing");
+    errors.push("development: SYNTILA_EMAIL send_email binding is missing");
   }
   for (const name of Object.keys(EXPECTED_PRODUCTION)) {
     if (development.config.vars?.[name] !== undefined) {

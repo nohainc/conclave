@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 
 const read = (path) => readFile(path, "utf8");
 const schema = JSON.parse(
-  await read("packages/protocol/schema/conclave-message.schema.json"),
+  await read("packages/protocol/schema/syntila-message.schema.json"),
 );
 const [
   protocolTs,
@@ -20,8 +20,8 @@ const [
   read("packages/dart/protocol/lib/generated_protocol.dart"),
   read("packages/protocol/src/index.ts"),
   read("packages/workspace-runtime-protocol/src/index.ts"),
-  read("packages/dart/protocol/lib/conclave_protocol.dart"),
-  read("packages/conclave_worker_protocol/lib/src/protocol_version.dart"),
+  read("packages/dart/protocol/lib/syntila_protocol.dart"),
+  read("packages/syntila_worker_protocol/lib/src/protocol_version.dart"),
   read("packages/dart/protocol/lib/workspace_runtime_protocol.dart"),
 ]);
 

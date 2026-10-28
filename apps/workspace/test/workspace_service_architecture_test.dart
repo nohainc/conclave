@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/workspace_service_lifecycle.dart';
-import 'package:conclave_workspace/workspace_settings.dart';
+import 'package:syntila_workspace/secure_credentials.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/workspace_service_lifecycle.dart';
+import 'package:syntila_workspace/workspace_settings.dart';
 
 class _MemoryCredentials implements SecureCredentialStore {
   final values = <String, String>{};

@@ -18,13 +18,13 @@ extension ExecutionStatusToneHelpers on ExecutionStatusTone {
   Color color(bool isDark) {
     switch (this) {
       case ExecutionStatusTone.usable:
-        return ConclaveBrand.success;
+        return SyntilaBrand.success;
       case ExecutionStatusTone.degraded:
-        return ConclaveBrand.warning;
+        return SyntilaBrand.warning;
       case ExecutionStatusTone.neutral:
-        return isDark ? Colors.white38 : ConclaveBrand.lightInkMuted;
+        return isDark ? Colors.white38 : SyntilaBrand.lightInkMuted;
       case ExecutionStatusTone.failed:
-        return ConclaveBrand.error;
+        return SyntilaBrand.error;
     }
   }
 }

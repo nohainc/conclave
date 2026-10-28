@@ -36,14 +36,14 @@ if (typeof templateId !== "string" || !(templateId in emailPreviewFixtures)) {
 if (!recipient) throw new Error("An explicit --recipient is required");
 
 const approvedRecipients = new Set(
-  (process.env.CONCLAVE_EMAIL_TEST_RECIPIENTS ?? "")
+  (process.env.SYNTILA_EMAIL_TEST_RECIPIENTS ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
 );
 if (approvedRecipients.size === 0 || !approvedRecipients.has(recipient)) {
   throw new Error(
-    "Refusing to send: --recipient must be listed in CONCLAVE_EMAIL_TEST_RECIPIENTS",
+    "Refusing to send: --recipient must be listed in SYNTILA_EMAIL_TEST_RECIPIENTS",
   );
 }
 
@@ -105,18 +105,18 @@ const transport = {
 
 const result = await sendRenderedEmail(
   {
-    CONCLAVE_EMAIL: transport,
-    ...(process.env.CONCLAVE_EMAIL_FROM
-      ? { CONCLAVE_EMAIL_FROM: process.env.CONCLAVE_EMAIL_FROM }
+    SYNTILA_EMAIL: transport,
+    ...(process.env.SYNTILA_EMAIL_FROM
+      ? { SYNTILA_EMAIL_FROM: process.env.SYNTILA_EMAIL_FROM }
       : {}),
-    ...(process.env.CONCLAVE_EMAIL_FALLBACK_FROM
+    ...(process.env.SYNTILA_EMAIL_FALLBACK_FROM
       ? {
-          CONCLAVE_EMAIL_FALLBACK_FROM:
-            process.env.CONCLAVE_EMAIL_FALLBACK_FROM,
+          SYNTILA_EMAIL_FALLBACK_FROM:
+            process.env.SYNTILA_EMAIL_FALLBACK_FROM,
         }
       : {}),
-    ...(process.env.CONCLAVE_EMAIL_FROM_NAME
-      ? { CONCLAVE_EMAIL_FROM_NAME: process.env.CONCLAVE_EMAIL_FROM_NAME }
+    ...(process.env.SYNTILA_EMAIL_FROM_NAME
+      ? { SYNTILA_EMAIL_FROM_NAME: process.env.SYNTILA_EMAIL_FROM_NAME }
       : {}),
   },
   { to: recipient, rendered },

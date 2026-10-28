@@ -586,7 +586,7 @@ rendering subscriptions. The web backend uses native IndexedDB through
 falls back to in-memory state; startup storage reads have a bounded timeout.
 
 Cloud session authentication determines the Syntila user ID before hydration.
-The database `conclave-ax-read-cache-v1` stores versioned safe read DTOs per user,
+The database `syntila-read-cache-v1` stores versioned safe read DTOs per user,
 never the session, viewer email, tokens, account security, credentials, grants,
 pending forms, mutation keys, local optimistic entities, or executable operations.
 Space settings, Thread configuration and Workflow snapshots use explicit
@@ -1341,7 +1341,7 @@ and closes the popup. Notification unread badges and action callbacks are retain
 ### Appearance preference
 
 AX saves the latest Light, Dark, or System appearance selection in browser-local
-storage (`conclave-ax-theme-v1`) and restores it synchronously before the first
+storage (`syntila-theme-v1`) and restores it synchronously before the first
 render after a refresh. This device-local preference is independent of sign-in
 and is not sent to Cloud. Missing, invalid, or inaccessible storage defaults to
 System; unavailable writes leave the current session's selection working.

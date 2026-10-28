@@ -1,4 +1,4 @@
-import { type ServiceConnectionState } from "@conclave/workspace-runtime-protocol";
+import { type ServiceConnectionState } from "@syntila/workspace-runtime-protocol";
 
 /**
  * Service-level readiness for one authenticated runtime session.

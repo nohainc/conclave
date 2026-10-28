@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_profile_lab/utils/profile_payload_migrations.dart';
+import 'package:syntila_profile_lab/utils/profile_payload_migrations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

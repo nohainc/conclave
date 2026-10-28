@@ -7,7 +7,7 @@ import {
   authorizeRealtimeScope,
   eventMatchesScope,
 } from "../src/realtime-gateway.js";
-import { parseRealtimeEvent } from "@conclave/protocol";
+import { parseRealtimeEvent } from "@syntila/protocol";
 import {
   handleCreateSpace,
   handleListSpaces,
@@ -32,9 +32,9 @@ function fixture() {
     ('owner','owner@test','Owner','now','now'), ('member','member@test','Member','now','now'), ('outsider','outsider@test','Outsider','now','now');`);
   const deliveries: { user: string; event: Record<string, unknown> }[] = [];
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
-    CONCLAVE_REALTIME_GATEWAY: {
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
+    SYNTILA_REALTIME_GATEWAY: {
       getByName(user: string) {
         return {
           async fetch(request: Request) {
@@ -332,7 +332,7 @@ describe("collaboration durable signals", () => {
   it("isolates same-named execution, Space and user streams and idempotency keys", async () => {
     const f = fixture();
     try {
-      const publisher = new CloudEventPublisher({ CONCLAVE_DB: f.db });
+      const publisher = new CloudEventPublisher({ SYNTILA_DB: f.db });
       const input = {
         type: "space.updated",
         spaceId: "same",
@@ -379,7 +379,7 @@ describe("collaboration durable signals", () => {
   it("retains Space sequence counters after expired events are pruned", async () => {
     const f = fixture();
     try {
-      const publisher = new CloudEventPublisher({ CONCLAVE_DB: f.db });
+      const publisher = new CloudEventPublisher({ SYNTILA_DB: f.db });
       const input = {
         type: "space.updated",
         spaceId: "p",

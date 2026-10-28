@@ -57,9 +57,9 @@ describe("profile avatars", () => {
     );
     bucket = new MemoryAvatarBucket();
     env = {
-      CONCLAVE_DB: store.db,
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_ARTIFACTS: bucket as never,
+      SYNTILA_DB: store.db,
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_ARTIFACTS: bucket as never,
       TEST_AUTHENTICATION: async (request: Request) => ({
         userId: request.headers.get("authorization") ?? "",
       }),
@@ -84,7 +84,7 @@ describe("profile avatars", () => {
   const request = (
     userId: string,
     init: RequestInit = {},
-    url = "https://conclave.test/api/profile/avatar",
+    url = "https://syntila.test/api/profile/avatar",
   ) =>
     (() => {
       const headers = new Headers(init.headers);
@@ -109,7 +109,7 @@ describe("profile avatars", () => {
     ).toEqual(new Uint8Array([9, 8, 7, 6]));
     const payload = (await upload.json()) as { avatarUrl: string };
     expect(payload.avatarUrl).toMatch(
-      /^https:\/\/conclave\.test\/api\/users\/a\/avatar\?v=[0-9a-f-]+$/,
+      /^https:\/\/syntila\.test\/api\/users\/a\/avatar\?v=[0-9a-f-]+$/,
     );
     expect(
       store.sqlite.prepare("SELECT avatar_url FROM users WHERE id='a'").get(),
@@ -184,7 +184,7 @@ describe("profile avatars", () => {
     );
     await expect(
       handleGetAvatar(
-        request("b", {}, "https://conclave.test/api/users/a/avatar"),
+        request("b", {}, "https://syntila.test/api/users/a/avatar"),
         env,
         "a",
       ),
@@ -194,7 +194,7 @@ describe("profile avatars", () => {
       "INSERT INTO people_relationships(user_low_id,user_high_id,established_at) VALUES ('a','b','now')",
     );
     const shared = await handleGetAvatar(
-      request("b", {}, "https://conclave.test/api/users/a/avatar"),
+      request("b", {}, "https://syntila.test/api/users/a/avatar"),
       env,
       "a",
     );

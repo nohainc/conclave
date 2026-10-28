@@ -5,15 +5,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/src/cli_command_runner.dart';
-import 'package:conclave_cli_worker_runtime/src/cli_environment_builder.dart';
-import 'package:conclave_cli_worker_runtime/src/cli_executable_locator.dart';
-import 'package:conclave_cli_worker_runtime/src/cli_streaming_runner.dart';
-import 'package:conclave_cli_worker_runtime/src/worker_process_cleanup.dart';
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+import 'package:syntila_cli_worker_runtime/src/cli_command_runner.dart';
+import 'package:syntila_cli_worker_runtime/src/cli_environment_builder.dart';
+import 'package:syntila_cli_worker_runtime/src/cli_executable_locator.dart';
+import 'package:syntila_cli_worker_runtime/src/cli_streaming_runner.dart';
+import 'package:syntila_cli_worker_runtime/src/worker_process_cleanup.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show ProfileVersionProbe, SafeProviderDiagnostics;
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 
 import 'engine_logger.dart';
 import 'engine_session_store.dart';

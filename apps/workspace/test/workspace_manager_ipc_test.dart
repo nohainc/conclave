@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_models.dart';
@@ -170,7 +170,7 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-              constraints: ConclaveDialogStyle.small,
+              constraints: SyntilaDialogStyle.small,
               title: Text('Revoke access for ${person.displayName}?'),
               content: const Text(
                   'They stop being able to run on this Workspace. Work already running finishes.'),
@@ -278,26 +278,26 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
     return PopupMenuButton<int>(
       key: key,
       enabled: !_busy,
-      color: ConclaveColors.composerBackground(isDark),
+      color: SyntilaColors.composerBackground(isDark),
       surfaceTintColor: Colors.transparent,
       elevation: 12,
-      shadowColor: ConclaveMenuStyle.shadow(isDark),
-      shape: ConclaveMenuStyle.shape(isDark),
-      menuPadding: ConclaveMenuStyle.padding,
+      shadowColor: SyntilaMenuStyle.shadow(isDark),
+      shape: SyntilaMenuStyle.shape(isDark),
+      menuPadding: SyntilaMenuStyle.padding,
       onSelected: onChanged,
       itemBuilder: (menuContext) => [
         for (final choice in choices.entries)
-          ConclaveMenuEntry<int>(
+          SyntilaMenuEntry<int>(
             value: choice.key,
             child: MenuItemButton(
-              style: ConclaveMenuStyle.item(isDark),
+              style: SyntilaMenuStyle.item(isDark),
               leadingIcon: Icon(
                   choice.key == selected
                       ? Icons.check_circle_rounded
                       : Icons.circle_outlined,
                   size: 15),
               onPressed: () => Navigator.pop(menuContext, choice.key),
-              child: Text(choice.value, style: ConclaveMenuStyle.textStyle),
+              child: Text(choice.value, style: SyntilaMenuStyle.textStyle),
             ),
           ),
       ],

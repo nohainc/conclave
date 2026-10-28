@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_protocol/conclave_protocol.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 
 import 'cloud_connection.dart';
 import 'assignment_startup.dart';
@@ -282,7 +282,7 @@ class WorkerAssignmentHandler {
                     lifecycle: spaceDirectoryLifecycle,
                     applicationStateDirectory: applicationStateDirectory ??
                         Directory(
-                            '${Directory.current.path}${Platform.pathSeparator}.conclave-mutation-state'),
+                            '${Directory.current.path}${Platform.pathSeparator}.syntila-mutation-state'),
                   )),
         threadMutationCoordinator = threadMutationCoordinator ??
             (threadDirectoryLifecycle == null

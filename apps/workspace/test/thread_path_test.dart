@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -8,7 +8,7 @@ void main() {
   late ThreadPathResolver resolver;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('conclave-work-path-');
+    root = await Directory.systemTemp.createTemp('syntila-work-path-');
     resolver = ThreadPathResolver(root);
   });
 
@@ -91,7 +91,7 @@ void main() {
   });
 
   test('rejects an existing symlink that escapes the Work Root', () async {
-    final outside = await Directory.systemTemp.createTemp('conclave-outside-');
+    final outside = await Directory.systemTemp.createTemp('syntila-outside-');
     addTearDown(() => outside.delete(recursive: true));
     await Link('${root.path}${Platform.pathSeparator}space-1')
         .create(outside.path);

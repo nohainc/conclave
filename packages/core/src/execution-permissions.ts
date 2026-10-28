@@ -2,7 +2,7 @@ import {
   EXECUTION_PERMISSIONS,
   isExecutionPermission,
   type ExecutionPermission,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 
 export { EXECUTION_PERMISSIONS, isExecutionPermission };
 export type { ExecutionPermission };

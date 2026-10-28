@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/app_shell.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
-import 'package:conclave_app/src/features/navigation/resizable_sidebar.dart';
+import 'package:syntila_app/src/app_shell.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/features/navigation/resizable_sidebar.dart';
 import 'ax_fixture_data.dart';
 import 'ax_fixture_realtime.dart';
 
@@ -53,7 +53,7 @@ void main() {
     final source = _HomeNotificationSource();
     final realtime = TestRealtime();
     await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
             services: const DefaultPlatformServices(),
             dataSource: source,
             realtimeClient: realtime,
@@ -86,7 +86,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final source = _NotificationSource();
       await tester.pumpWidget(MaterialApp(
-          home: ConclaveAppShell(
+          home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: source,
         realtimeClient: TestRealtime(),
@@ -137,8 +137,8 @@ void main() {
       final source = _NotificationSource();
       final realtime = TestRealtime();
       await tester.pumpWidget(MaterialApp(
-        theme: dark ? ConclaveBrand.darkTheme() : ConclaveBrand.lightTheme(),
-        home: ConclaveAppShell(
+        theme: dark ? SyntilaBrand.darkTheme() : SyntilaBrand.lightTheme(),
+        home: SyntilaAppShell(
           services: const DefaultPlatformServices(),
           dataSource: source,
           realtimeClient: realtime,

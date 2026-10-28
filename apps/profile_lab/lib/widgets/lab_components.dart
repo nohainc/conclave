@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../utils/profile_lab_security.dart';
@@ -116,7 +116,7 @@ class StatusBadge extends StatelessWidget {
     final color = switch (status) {
       LabStatus.success => ProfileLabTheme.passColor,
       LabStatus.warning => ProfileLabTheme.warnColor,
-      LabStatus.error => ConclaveColors.errorTextDark,
+      LabStatus.error => SyntilaColors.errorTextDark,
       LabStatus.neutral => ProfileLabTheme.secondaryText
     };
     final symbol = icon ??

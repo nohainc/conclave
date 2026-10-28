@@ -35,7 +35,7 @@ export const EXECUTION_ERROR_MESSAGES = {
     "This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.",
 } as const;
 
-export const REALTIME_EVENTS_NAME = "conclave.realtime-events" as const;
+export const REALTIME_EVENTS_NAME = "syntila.realtime-events" as const;
 export const REALTIME_EVENTS_VERSION = "1.1" as const;
 export const REALTIME_EVENT_ENVELOPE_FIELDS = [
   "eventId",

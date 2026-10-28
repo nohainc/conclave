@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 
 import 'platform_runtime.dart';
 

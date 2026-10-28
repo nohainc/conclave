@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 AxThread _thread(String id, {Map<String, dynamic> metadata = const {}}) =>

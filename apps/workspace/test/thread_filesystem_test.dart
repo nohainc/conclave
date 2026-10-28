@@ -1,4 +1,4 @@
-import 'package:conclave_workspace/thread_filesystem.dart';
+import 'package:syntila_workspace/thread_filesystem.dart';
 import 'package:test/test.dart';
 
 void main() {

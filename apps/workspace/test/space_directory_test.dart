@@ -3,11 +3,11 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/space_directory.dart';
+import 'package:syntila_workspace/space_directory.dart';
 
 void main() {
   test('keeps a stable directory when the Space is renamed', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final resolver = SpaceDirectoryResolver(
       workRoot: Directory('${root.path}/work'),
@@ -28,7 +28,7 @@ void main() {
   });
 
   test('adopts a marked manual move', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     final resolver = SpaceDirectoryResolver(
@@ -51,7 +51,7 @@ void main() {
   });
 
   test('asks before reusing a folder marked for another Space', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     final resolver = SpaceDirectoryResolver(
@@ -78,7 +78,7 @@ void main() {
   });
 
   test('asks before using an unmarked non-empty directory', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     await Directory('${work.path}/Space').create(recursive: true);
@@ -110,7 +110,7 @@ void main() {
   });
 
   test('claims an empty unmarked directory without asking', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     await Directory('${work.path}/Space').create(recursive: true);
@@ -125,7 +125,7 @@ void main() {
 
   test('adopts the legacy Space ID directory after Work Root migration',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     await Directory('${work.path}/space-a/thread-a').create(recursive: true);
@@ -143,7 +143,7 @@ void main() {
   });
 
   test('keeps Space fencing metadata in application state', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     final state = Directory('${root.path}/state');
@@ -176,7 +176,7 @@ void main() {
 
   test('forgets registry entries of removed Spaces without touching folders',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     final resolver = SpaceDirectoryResolver(
@@ -200,7 +200,7 @@ void main() {
 
   test('runs different Threads of one Space in parallel, one Thread serially',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final state = Directory('${root.path}/state');
     final coordinator = SpaceMutationCoordinator(
@@ -241,7 +241,7 @@ void main() {
 
   test('reset clears Thread fences so a restarted lease counter is accepted',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final state = Directory('${root.path}/state');
     final coordinator = SpaceMutationCoordinator(
@@ -271,7 +271,7 @@ void main() {
 
   test('asks before taking a registered folder claimed by another Space',
       () async {
-    final root = await Directory.systemTemp.createTemp('conclave-space-');
+    final root = await Directory.systemTemp.createTemp('syntila-space-');
     addTearDown(() => root.delete(recursive: true));
     final work = Directory('${root.path}/work');
     final resolver = SpaceDirectoryResolver(
@@ -314,7 +314,7 @@ void main() {
     late SpaceDirectoryResolver resolver;
 
     setUp(() async {
-      root = await Directory.systemTemp.createTemp('conclave-space-');
+      root = await Directory.systemTemp.createTemp('syntila-space-');
       work = Directory('${root.path}/work');
       resolver = SpaceDirectoryResolver(
         workRoot: work,

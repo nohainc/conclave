@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
+import 'package:syntila_profile_lab/profile_lab_test_sandbox.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

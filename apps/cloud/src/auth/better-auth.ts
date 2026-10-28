@@ -30,22 +30,22 @@ const SIGNUP_OTP_MAX_ATTEMPTS = 5;
 const SIGNUP_OTP_PREFIX = "signup-otp:";
 const EMAIL_CHANGE_OTP_PREFIX = "email-change-otp:";
 
-export type BetterAuthRuntimeEnv = Pick<Env, "CONCLAVE_DB"> &
+export type BetterAuthRuntimeEnv = Pick<Env, "SYNTILA_DB"> &
   EmailSenderEnvironment & {
-    CONCLAVE_ARTIFACTS?: Env["CONCLAVE_ARTIFACTS"];
-    CONCLAVE_ENVIRONMENT: string;
-    CONCLAVE_E2E?: string;
+    SYNTILA_ARTIFACTS?: Env["SYNTILA_ARTIFACTS"];
+    SYNTILA_ENVIRONMENT: string;
+    SYNTILA_E2E?: string;
     BETTER_AUTH_SECRET?: string;
     BETTER_AUTH_URL?: string;
     BETTER_AUTH_TRUSTED_ORIGINS?: string;
     BETTER_AUTH_RP_ID?: string;
     BETTER_AUTH_ORIGIN?: string;
-    CONCLAVE_APP_URL?: string;
-    CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
-    CONCLAVE_AUTH_GITHUB_CLIENT_ID?: string;
-    CONCLAVE_AUTH_GITHUB_CLIENT_SECRET?: string;
-    CONCLAVE_AUTH_GOOGLE_CLIENT_ID?: string;
-    CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET?: string;
+    SYNTILA_APP_URL?: string;
+    SYNTILA_REALTIME_GATEWAY?: DurableObjectNamespace;
+    SYNTILA_AUTH_GITHUB_CLIENT_ID?: string;
+    SYNTILA_AUTH_GITHUB_CLIENT_SECRET?: string;
+    SYNTILA_AUTH_GOOGLE_CLIENT_ID?: string;
+    SYNTILA_AUTH_GOOGLE_CLIENT_SECRET?: string;
   };
 
 function providerCredentials(
@@ -63,21 +63,21 @@ export type SocialProviderId = "github" | "google";
 export function isSocialProviderConfigured(
   env: Pick<
     BetterAuthRuntimeEnv,
-    | "CONCLAVE_AUTH_GITHUB_CLIENT_ID"
-    | "CONCLAVE_AUTH_GITHUB_CLIENT_SECRET"
-    | "CONCLAVE_AUTH_GOOGLE_CLIENT_ID"
-    | "CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET"
+    | "SYNTILA_AUTH_GITHUB_CLIENT_ID"
+    | "SYNTILA_AUTH_GITHUB_CLIENT_SECRET"
+    | "SYNTILA_AUTH_GOOGLE_CLIENT_ID"
+    | "SYNTILA_AUTH_GOOGLE_CLIENT_SECRET"
   >,
   provider: SocialProviderId,
 ): boolean {
   return provider === "google"
     ? Boolean(
-        env.CONCLAVE_AUTH_GOOGLE_CLIENT_ID &&
-        env.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET,
+        env.SYNTILA_AUTH_GOOGLE_CLIENT_ID &&
+        env.SYNTILA_AUTH_GOOGLE_CLIENT_SECRET,
       )
     : Boolean(
-        env.CONCLAVE_AUTH_GITHUB_CLIENT_ID &&
-        env.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET,
+        env.SYNTILA_AUTH_GITHUB_CLIENT_ID &&
+        env.SYNTILA_AUTH_GITHUB_CLIENT_SECRET,
       );
 }
 
@@ -87,11 +87,11 @@ export function isSocialProviderConfigured(
  * production both share one origin and this equals the request origin.
  */
 export function configuredAppOrigin(
-  env: Pick<BetterAuthRuntimeEnv, "CONCLAVE_APP_URL">,
+  env: Pick<BetterAuthRuntimeEnv, "SYNTILA_APP_URL">,
 ): string | undefined {
-  if (!env.CONCLAVE_APP_URL) return undefined;
+  if (!env.SYNTILA_APP_URL) return undefined;
   try {
-    return new URL(env.CONCLAVE_APP_URL).origin;
+    return new URL(env.SYNTILA_APP_URL).origin;
   } catch {
     return undefined;
   }
@@ -119,8 +119,8 @@ async function sendAuthEmail<
   action: string,
   actionUrl: string,
 ): Promise<void> {
-  if (!env.CONCLAVE_EMAIL) {
-    if (env.CONCLAVE_ENVIRONMENT === "development") {
+  if (!env.SYNTILA_EMAIL) {
+    if (env.SYNTILA_ENVIRONMENT === "development") {
       console.info("auth.email.development", {
         action,
         email: user.email,
@@ -129,7 +129,7 @@ async function sendAuthEmail<
     }
     throw new EmailDeliveryError(
       "configuration_error",
-      "CONCLAVE_EMAIL is required for authentication emails",
+      "SYNTILA_EMAIL is required for authentication emails",
     );
   }
 
@@ -150,8 +150,8 @@ async function sendSignUpVerificationCodeEmail(
   verificationCode: string,
   purpose: "sign-up" | "email-change" = "sign-up",
 ): Promise<void> {
-  if (!env.CONCLAVE_EMAIL) {
-    if (env.CONCLAVE_ENVIRONMENT === "development") {
+  if (!env.SYNTILA_EMAIL) {
+    if (env.SYNTILA_ENVIRONMENT === "development") {
       console.info("auth.signup_otp.development", {
         email: recipient.email,
         verificationCode,
@@ -161,7 +161,7 @@ async function sendSignUpVerificationCodeEmail(
     }
     throw new EmailDeliveryError(
       "configuration_error",
-      "CONCLAVE_EMAIL is required for authentication emails",
+      "SYNTILA_EMAIL is required for authentication emails",
     );
   }
 
@@ -183,8 +183,8 @@ async function sendWelcomeEmail(
 ): Promise<void> {
   const rawEmail = recipient.email?.trim();
   if (!rawEmail) return;
-  if (!env.CONCLAVE_EMAIL) {
-    if (env.CONCLAVE_ENVIRONMENT === "development") {
+  if (!env.SYNTILA_EMAIL) {
+    if (env.SYNTILA_ENVIRONMENT === "development") {
       console.info("auth.welcome.development", {
         email: rawEmail,
       });
@@ -281,13 +281,13 @@ export function buildBetterAuthOptions(
   }
 
   const github = providerCredentials(
-    env.CONCLAVE_AUTH_GITHUB_CLIENT_ID,
-    env.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET,
+    env.SYNTILA_AUTH_GITHUB_CLIENT_ID,
+    env.SYNTILA_AUTH_GITHUB_CLIENT_SECRET,
     ["user:email"],
   );
   const google = providerCredentials(
-    env.CONCLAVE_AUTH_GOOGLE_CLIENT_ID,
-    env.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET,
+    env.SYNTILA_AUTH_GOOGLE_CLIENT_ID,
+    env.SYNTILA_AUTH_GOOGLE_CLIENT_SECRET,
     ["email", "profile"],
   );
   const trustedOrigins = [
@@ -333,7 +333,7 @@ export function buildBetterAuthOptions(
       }) => {
         const credentialId = clientData.id;
         if (!credentialId) return;
-        await env.CONCLAVE_DB.prepare(
+        await env.SYNTILA_DB.prepare(
           `INSERT INTO auth_step_up_events
              (id, user_id, method, created_at)
            SELECT ?1, user_id, 'passkey', ?2
@@ -361,7 +361,7 @@ export function buildBetterAuthOptions(
   };
 
   return {
-    database: env.CONCLAVE_DB,
+    database: env.SYNTILA_DB,
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     user: {
@@ -379,8 +379,8 @@ export function buildBetterAuthOptions(
       deleteUser: {
         enabled: true,
         beforeDelete: async (user: { id: string }) => {
-          if (env.CONCLAVE_ARTIFACTS)
-            await deleteAccountAvatars(env.CONCLAVE_ARTIFACTS, user.id);
+          if (env.SYNTILA_ARTIFACTS)
+            await deleteAccountAvatars(env.SYNTILA_ARTIFACTS, user.id);
         },
         afterDelete: async (user: { email: string; name?: string | null }) => {
           try {
@@ -532,7 +532,7 @@ export function buildBetterAuthOptions(
             context: unknown,
           ) => {
             try {
-              await recordAuthAuditEvent(env.CONCLAVE_DB, {
+              await recordAuthAuditEvent(env.SYNTILA_DB, {
                 action: "auth.sign_in",
                 outcome: "success",
                 userId: session.userId,
@@ -548,7 +548,7 @@ export function buildBetterAuthOptions(
         delete: {
           after: async (session: { userId: string; id: string }) => {
             try {
-              await recordAuthAuditEvent(env.CONCLAVE_DB, {
+              await recordAuthAuditEvent(env.SYNTILA_DB, {
                 action: "auth.session.revoked",
                 outcome: "success",
                 userId: session.userId,
@@ -583,12 +583,12 @@ export function buildBetterAuthOptions(
     },
     trustedOrigins,
     advanced: {
-      ...(env.CONCLAVE_ENVIRONMENT === "development" &&
-      env.CONCLAVE_E2E === "true"
+      ...(env.SYNTILA_ENVIRONMENT === "development" &&
+      env.SYNTILA_E2E === "true"
         ? { database: { validateSchema: false } }
         : {}),
       useSecureCookies:
-        env.CONCLAVE_ENVIRONMENT === "production" &&
+        env.SYNTILA_ENVIRONMENT === "production" &&
         Boolean(env.BETTER_AUTH_URL?.startsWith("https://")),
       defaultCookieAttributes: {
         httpOnly: true,
@@ -756,7 +756,7 @@ export async function handleBetterAuthRequest(
   const statusOutcome = response.status >= 400 ? "failure" : "success";
   if (verifiedSignUpEmail && statusOutcome === "success") {
     try {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `UPDATE users
             SET email_verified = 1, updated_at = ?1
           WHERE lower(email) = ?2`,
@@ -820,7 +820,7 @@ async function handleSignUpSendCode(
       ? body.name.trim()
       : null;
 
-  const existingUser = await env.CONCLAVE_DB.prepare(
+  const existingUser = await env.SYNTILA_DB.prepare(
     "SELECT id FROM users WHERE lower(email) = ?1 LIMIT 1",
   )
     .bind(normalizedEmail)
@@ -840,14 +840,14 @@ async function handleSignUpSendCode(
     now.getTime() + SIGNUP_OTP_EXPIRATION_SECONDS * 1000,
   );
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "DELETE FROM auth_verifications WHERE identifier = ?1",
   )
     .bind(identifier)
     .run();
 
   const verificationId = `ver-${crypto.randomUUID()}`;
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO auth_verifications
        (id, identifier, value, expires_at, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
@@ -869,7 +869,7 @@ async function handleSignUpSendCode(
       verificationCode,
     );
   } catch (error) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE id = ?1",
     )
       .bind(verificationId)
@@ -933,7 +933,7 @@ async function verifySignUpOtpIfProvided(
   }
 
   const identifier = signupOtpIdentifier(rawEmail);
-  const record = await env.CONCLAVE_DB.prepare(
+  const record = await env.SYNTILA_DB.prepare(
     `SELECT id, value, expires_at
        FROM auth_verifications
       WHERE identifier = ?1
@@ -953,7 +953,7 @@ async function verifySignUpOtpIfProvided(
 
   const expiresAtMs = Date.parse(record.expires_at);
   if (Number.isNaN(expiresAtMs) || expiresAtMs < Date.now()) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE id = ?1",
     )
       .bind(record.id)
@@ -967,7 +967,7 @@ async function verifySignUpOtpIfProvided(
 
   const parsed = parseStoredOtpValue(record.value);
   if (!parsed || parsed.attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE id = ?1",
     )
       .bind(record.id)
@@ -982,7 +982,7 @@ async function verifySignUpOtpIfProvided(
   if (parsed.code !== rawOtp) {
     const nextAttempts = parsed.attempts + 1;
     if (nextAttempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         "DELETE FROM auth_verifications WHERE id = ?1",
       )
         .bind(record.id)
@@ -993,7 +993,7 @@ async function verifySignUpOtpIfProvided(
         "Too many invalid attempts. Request a new verification code.",
       );
     }
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `UPDATE auth_verifications
           SET value = ?1, updated_at = ?2
         WHERE id = ?3`,
@@ -1011,7 +1011,7 @@ async function verifySignUpOtpIfProvided(
     );
   }
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "DELETE FROM auth_verifications WHERE identifier = ?1",
   )
     .bind(identifier)
@@ -1132,11 +1132,11 @@ async function storeEmailChangeState(
     now.getTime() + SIGNUP_OTP_EXPIRATION_SECONDS * 1000,
   );
   const id = `ver-${crypto.randomUUID()}`;
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE identifier = ?1",
     ).bind(identifier),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO auth_verifications
          (id, identifier, value, expires_at, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
@@ -1162,7 +1162,7 @@ async function deliverEmailChangeCode(
     await sendSignUpVerificationCodeEmail(env, recipient, code, "email-change");
     return undefined;
   } catch (error) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE id = ?1",
     )
       .bind(verificationId)
@@ -1185,7 +1185,7 @@ async function emailInUse(
   email: string,
   userId: string,
 ): Promise<boolean> {
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     "SELECT id FROM users WHERE lower(email) = ?1 AND id != ?2 LIMIT 1",
   )
     .bind(email, userId)
@@ -1269,7 +1269,7 @@ async function consumeEmailChangeCode(
       "Enter the 6-digit verification code.",
     );
   }
-  const record = await env.CONCLAVE_DB.prepare(
+  const record = await env.SYNTILA_DB.prepare(
     `SELECT id, value, expires_at FROM auth_verifications
       WHERE identifier = ?1 ORDER BY created_at DESC LIMIT 1`,
   )
@@ -1285,7 +1285,7 @@ async function consumeEmailChangeCode(
     expiresAtMs < Date.now()
   ) {
     if (record) {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         "DELETE FROM auth_verifications WHERE id = ?1",
       )
         .bind(record.id)
@@ -1300,7 +1300,7 @@ async function consumeEmailChangeCode(
   if (state.code !== code) {
     const attempts = state.attempts + 1;
     if (attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         "DELETE FROM auth_verifications WHERE id = ?1",
       )
         .bind(record.id)
@@ -1311,7 +1311,7 @@ async function consumeEmailChangeCode(
         "Too many invalid attempts. Start the email change again.",
       );
     }
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "UPDATE auth_verifications SET value = ?1, updated_at = ?2 WHERE id = ?3",
     )
       .bind(
@@ -1365,7 +1365,7 @@ export async function handleEmailChangeConfirm(
   const { state } = result;
   const identifier = emailChangeIdentifier(user.id);
   if (await emailInUse(env, state.newEmail, user.id)) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE identifier = ?1",
     )
       .bind(identifier)
@@ -1376,12 +1376,12 @@ export async function handleEmailChangeConfirm(
       "Another account already uses this email address.",
     );
   }
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       `UPDATE users SET email = ?1, email_verified = 1, updated_at = ?2
         WHERE id = ?3`,
     ).bind(state.newEmail, new Date().toISOString(), user.id),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "DELETE FROM auth_verifications WHERE identifier = ?1",
     ).bind(identifier),
   ]);
@@ -1479,7 +1479,7 @@ async function safeRecord(
   event: Parameters<typeof recordAuthAuditEvent>[1],
 ): Promise<void> {
   try {
-    await recordAuthAuditEvent(env.CONCLAVE_DB, event);
+    await recordAuthAuditEvent(env.SYNTILA_DB, event);
   } catch {
     // Do not turn a successful authentication or account operation into a 500.
   }
@@ -1489,7 +1489,7 @@ async function safeRecord(
  * Keep OAuth callbacks on this AX origin and prevent open redirects.
  *
  * Only the request origin and the operator-configured application origin
- * (`CONCLAVE_APP_URL`) are accepted. Relative targets resolve against the
+ * (`SYNTILA_APP_URL`) are accepted. Relative targets resolve against the
  * application origin when one is configured, so local development, where the
  * app and the API use different ports, returns to the app. Same-origin targets
  * stay path-only; a distinct application origin yields an absolute URL.

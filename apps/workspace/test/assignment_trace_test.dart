@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:conclave_workspace/assignment_trace.dart';
+import 'package:syntila_workspace/assignment_trace.dart';
 import 'package:test/test.dart';
 
 void main() {

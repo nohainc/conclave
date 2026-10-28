@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
-import 'package:conclave_cli_worker_engine/src/conversation_execution_router.dart';
-import 'package:conclave_cli_worker_engine/src/worker_session.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
+import 'package:syntila_cli_worker_engine/src/conversation_execution_router.dart';
+import 'package:syntila_cli_worker_engine/src/worker_session.dart';
 import 'package:test/test.dart';
 
 void main() {

@@ -253,7 +253,7 @@ class AxRenderDiagnostics {
 }
 
 /// Keeps a guarded async zone around the application entrypoint.
-void runConclaveApp(void Function() start) {
+void runSyntilaApp(void Function() start) {
   AxRenderDiagnostics.instance.install();
   runZonedGuarded(start, (error, stack) {
     AxRenderDiagnostics.instance.captureException(

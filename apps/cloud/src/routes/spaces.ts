@@ -7,7 +7,7 @@ import {
   spaceMemberPermissions,
   SPACE_MEMBER_PERMISSION_KEYS,
   parseSpaceSettings,
-} from "@conclave/security";
+} from "@syntila/security";
 import {
   loadSpacePermissions,
   requireSpaceOwner,
@@ -26,7 +26,7 @@ import {
   sendSpaceInvitationEmail,
 } from "../invitation-email.js";
 import { classifyEmailDeliveryFailure } from "../email/email-config.js";
-import { hashToken, authorizeSpaceOwner } from "@conclave/security";
+import { hashToken, authorizeSpaceOwner } from "@syntila/security";
 import {
   HttpError,
   authorizeSpaceOwnerOrThrow,
@@ -71,7 +71,7 @@ export async function handleListSpaces(
   {
     const includeArchived =
       new URL(request.url).searchParams.get("archived") === "true";
-    const rows = await env.CONCLAVE_DB.prepare(
+    const rows = await env.SYNTILA_DB.prepare(
       `SELECT p.id, p.name, p.description, pm.role,
               p.settings_json AS settingsJson, p.created_at AS createdAt, ${lastSpaceActivitySql("p")} AS updatedAt,
               EXISTS (
@@ -180,7 +180,7 @@ export async function handleCreateSpace(
   const id = `space-${crypto.randomUUID()}`;
 
   {
-    const duplicate = await env.CONCLAVE_DB.prepare(
+    const duplicate = await env.SYNTILA_DB.prepare(
       `SELECT id FROM spaces
        WHERE owner_user_id = ?1 AND LOWER(TRIM(name)) = LOWER(TRIM(?2))
        LIMIT 1`,
@@ -202,7 +202,7 @@ export async function handleCreateSpace(
       : [];
     await publishCollaborationEvent(env, "space.created", id, id, {
       mutations: [
-        env.CONCLAVE_DB.prepare(
+        env.SYNTILA_DB.prepare(
           `INSERT INTO spaces (id, owner_user_id, name, description, settings_json, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
         ).bind(
@@ -213,7 +213,7 @@ export async function handleCreateSpace(
           JSON.stringify(settings),
           now,
         ),
-        env.CONCLAVE_DB.prepare(
+        env.SYNTILA_DB.prepare(
           `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
          VALUES (?1, ?2, ?3, 'owner', ?4, ?4)
          ON CONFLICT(space_id, user_id) DO NOTHING`,
@@ -254,7 +254,7 @@ export async function handleGetSpace(
     spaceId,
     accessContext,
   );
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT p.id, p.name, p.description, pm.role,
             p.settings_json AS settingsJson, p.created_at AS createdAt, p.updated_at AS updatedAt
      FROM spaces p JOIN space_memberships pm ON pm.space_id = p.id
@@ -305,7 +305,7 @@ export async function handleUpdateSpace(
     spaceId,
     accessContext,
   );
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     `SELECT id, owner_user_id AS ownerUserId, name, description,
             settings_json AS settingsJson,
             created_at AS createdAt, updated_at AS updatedAt
@@ -415,7 +415,7 @@ export async function handleUpdateSpace(
     updatedAt: now,
   };
   if (space.name.trim().toLowerCase() !== existing.name.trim().toLowerCase()) {
-    const duplicate = await env.CONCLAVE_DB.prepare(
+    const duplicate = await env.SYNTILA_DB.prepare(
       `SELECT id FROM spaces
        WHERE owner_user_id = ?1 AND id <> ?2
          AND LOWER(TRIM(name)) = LOWER(TRIM(?3))
@@ -434,7 +434,7 @@ export async function handleUpdateSpace(
       : {}),
     ...(typeof body.archived === "boolean" ? { archived: body.archived } : {}),
   };
-  const mutation = env.CONCLAVE_DB.prepare(
+  const mutation = env.SYNTILA_DB.prepare(
     `UPDATE spaces SET name = ?1, description = ?2,
        settings_json = json_patch(settings_json, ?3), updated_at = ?4
      WHERE id = ?5`,
@@ -483,7 +483,7 @@ export async function handleDeleteSpace(
   {
     try {
       await authorizeSpaceOwner(
-        env.CONCLAVE_DB,
+        env.SYNTILA_DB,
         context,
         spaceId,
         "spaces:manage",
@@ -494,7 +494,7 @@ export async function handleDeleteSpace(
         error instanceof Error ? error.message : "Forbidden",
       );
     }
-    const audience = await env.CONCLAVE_DB.prepare(
+    const audience = await env.SYNTILA_DB.prepare(
       "SELECT user_id FROM space_memberships WHERE space_id = ?1",
     )
       .bind(spaceId)
@@ -529,7 +529,7 @@ export async function handleDeleteSpace(
     await publishCollaborationEvent(env, "space.deleted", spaceId, spaceId, {
       recipientUserIds: (audience.results ?? []).map((row) => row.user_id),
       mutations: cleanupStatements.map((sql) =>
-        env.CONCLAVE_DB.prepare(sql).bind(spaceId),
+        env.SYNTILA_DB.prepare(sql).bind(spaceId),
       ),
     });
     return json({ spaceId, deleted: true });
@@ -543,14 +543,14 @@ export async function handleListSpaceMembers(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   await authorizeRequest(request, env, "spaces:read", spaceId, accessContext);
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT pm.user_id AS userId, u.display_name AS displayName, u.email, pm.role, pm.created_at AS createdAt
      FROM space_memberships pm JOIN users u ON u.id = pm.user_id
      WHERE pm.space_id = ?1 ORDER BY CASE pm.role WHEN 'owner' THEN 0 WHEN 'collaborator' THEN 1 ELSE 2 END, u.display_name`,
   )
     .bind(spaceId)
     .all();
-  const space = await env.CONCLAVE_DB.prepare(
+  const space = await env.SYNTILA_DB.prepare(
     "SELECT settings_json AS settingsJson FROM spaces WHERE id = ?1",
   )
     .bind(spaceId)
@@ -582,7 +582,7 @@ export async function handleListSpaceInvitations(
   );
   const policy = await loadSpacePermissions(env, context.userId, spaceId);
   if (policy.role !== "owner") return json({ invitations: [] });
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT id, email, invitee_user_id AS inviteeUserId, role, status, expires_at AS expiresAt, created_at AS createdAt
      FROM space_invitations WHERE space_id = ?1 AND status = 'pending' ORDER BY created_at DESC`,
   )
@@ -608,7 +608,7 @@ export async function handleListSpaceAudit(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   await authorizeRequest(request, env, "spaces:read", spaceId, accessContext);
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT id, action, target_type AS targetType, target_id AS targetId, created_at AS createdAt
      FROM space_audit_log WHERE space_id = ?1 ORDER BY created_at DESC LIMIT 100`,
   )
@@ -648,7 +648,7 @@ export async function handleCreateSpaceInvitation(
     const userId = requiredString(body.userId, "userId");
     if (userId === context.userId)
       throw new HttpError(400, "You cannot invite yourself");
-    const person = await env.CONCLAVE_DB.prepare(
+    const person = await env.SYNTILA_DB.prepare(
       `SELECT u.email FROM people_relationships p JOIN users u ON u.id=?2 AND u.status='active'
       WHERE p.user_low_id=MIN(?1,?2) AND p.user_high_id=MAX(?1,?2)`,
     )
@@ -688,7 +688,7 @@ export async function handleCreateSpaceInvitation(
       403,
       "You cannot invite a member with rights you do not hold",
     );
-  const existingMember = await env.CONCLAVE_DB.prepare(
+  const existingMember = await env.SYNTILA_DB.prepare(
     `SELECT pm.user_id FROM space_memberships pm
      JOIN users u ON u.id = pm.user_id
      WHERE pm.space_id = ?1 AND (pm.user_id = ?3 OR LOWER(u.email) = LOWER(?2))
@@ -699,12 +699,12 @@ export async function handleCreateSpaceInvitation(
   if (existingMember) {
     throw new HttpError(409, "This user is already a Space member");
   }
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE space_invitations SET status='expired',updated_at=?3 WHERE space_id=?1 AND (LOWER(email)=?2 OR invitee_user_id=?4) AND status='pending' AND expires_at<=?3",
   )
     .bind(spaceId, email, new Date().toISOString(), inviteeUserId)
     .run();
-  const existingInvitation = await env.CONCLAVE_DB.prepare(
+  const existingInvitation = await env.SYNTILA_DB.prepare(
     `SELECT id FROM space_invitations
      WHERE space_id = ?1 AND status = 'pending' AND (LOWER(email) = LOWER(?2) OR invitee_user_id = ?3)
      LIMIT 1`,
@@ -721,8 +721,8 @@ export async function handleCreateSpaceInvitation(
   const id = `pinv-${crypto.randomUUID()}`;
   const token = `space_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
   try {
-    await env.CONCLAVE_DB.batch([
-      env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.batch([
+      env.SYNTILA_DB.prepare(
         `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at, invitee_user_id)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8, ?9)`,
       ).bind(
@@ -736,7 +736,7 @@ export async function handleCreateSpaceInvitation(
         now.toISOString(),
         inviteeUserId,
       ),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
       ).bind(
         permissionJsonPath("invitationPermissions", id),
@@ -758,7 +758,7 @@ export async function handleCreateSpaceInvitation(
       );
     throw error;
   }
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
      VALUES (?1, ?2, 'user', ?3, 'space.invitation.created', 'invitation', ?4, ?5, ?6)`,
   )
@@ -773,7 +773,7 @@ export async function handleCreateSpaceInvitation(
     .run();
   const recipient = inviteeUserId
     ? { id: inviteeUserId }
-    : await env.CONCLAVE_DB.prepare(
+    : await env.SYNTILA_DB.prepare(
         `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
       )
         .bind(email)
@@ -786,7 +786,7 @@ export async function handleCreateSpaceInvitation(
         : [],
   });
 
-  const spaceRow = await env.CONCLAVE_DB.prepare(
+  const spaceRow = await env.SYNTILA_DB.prepare(
     `SELECT name FROM spaces WHERE id = ?1`,
   )
     .bind(spaceId)
@@ -855,7 +855,7 @@ export async function handleChangeSpaceMemberRole(
       : null;
   if (!role)
     throw new HttpError(400, "Space role or member permissions are required");
-  const member = await env.CONCLAVE_DB.prepare(
+  const member = await env.SYNTILA_DB.prepare(
     "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
     .bind(spaceId, userId)
@@ -863,11 +863,11 @@ export async function handleChangeSpaceMemberRole(
   if (!member) throw new HttpError(404, "Space member not found");
   if (member.role === "owner")
     throw new HttpError(403, "Owner permissions cannot be changed");
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "UPDATE space_memberships SET role = ?1, updated_at = ?2 WHERE space_id = ?3 AND user_id = ?4 AND role <> 'owner'",
     ).bind(role, new Date().toISOString(), spaceId, userId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
     ).bind(
       permissionJsonPath("memberPermissions", userId),
@@ -876,7 +876,7 @@ export async function handleChangeSpaceMemberRole(
       spaceId,
     ),
   ]);
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.member.role_changed', 'user', ?4, ?5, ?6)`,
   )
     .bind(
@@ -912,14 +912,14 @@ export async function handleRemoveSpaceMember(
     spaceId,
     accessContext,
   );
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `DELETE FROM space_memberships WHERE space_id = ?1 AND user_id = ?2 AND role <> 'owner'`,
   )
     .bind(spaceId, userId)
     .run();
   if (!result.success || (result.meta?.changes ?? 0) === 0)
     throw new HttpError(404, "Space member not found");
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE spaces SET settings_json = json_remove(settings_json, ?1) WHERE id = ?2",
   )
     .bind(permissionJsonPath("memberPermissions", userId), spaceId)
@@ -927,7 +927,7 @@ export async function handleRemoveSpaceMember(
   // A contributed execution Workspace is owned by the departing user. Revoke
   // that user's Space Grants with the membership removal so the scheduler
   // cannot continue using infrastructure after collaboration ends.
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE workspace_space_grants
         SET status = 'revoked', updated_at = ?1
       WHERE space_id = ?2 AND granted_by_user_id = ?3
@@ -935,7 +935,7 @@ export async function handleRemoveSpaceMember(
   )
     .bind(new Date().toISOString(), spaceId, userId)
     .run();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.member.removed', 'user', ?4, '{}', ?5)`,
   )
     .bind(
@@ -967,7 +967,7 @@ export async function handleExpireSpaceInvitation(
     accessContext,
   );
   await requireSpaceOwner(env, context, spaceId);
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     `SELECT id, email, invitee_user_id AS inviteeUserId FROM space_invitations WHERE id = ?1 AND space_id = ?2 AND status = 'pending'`,
   )
     .bind(invitationId, spaceId)
@@ -978,19 +978,19 @@ export async function handleExpireSpaceInvitation(
     }>();
   if (!existing) throw new HttpError(404, "Pending invitation not found");
 
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE space_invitations SET status = 'expired', updated_at = ?1 WHERE id = ?2 AND space_id = ?3 AND status = 'pending'`,
   )
     .bind(new Date().toISOString(), invitationId, spaceId)
     .run();
   if (!result.success || (result.meta?.changes ?? 0) === 0)
     throw new HttpError(404, "Pending invitation not found");
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE spaces SET settings_json = json_remove(settings_json, ?1) WHERE id = ?2",
   )
     .bind(permissionJsonPath("invitationPermissions", invitationId), spaceId)
     .run();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.invitation.expired', 'invitation', ?4, '{}', ?5)`,
   )
     .bind(
@@ -1003,7 +1003,7 @@ export async function handleExpireSpaceInvitation(
     .run();
   const recipient = existing.inviteeUserId
     ? { id: existing.inviteeUserId }
-    : await env.CONCLAVE_DB.prepare(
+    : await env.SYNTILA_DB.prepare(
         `SELECT id FROM users WHERE LOWER(email) = LOWER(?1) LIMIT 1`,
       )
         .bind(existing.email)
@@ -1026,7 +1026,7 @@ export async function handleListCurrentUserInvitations(
   const context = await securityContext(request, env, accessContext);
   const email = context.user.email.trim().toLowerCase();
   const now = new Date().toISOString();
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT 
        pi.id,
        pi.space_id AS spaceId,
@@ -1058,7 +1058,7 @@ export async function handleAcceptSpaceInvitation(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  const invitation = await env.CONCLAVE_DB.prepare(
+  const invitation = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, invited_by_user_id AS invitedByUserId, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
@@ -1106,7 +1106,7 @@ export async function handleAcceptSpaceInvitation(
         inviter.rights[key],
     ]),
   );
-  const existingMember = await env.CONCLAVE_DB.prepare(
+  const existingMember = await env.SYNTILA_DB.prepare(
     "SELECT user_id FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
     .bind(invitation.spaceId, context.userId)
@@ -1115,12 +1115,12 @@ export async function handleAcceptSpaceInvitation(
     throw new HttpError(409, "You are already a member of this Space");
   const membershipId = `pm-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  const acceptance = await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  const acceptance = await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       `UPDATE space_invitations SET status = 'accepted', invitee_user_id = COALESCE(invitee_user_id, ?1), accepted_by_user_id = ?1, accepted_at = ?2, updated_at = ?2 WHERE id = ?3 AND status = 'pending' AND expires_at > ?2`,
     ).bind(context.userId, now, invitation.id),
 
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at) SELECT ?1, ?2, ?3, ?4, ?5, ?5 WHERE EXISTS (SELECT 1 FROM space_invitations WHERE id=?6 AND status='accepted' AND accepted_by_user_id=?3 AND accepted_at=?5) ON CONFLICT(space_id, user_id) DO NOTHING`,
     ).bind(
       membershipId,
@@ -1130,7 +1130,7 @@ export async function handleAcceptSpaceInvitation(
       now,
       invitation.id,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "UPDATE spaces SET settings_json = json_remove(json_set(settings_json, ?1, json(?2)), ?3), updated_at = ?4 WHERE id = ?5 AND EXISTS (SELECT 1 FROM space_memberships WHERE id = ?6)",
     ).bind(
       permissionJsonPath("memberPermissions", context.userId),
@@ -1140,7 +1140,7 @@ export async function handleAcceptSpaceInvitation(
       invitation.spaceId,
       membershipId,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) SELECT ?1, ?2, 'user', ?3, 'space.invitation.accepted', 'invitation', ?4, '{}', ?5 WHERE EXISTS(SELECT 1 FROM space_memberships WHERE id=?6)`,
     ).bind(
       `pa-${crypto.randomUUID()}`,
@@ -1178,7 +1178,7 @@ export async function handleDeclineSpaceInvitation(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
-  const invitation = await env.CONCLAVE_DB.prepare(
+  const invitation = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
@@ -1207,17 +1207,17 @@ export async function handleDeclineSpaceInvitation(
       "Invitation recipient does not match signed-in user",
     );
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "UPDATE spaces SET settings_json = json_remove(settings_json, ?1) WHERE id = ?2",
     ).bind(
       permissionJsonPath("invitationPermissions", invitation.id),
       invitation.spaceId,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE space_invitations SET status = 'declined', updated_at = ?1 WHERE id = ?2 AND status = 'pending'`,
     ).bind(now, invitation.id),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO space_audit_log (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, 'space.invitation.declined', 'invitation', ?4, '{}', ?5)`,
     ).bind(
       `pa-${crypto.randomUUID()}`,

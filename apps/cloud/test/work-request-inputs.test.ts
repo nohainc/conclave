@@ -36,7 +36,7 @@ import {
   withInputFacts,
   workRequestInputStatements,
 } from "../src/routes/work-request-inputs.js";
-import { computePackageDigest } from "@conclave/security";
+import { computePackageDigest } from "@syntila/security";
 
 const fileA = "wrf-11111111-2222-3333-4444-555555555555";
 const fileB = "wrf-11111111-2222-3333-4444-666666666666";
@@ -93,8 +93,8 @@ async function fixture() {
     { bytes: Uint8Array; customMetadata?: Record<string, string> }
   >();
   const env = {
-    CONCLAVE_DB: db,
-    CONCLAVE_ARTIFACTS: {
+    SYNTILA_DB: db,
+    SYNTILA_ARTIFACTS: {
       async put(
         key: string,
         value: ArrayBuffer | string,
@@ -228,7 +228,7 @@ describe("Input Delivery v1", () => {
       const merged = withInputFacts(
         stored,
         await loadWorkRequestInputs(
-          (env as { CONCLAVE_DB: D1Database }).CONCLAVE_DB,
+          (env as { SYNTILA_DB: D1Database }).SYNTILA_DB,
           "wr",
         ),
       ) as { attachments: Record<string, unknown>[] };

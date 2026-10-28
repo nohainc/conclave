@@ -3,7 +3,7 @@ import {
   type StepResult,
   type BuiltinWorkflowStep,
   type ThreadBindingId,
-} from "@conclave/core";
+} from "@syntila/core";
 import type { TaskToDispatch } from "./assignment-dispatcher.js";
 import { workStepSessionKey } from "./work-session-key.js";
 

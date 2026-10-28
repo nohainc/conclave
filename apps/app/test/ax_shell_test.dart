@@ -4,15 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
-import 'package:conclave_app/src/features/navigation/ax_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/ax_top_bar.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
-import 'package:conclave_app/src/platform/theme_preference.dart';
-import 'package:conclave_app/src/app_shell.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/features/navigation/ax_sidebar.dart';
+import 'package:syntila_app/src/features/navigation/ax_top_bar.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/platform/theme_preference.dart';
+import 'package:syntila_app/src/app_shell.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_data.dart';
 import 'ax_fixture_realtime.dart';
@@ -86,13 +86,13 @@ void main() {
     });
   }
 
-  for (final theme in [ConclaveBrand.lightTheme(), ConclaveBrand.darkTheme()]) {
+  for (final theme in [SyntilaBrand.lightTheme(), SyntilaBrand.darkTheme()]) {
     testWidgets(
         'login presentation uses matching branded buttons in ${theme.brightness}',
         (tester) async {
       await tester.pumpWidget(MaterialApp(
         theme: theme,
-        home: const ConclaveAppShell(
+        home: const SyntilaAppShell(
           services: DefaultPlatformServices(),
           dataSource: AxFixtureDataSource(authenticated: false),
         ),
@@ -191,7 +191,7 @@ void main() {
           lastActivity: '',
           role: 'owner');
       await tester.pumpWidget(MaterialApp(
-        theme: dark ? ConclaveBrand.darkTheme() : ConclaveBrand.lightTheme(),
+        theme: dark ? SyntilaBrand.darkTheme() : SyntilaBrand.lightTheme(),
         home: Scaffold(
             body: AxIconRail(
           shellContext: AxShellContext(
@@ -223,7 +223,7 @@ void main() {
       expect(anchors.length, greaterThan(1));
       for (final anchor in anchors) {
         expect(anchor.style?.backgroundColor?.resolve({}),
-            ConclaveColors.navigationBackground(dark));
+            SyntilaColors.navigationBackground(dark));
         expect(anchor.style?.surfaceTintColor?.resolve({}), Colors.transparent);
       }
       await tester.tap(find.byTooltip('Spaces and Threads'));
@@ -233,12 +233,12 @@ void main() {
       final threadColor =
           tester.widget<Text>(find.text('Menu Thread')).style?.color;
       expect(spaceColor, threadColor);
-      expect(spaceColor, ConclaveColors.navigationTextMuted(dark));
+      expect(spaceColor, SyntilaColors.navigationTextMuted(dark));
       expect(
           find.byWidgetPredicate((widget) =>
               widget is Material &&
               widget.elevation == 12 &&
-              widget.color == ConclaveColors.navigationBackground(dark)),
+              widget.color == SyntilaColors.navigationBackground(dark)),
           findsOneWidget);
       expect(tester.takeException(), isNull);
     });
@@ -256,7 +256,7 @@ void main() {
   testWidgets('shell initializes its store before registering listeners',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
         initialUri: Uri.parse('/settings/profile'),
@@ -264,7 +264,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.byType(ConclaveAppShell), findsOneWidget);
+    expect(find.byType(SyntilaAppShell), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     expect(tester.takeException(), isNull);
@@ -273,8 +273,8 @@ void main() {
   testWidgets('profile page uses sections without passkey controls',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.lightTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.lightTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
         initialUri: Uri.parse('/settings/profile'),
@@ -351,7 +351,7 @@ void main() {
       (tester) async {
     final source = _LinkedProvidersFixture(['google', 'github']);
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: source,
         initialUri: Uri.parse('/settings/profile'),
@@ -416,8 +416,8 @@ void main() {
     ]) {
       await tester.pumpWidget(MaterialApp(
         key: UniqueKey(),
-        theme: ConclaveBrand.lightTheme(),
-        home: ConclaveAppShell(
+        theme: SyntilaBrand.lightTheme(),
+        home: SyntilaAppShell(
           services: const DefaultPlatformServices(),
           dataSource: _LinkedProvidersFixture(providers),
           initialUri: Uri.parse('/settings/profile'),
@@ -451,7 +451,7 @@ void main() {
             matching: find.byType(IconButton));
         expect(action, findsOneWidget);
         final button = tester.widget<IconButton>(action);
-        expect(button.color, ConclaveColors.textPrimary(false));
+        expect(button.color, SyntilaColors.textPrimary(false));
         expect(button.iconSize, 20);
         expect(tester.getSize(action), const Size(48, 48));
         final deleteAction =
@@ -477,11 +477,11 @@ void main() {
     for (final isDark in [false, true]) {
       final mode = isDark ? ThemeMode.dark : ThemeMode.light;
       final theme =
-          isDark ? ConclaveBrand.darkTheme() : ConclaveBrand.lightTheme();
+          isDark ? SyntilaBrand.darkTheme() : SyntilaBrand.lightTheme();
       await tester.pumpWidget(MaterialApp(
         key: UniqueKey(),
         theme: theme,
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
           services: const DefaultPlatformServices(),
           themePreference: ThemePreference(
             read: () => mode.name,
@@ -513,7 +513,7 @@ void main() {
         expect(text.style?.fontSize, 13);
         expect(text.style?.fontFamily, theme.textTheme.bodySmall?.fontFamily);
         expect(text.style?.fontWeight, FontWeight.w500);
-        expect(text.style?.color, ConclaveColors.textPrimary(isDark));
+        expect(text.style?.color, SyntilaColors.textPrimary(isDark));
         expect(tester.getSize(finder).width, greaterThan(60));
         expect(tester.getSize(finder).height, greaterThan(0));
       }
@@ -525,7 +525,7 @@ void main() {
         final expiry = find.text('Expiry unavailable').at(index);
         expect(tester.getTopLeft(label).dx, tester.getTopLeft(expiry).dx);
         expect(tester.widget<Text>(expiry).style?.color,
-            ConclaveColors.textSecondary(isDark));
+            SyntilaColors.textSecondary(isDark));
       }
       expect(find.text('Linked login methods'), findsNothing);
       expect(find.text('No linked methods loaded.'), findsNothing);
@@ -537,8 +537,8 @@ void main() {
 
   testWidgets('profile revoke all keeps the current session', (tester) async {
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.lightTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.lightTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
         initialUri: Uri.parse('/settings/profile'),
@@ -558,8 +558,8 @@ void main() {
       (tester) async {
     final data = _DeleteAccountFixture();
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.lightTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.lightTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: data,
         initialUri: Uri.parse('/settings/profile'),
@@ -599,8 +599,8 @@ void main() {
     final data = _RemovableAccountFixture();
     final realtime = TestRealtime();
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.lightTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.lightTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: data,
         realtimeClient: realtime,
@@ -619,8 +619,8 @@ void main() {
   testWidgets('profile email change needs codes from new then current email',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.lightTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.lightTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: _EmailChangeFixture(),
         initialUri: Uri.parse('/settings/profile'),
@@ -663,8 +663,8 @@ void main() {
       (tester) async {
     final data = _DelayedAccountSecurityDataSource();
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.lightTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.lightTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: data,
         initialUri: Uri.parse('/settings/profile'),
@@ -689,7 +689,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final data = _SpaceScopedFixture();
     await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
       services: const DefaultPlatformServices(),
       dataSource: data,
     )));
@@ -721,8 +721,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
-      theme: ConclaveBrand.darkTheme(),
-      home: ConclaveAppShell(
+      theme: SyntilaBrand.darkTheme(),
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const AxFixtureDataSource(),
         initialUri: Uri.parse('/spaces/space-auth/threads/thread-auth'),
@@ -793,7 +793,7 @@ void main() {
         lastActivity: '',
       );
       await tester.pumpWidget(MaterialApp(
-        theme: ConclaveBrand.darkTheme(),
+        theme: SyntilaBrand.darkTheme(),
         home: Scaffold(
           body: SpaceTree(
             shellContext: const AxShellContext(
@@ -919,7 +919,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: shellContext,
@@ -981,7 +981,7 @@ void main() {
       // Verify folder open icon is displayed for expanded space
       expect(
         find.byWidgetPredicate(
-            (w) => w is ConclaveFolderIcon && w.isExpanded == true),
+            (w) => w is SyntilaFolderIcon && w.isExpanded == true),
         findsOneWidget,
       );
 
@@ -1028,7 +1028,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: shellContext,
@@ -1105,7 +1105,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: shellContext,
@@ -1132,7 +1132,7 @@ void main() {
               .style
               ?.backgroundColor
               ?.resolve({}),
-          ConclaveColors.navigationBackgroundDark);
+          SyntilaColors.navigationBackgroundDark);
 
       // Test 1: Appearance Submenu
       await tester.tap(find.text('Appearance'));
@@ -1193,7 +1193,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.lightTheme(),
+          theme: SyntilaBrand.lightTheme(),
           home: Scaffold(
             body: AxIconRail(
               shellContext: shellContext,
@@ -1301,7 +1301,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: shellContext,
@@ -1379,7 +1379,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -1442,7 +1442,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -1505,7 +1505,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -1578,7 +1578,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -1624,7 +1624,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -1682,7 +1682,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -1734,7 +1734,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: SizedBox(
               width: 50,
@@ -1801,7 +1801,7 @@ void main() {
       // Tapping Spaces & Threads popup menu
       await tester.tap(find.byTooltip('Spaces and Threads'));
       await tester.pumpAndSettle();
-      expect(find.byType(ConclaveFolderIcon), findsAtLeastNWidgets(1));
+      expect(find.byType(SyntilaFolderIcon), findsAtLeastNWidgets(1));
       expect(find.text(testSpace.name), findsOneWidget);
       expect(find.text(testSpace.threads.first.name), findsOneWidget);
       expect(find.text('Create Space'), findsNothing); // Removed from menu
@@ -1887,7 +1887,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: globalContext,
@@ -2071,7 +2071,7 @@ void main() {
 
         await tester.pumpWidget(
           MaterialApp(
-            theme: ConclaveBrand.darkTheme(),
+            theme: SyntilaBrand.darkTheme(),
             home: Scaffold(
               body: AxSidebar(
                 shellContext: ctx,
@@ -2108,7 +2108,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: homeContext,
@@ -2129,7 +2129,7 @@ void main() {
       // Collapsed space shows closed folder icon
       expect(
         find.byWidgetPredicate(
-            (w) => w is ConclaveFolderIcon && w.isExpanded == false),
+            (w) => w is SyntilaFolderIcon && w.isExpanded == false),
         findsOneWidget,
       );
 
@@ -2154,7 +2154,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: expandedSpaceContext,
@@ -2173,7 +2173,7 @@ void main() {
       // Expanded space shows open folder icon and threads
       expect(
         find.byWidgetPredicate(
-            (w) => w is ConclaveFolderIcon && w.isExpanded == true),
+            (w) => w is SyntilaFolderIcon && w.isExpanded == true),
         findsOneWidget,
       );
       expect(find.text('Engine optimization'), findsOneWidget);
@@ -2195,7 +2195,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: expandedContext,
@@ -2238,7 +2238,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: spaceContext,
@@ -2265,7 +2265,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: threadContext,
@@ -2303,7 +2303,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: workspaceContext,
@@ -2357,7 +2357,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: degradedCtx,
@@ -2404,7 +2404,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -2427,7 +2427,7 @@ void main() {
       tester.view.physicalSize = const Size(450, 800);
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxTopBar(
               shellContext: shellContext,
@@ -2468,7 +2468,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: Row(
               children: [
@@ -2570,7 +2570,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: shellContext,
@@ -2681,7 +2681,7 @@ void main() {
       // 6. Verify Visual UI: when on Thread, Thread item is highlighted, Home is not
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AxSidebar(
               shellContext: threadCtx,
@@ -2737,10 +2737,10 @@ void main() {
       Widget buildAppScaffold() {
         final scaffoldKey = GlobalKey<ScaffoldState>();
         return MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
+              final isDesktop = SyntilaBrand.isDesktop(constraints.maxWidth);
 
               return Scaffold(
                 key: scaffoldKey,
@@ -2846,9 +2846,9 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: const Scaffold(
-            body: ConclaveAppShell(
+            body: SyntilaAppShell(
               services: DefaultPlatformServices(),
               dataSource: AxFixtureDataSource(),
             ),
@@ -2902,7 +2902,7 @@ void main() {
 
       final data = _InvitationTestFixture();
       await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
           services: const DefaultPlatformServices(),
           dataSource: data,
         ),
@@ -2950,7 +2950,7 @@ void main() {
       );
 
       await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
           services: const DefaultPlatformServices(),
           dataSource: data,
         ),
@@ -2990,7 +2990,7 @@ void main() {
 
     final data = _SignUpOtpFixture();
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: data,
         initialUri: Uri.parse('/login'),
@@ -3076,7 +3076,7 @@ void main() {
 
     final data = _PasswordResetFixture();
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: data,
         initialUri: Uri.parse('/login?token=reset-token-abc'),
@@ -3131,7 +3131,7 @@ void main() {
 
     const data = AxFixtureDataSource(authenticated: false);
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: data,
         initialUri: Uri.parse('/login?error=account_not_linked'),

@@ -30,7 +30,7 @@ it("deletes a released Workspace's Workers; Worker IDs never change Workspace", 
       localConcurrencyLimit: 1,
       revision: 5,
     };
-    const env = { CONCLAVE_DB: db } as never;
+    const env = { SYNTILA_DB: db } as never;
     const publish = (ws: string) =>
       recordWorkspaceWorkerInventory(env, ws, { workers: [worker] });
     const owner = () =>

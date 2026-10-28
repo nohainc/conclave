@@ -6,7 +6,7 @@ export {
   spaceModelOptions,
   spaceWorkerExecutionOptions,
 } from "../worker-execution-options.js";
-import { extractBearerToken } from "@conclave/security";
+import { extractBearerToken } from "@syntila/security";
 import { listWorkerProfiles } from "../worker-profile-registry.js";
 import { HttpError, json, securityContext } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
@@ -47,7 +47,7 @@ export async function handleListWorkspaceWorkerInventory(
        LEFT JOIN worker_profile_history history
          ON history.worker_type_id = i.worker_type_id
         AND history.revision = i.profile_release_version`;
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `${columns}
       WHERE i.owner_user_id = ?1
         AND (?2 IS NULL OR i.workspace_id = ?2)
@@ -63,7 +63,7 @@ export async function handleListWorkspaceWorkerInventory(
   // member-access policy. Only clients that ask for it receive them.
   const shared: unknown[] = [];
   if (params.get("includeShared") === "true") {
-    const sharedRows = await env.CONCLAVE_DB.prepare(
+    const sharedRows = await env.SYNTILA_DB.prepare(
       `${columns}
         WHERE ew.status != 'revoked'
           AND i.owner_user_id <> ?1
@@ -189,7 +189,7 @@ async function requireWorkspaceRuntime(
   if (!runtimeId || !credential)
     throw new HttpError(401, "Workspace runtime credentials are required");
   const runtime = await new WorkspaceRuntimeAuthenticator(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
   ).authenticateRuntime(runtimeId, credential);
   if (!runtime)
     throw new HttpError(401, "Workspace runtime credential is invalid");
@@ -200,7 +200,7 @@ export async function handleListWorkspaceWorkerCatalog(
   env: SecurityEnv,
 ): Promise<Response> {
   await requireWorkspaceRuntime(request, env);
-  return json(await listWorkerProfiles(env.CONCLAVE_DB));
+  return json(await listWorkerProfiles(env.SYNTILA_DB));
 }
 
 export async function handleListWorkerCatalog(
@@ -209,5 +209,5 @@ export async function handleListWorkerCatalog(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await securityContext(request, env, ctx);
-  return json(await listWorkerProfiles(env.CONCLAVE_DB));
+  return json(await listWorkerProfiles(env.SYNTILA_DB));
 }

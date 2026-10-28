@@ -1,7 +1,7 @@
 # Workspace Windows runtime candidate
 
 Windows x64 source support includes the standalone Dart Workspace Service, the
-`conclave-workspace` management CLI, and the separately supervised generic CLI
+`syntila-workspace` management CLI, and the separately supervised generic CLI
 Worker Engine. The package is an unsigned qualification candidate, with manual
 updates; Windows installer packaging and release signing remain separate ADR-021
 phases.
@@ -9,7 +9,7 @@ phases.
 ## Build and run
 
 Install the Dart SDK, Node.js and Git for Windows Bash. Supply
-`CONCLAVE_RELEASE_TRUST_KEYS_JSON` with your public application-release trust
+`SYNTILA_RELEASE_TRUST_KEYS_JSON` with your public application-release trust
 roots, then run from PowerShell at the repository root:
 
 ```powershell
@@ -17,10 +17,10 @@ roots, then run from PowerShell at the repository root:
 ```
 
 The script uses the canonical Engine/service build scripts and creates
-`dist/conclave-workspace/conclave-workspace-windows-x64-release-preview.zip`.
+`dist/syntila-workspace/syntila-workspace-windows-x64-release-preview.zip`.
 Extract the entire ZIP to a stable per-user installation directory. The target
 machine needs the Microsoft Visual C++ x64 redistributable. Run
-`conclave-workspace.exe service install` and `setup` (or `login`, then `connect`).
+`syntila-workspace.exe service install` and `setup` (or `login`, then `connect`).
 Moving an installation changes its scheduled task executable path; stop and
 unregister the old task before registering the new path. Existing data is kept.
 For manual updates, stop the service, replace the complete application directory,
@@ -39,7 +39,7 @@ keys or provider credentials are needed by CI.
   requesting elevation or a Windows SCM service. Stop keeps registration;
   Cloud disconnect keeps the service available. Stop requests graceful exit
   through the host stop marker before bounded Task Scheduler termination.
-- Management uses `\\.\pipe\conclave-workspace-<installation-id>`. The native
+- Management uses `\\.\pipe\syntila-workspace-<installation-id>`. The native
   adapter sets a protected owning-user SID DACL, rejects remote clients, and
   verifies the pipe owner before sending the existing capability key. Existing
   protocol/version/authentication semantics remain; input is byte-bounded before
@@ -51,7 +51,7 @@ keys or provider credentials are needed by CI.
 - Legacy `~/.conclave-workspace` state stops default activation with a
   recoverable error. Registries may hold absolute paths, so the application does
   not move files or guess which root is authoritative. Select the existing root
-  with `CONCLAVE_WORKSPACE_DATA_DIR` (or the service's `--data-dir`) to retain its
+  with `SYNTILA_WORKSPACE_DATA_DIR` (or the service's `--data-dir`) to retain its
   installation/Cloud identities, credentials, registry, sessions, Profiles,
   Engine files, and configured Work Root. Existing macOS installations do not
   migrate. No replacement Cloud Workspace is created by this recovery.

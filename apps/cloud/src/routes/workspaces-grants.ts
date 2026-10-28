@@ -4,12 +4,12 @@ import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 import {
   canTransitionWorkspaceSpaceGrantStatus,
   isWorkspaceSpaceGrantStatus,
-} from "@conclave/core";
+} from "@syntila/core";
 
 import {
   authorizeWorkspaceOwner,
   authorizeSpaceOwner,
-} from "@conclave/security";
+} from "@syntila/security";
 
 import {
   HttpError,
@@ -32,12 +32,12 @@ export async function handleListWorkspaceSpaceGrants(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   await authorizeWorkspaceOwner(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context,
     workspaceId,
     "workspace:manage",
   );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
      FROM workspace_space_grants g JOIN execution_workspaces ew ON ew.id = g.workspace_id
      WHERE g.workspace_id = ?1 ORDER BY g.created_at DESC`,
@@ -70,7 +70,7 @@ export async function handleUpdateWorkspaceSpaceGrant(
   const existing = await loadWorkspaceSpaceGrant(env, grantId);
   if (!existing) throw new HttpError(404, "Workspace Space Grant not found");
   await authorizeWorkspaceOwner(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context,
     String(existing.workspace_id),
     "workspace:manage",
@@ -114,7 +114,7 @@ export async function handleUpdateWorkspaceSpaceGrant(
   if (existingStatus !== "active" && existingStatus !== "suspended") {
     throw new HttpError(409, "Terminal Workspace Grants cannot be updated");
   }
-  const updatedRow = await env.CONCLAVE_DB.prepare(
+  const updatedRow = await env.SYNTILA_DB.prepare(
     `UPDATE workspace_space_grants SET
        status = ?1, expires_at = ?2, updated_at = ?3, allowed_permissions_json = ?6
      WHERE id = ?4 AND status = ?5`,
@@ -156,14 +156,14 @@ export async function handleRevokeWorkspaceSpaceGrant(
   if (!existing) throw new HttpError(404, "Workspace Space Grant not found");
   try {
     await authorizeWorkspaceOwner(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       context,
       String(existing.workspace_id),
       "workspace:manage",
     );
   } catch {
     await authorizeSpaceOwner(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       context,
       String(existing.space_id),
     );
@@ -179,7 +179,7 @@ export async function handleRevokeWorkspaceSpaceGrant(
     throw new HttpError(409, "Terminal Workspace Grants cannot be revoked");
   }
   const now = new Date().toISOString();
-  const revoked = await env.CONCLAVE_DB.prepare(
+  const revoked = await env.SYNTILA_DB.prepare(
     "UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1 WHERE id = ?2 AND status = ?3",
   )
     .bind(now, grantId, existing.status)
@@ -213,7 +213,7 @@ async function revokeGrantAssignments(
   env: SecurityEnv,
   grantId: string,
 ): Promise<void> {
-  const { results } = await env.CONCLAVE_DB.prepare(
+  const { results } = await env.SYNTILA_DB.prepare(
     `SELECT id, attempt_id FROM worker_assignments
       WHERE workspace_space_grant_id = ?1 AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
   )

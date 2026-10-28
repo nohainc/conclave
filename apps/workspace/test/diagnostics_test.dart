@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/assignment_journal.dart';
-import 'package:conclave_workspace/diagnostics.dart';
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/assignment_journal.dart';
+import 'package:syntila_workspace/diagnostics.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -20,7 +20,7 @@ void main() {
   test('diagnostics redact secrets and preserve assignment correlation',
       () async {
     final directory =
-        await Directory.systemTemp.createTemp('conclave-diagnostics-');
+        await Directory.systemTemp.createTemp('syntila-diagnostics-');
     File('${directory.path}/logs/workspace.log')
       ..createSync(recursive: true)
       ..writeAsStringSync(jsonEncode({
@@ -70,7 +70,7 @@ void main() {
 
   test('connection diagnostics include exact safe failure stages', () async {
     final directory =
-        await Directory.systemTemp.createTemp('conclave-connection-diag-');
+        await Directory.systemTemp.createTemp('syntila-connection-diag-');
     const runtimeSecret = 'workspace-runtime-secret-never-export';
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
@@ -118,7 +118,7 @@ void main() {
   test('activity observability reports stale running assignments and timeline',
       () async {
     final directory =
-        await Directory.systemTemp.createTemp('conclave-observability-');
+        await Directory.systemTemp.createTemp('syntila-observability-');
     final journal =
         AssignmentJournal(File('${directory.path}/assignments.jsonl'));
     await journal.append(AssignmentRecord(

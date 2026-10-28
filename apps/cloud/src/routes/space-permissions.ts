@@ -4,7 +4,7 @@ import {
   spaceMemberPermissions,
   type SpaceMemberPermissions,
   type SecurityContext,
-} from "@conclave/security";
+} from "@syntila/security";
 import { HttpError } from "./http-security.js";
 import type { SecurityEnv } from "./http-security.js";
 
@@ -31,11 +31,11 @@ export function validateMemberPermissions(
 }
 
 export async function loadSpacePermissions(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   userId: string,
   spaceId: string,
 ) {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT sm.role, s.settings_json AS settingsJson FROM space_memberships sm
      JOIN spaces s ON s.id = sm.space_id WHERE sm.space_id = ?1 AND sm.user_id = ?2`,
   )
@@ -73,7 +73,7 @@ export async function requireSpaceOwner(
 }
 
 export async function requireWorkflowPermission(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   userId: string,
   spaceId: string,
   workflowId: string,

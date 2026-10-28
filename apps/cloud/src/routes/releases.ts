@@ -1,7 +1,7 @@
 import { canonicalJson } from "../canonical-json.js";
 import { verifyEd25519ReleaseSignature } from "../release-trust.js";
-import { computePackageDigest } from "@conclave/security";
-import { compareSemver } from "@conclave/tool-profile";
+import { computePackageDigest } from "@syntila/security";
+import { compareSemver } from "@syntila/tool-profile";
 import {
   HttpError,
   authorizeRequest,
@@ -26,7 +26,7 @@ export async function handleGetLatestWorkspaceRelease(
   const arch = url.searchParams.get("arch");
   const currentVersion = url.searchParams.get("currentVersion");
 
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT version, channel, min_supported_workspace_version as minSupportedWorkspaceVersion,
             supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
             package_digest as packageDigest, package_r2_key as packageR2Key,
@@ -105,7 +105,7 @@ export async function handleGetWorkspaceRelease(
   env: SecurityEnv,
   version: string,
 ): Promise<Response> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT version, channel, min_supported_workspace_version as minSupportedWorkspaceVersion,
             supported_os_json as supportedOsJson, supported_arch_json as supportedArchJson,
             package_digest as packageDigest, package_r2_key as packageR2Key,
@@ -172,7 +172,7 @@ export async function handleDownloadWorkspaceRelease(
       ctx,
     );
   }
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT package_r2_key, package_digest, is_revoked, revocation_reason,
             signing_key_id as signingKeyId FROM workspace_releases WHERE version = ?1`,
   )
@@ -202,7 +202,7 @@ export async function handleDownloadWorkspaceRelease(
     );
   }
 
-  const revokedKey = await env.CONCLAVE_DB.prepare(
+  const revokedKey = await env.SYNTILA_DB.prepare(
     "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
   )
     .bind(row.signingKeyId)
@@ -215,8 +215,8 @@ export async function handleDownloadWorkspaceRelease(
   }
 
   const bucket =
-    (env as unknown as { CONCLAVE_STORAGE?: R2Bucket }).CONCLAVE_STORAGE ??
-    env.CONCLAVE_ARTIFACTS;
+    (env as unknown as { SYNTILA_STORAGE?: R2Bucket }).SYNTILA_STORAGE ??
+    env.SYNTILA_ARTIFACTS;
   if (!bucket) {
     return json({ error: "Storage bucket not configured" }, { status: 500 });
   }
@@ -235,7 +235,7 @@ export async function handleDownloadWorkspaceRelease(
   headers.set("ETag", object.httpEtag);
   headers.set(
     "Content-Disposition",
-    `attachment; filename="conclave-workspace-${version}.tar.gz"`,
+    `attachment; filename="syntila-workspace-${version}.tar.gz"`,
   );
 
   return new Response(object.body, { headers });
@@ -352,14 +352,14 @@ export async function handlePublishWorkspaceRelease(
   }
   const digest = computedDigest;
 
-  const publisher = env.CONCLAVE_RELEASE_PUBLISHER ?? "conclave";
+  const publisher = env.SYNTILA_RELEASE_PUBLISHER ?? "conclave";
   if (!signingKeyId || !providedSignature) {
     return json(
       { error: "signingKeyId and signature are required" },
       { status: 400 },
     );
   }
-  const revokedSigningKey = await env.CONCLAVE_DB.prepare(
+  const revokedSigningKey = await env.SYNTILA_DB.prepare(
     "SELECT key_id FROM release_signing_key_revocations WHERE key_id = ?1",
   )
     .bind(signingKeyId)
@@ -378,11 +378,11 @@ export async function handlePublishWorkspaceRelease(
   if (
     revokedSigningKey ||
     !(await verifyEd25519ReleaseSignature({
-      trustKeysJson: env.CONCLAVE_RELEASE_TRUST_KEYS_JSON,
+      trustKeysJson: env.SYNTILA_RELEASE_TRUST_KEYS_JSON,
       publisher,
       signingKeyId,
       signature: providedSignature,
-      message: `conclave-workspace-release-metadata-v1\n${canonicalJson(signedMetadata)}`,
+      message: `syntila-workspace-release-metadata-v1\n${canonicalJson(signedMetadata)}`,
     }))
   ) {
     return json(
@@ -392,7 +392,7 @@ export async function handlePublishWorkspaceRelease(
   }
   const signature = providedSignature;
 
-  const previous = await env.CONCLAVE_DB.prepare(
+  const previous = await env.SYNTILA_DB.prepare(
     "SELECT package_digest, signature, signing_key_id FROM workspace_releases WHERE version = ?1",
   )
     .bind(version)
@@ -423,8 +423,8 @@ export async function handlePublishWorkspaceRelease(
   }
 
   const bucket =
-    (env as unknown as { CONCLAVE_STORAGE?: R2Bucket }).CONCLAVE_STORAGE ??
-    env.CONCLAVE_ARTIFACTS;
+    (env as unknown as { SYNTILA_STORAGE?: R2Bucket }).SYNTILA_STORAGE ??
+    env.SYNTILA_ARTIFACTS;
   if (!bucket) {
     return json({ error: "Storage bucket not configured" }, { status: 500 });
   }
@@ -443,7 +443,7 @@ export async function handlePublishWorkspaceRelease(
   });
 
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_releases (
        version, channel, min_supported_workspace_version, supported_os_json,
        supported_arch_json, package_digest, package_r2_key, signature, signing_key_id,
@@ -492,7 +492,7 @@ export async function handleRevokeWorkspaceRelease(
   const reason = body.reason || "Revoked by administrator";
   const now = new Date().toISOString();
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE workspace_releases
      SET is_revoked = 1, revoked_at = ?1, revocation_reason = ?2
      WHERE version = ?3`,
@@ -512,10 +512,10 @@ export async function handleGetReleaseTrustState(
   env: SecurityEnv,
 ): Promise<Response> {
   const [keys, workspaceReleases] = await Promise.all([
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "SELECT key_id FROM release_signing_key_revocations ORDER BY key_id",
     ).all<{ key_id: string }>(),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "SELECT version, package_digest FROM workspace_releases WHERE is_revoked = 1",
     ).all<{ version: string; package_digest: string }>(),
   ]);
@@ -549,7 +549,7 @@ export async function handleRevokeReleaseSigningKey(
     typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
   if (!reason) throw new HttpError(400, "revocation reason is required");
   const now = new Date().toISOString();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO release_signing_key_revocations (key_id, revoked_at, revoked_by_user_id, reason)
      VALUES (?1, ?2, ?3, ?4) ON CONFLICT(key_id) DO NOTHING`,
   )

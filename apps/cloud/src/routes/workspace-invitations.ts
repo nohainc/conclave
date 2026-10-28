@@ -1,4 +1,4 @@
-import { hashToken } from "@conclave/security";
+import { hashToken } from "@syntila/security";
 import {
   HttpError,
   json,
@@ -26,7 +26,7 @@ async function ownedWorkspace(
   workspaceId: string,
   userId: string,
 ) {
-  const workspace = await env.CONCLAVE_DB.prepare(
+  const workspace = await env.SYNTILA_DB.prepare(
     "SELECT id FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status != 'revoked'",
   )
     .bind(workspaceId, userId)
@@ -52,7 +52,7 @@ export async function handleWorkspaceInvitations(
   if (invitationId !== undefined) {
     if (request.method !== "POST")
       throw new HttpError(405, "Unsupported method");
-    const revoked = await env.CONCLAVE_DB.prepare(
+    const revoked = await env.SYNTILA_DB.prepare(
       "UPDATE workspace_invitations SET status='revoked',updated_at=?3 WHERE id=?1 AND workspace_id=?2 AND status='pending'",
     )
       .bind(invitationId, workspaceId, now)
@@ -62,7 +62,7 @@ export async function handleWorkspaceInvitations(
     return json({ revoked: true });
   }
   if (request.method === "GET") {
-    const rows = await env.CONCLAVE_DB.prepare(
+    const rows = await env.SYNTILA_DB.prepare(
       `SELECT id, email, status, expires_at AS expiresAt, created_at AS createdAt
        FROM workspace_invitations WHERE workspace_id = ?1 ORDER BY created_at DESC LIMIT 100`,
     )
@@ -86,19 +86,19 @@ export async function handleWorkspaceInvitations(
     throw new HttpError(400, "Enter a valid email address");
   if (email === context.user.email.trim().toLowerCase())
     throw new HttpError(400, "You cannot invite yourself");
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE workspace_invitations SET status='expired',updated_at=?2 WHERE workspace_id=?1 AND status='pending' AND expires_at<=?2",
   )
     .bind(workspaceId, now)
     .run();
-  const already = await env.CONCLAVE_DB.prepare(
+  const already = await env.SYNTILA_DB.prepare(
     `SELECT 1 AS found FROM workspace_person_grants g JOIN users u ON u.id = g.user_id
      WHERE g.workspace_id = ?1 AND g.status = 'active' AND LOWER(u.email) = ?2`,
   )
     .bind(workspaceId, email)
     .first();
   if (already) throw new HttpError(409, "This person already has access");
-  const pending = await env.CONCLAVE_DB.prepare(
+  const pending = await env.SYNTILA_DB.prepare(
     "SELECT COUNT(*) AS n, SUM(LOWER(email) = ?2) AS same FROM workspace_invitations WHERE workspace_id = ?1 AND status = 'pending'",
   )
     .bind(workspaceId, email)
@@ -110,7 +110,7 @@ export async function handleWorkspaceInvitations(
   const id = `winv-${crypto.randomUUID()}`;
   const token = `workspace_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS).toISOString();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_invitations(id,workspace_id,email,token_hash,invited_by_user_id,status,expires_at,created_at,updated_at)
      VALUES(?1,?2,?3,?4,?5,'pending',?6,?7,?7)`,
   )
@@ -135,7 +135,7 @@ export async function handleMyWorkspaceInvitations(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   if (request.method !== "GET") throw new HttpError(405, "Unsupported method");
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT i.id, ew.name AS workspaceName, u.display_name AS ownerName, i.expires_at AS expiresAt
      FROM workspace_invitations i
      JOIN execution_workspaces ew ON ew.id = i.workspace_id AND ew.status != 'revoked'
@@ -161,7 +161,7 @@ export async function handleAcceptWorkspaceInvitation(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   if (request.method !== "POST") throw new HttpError(405, "Unsupported method");
-  const invitation = await env.CONCLAVE_DB.prepare(
+  const invitation = await env.SYNTILA_DB.prepare(
     `SELECT i.id, i.workspace_id AS workspaceId, i.email, i.status, i.expires_at AS expiresAt,
             i.invited_by_user_id AS invitedBy, ew.owner_user_id AS ownerId
      FROM workspace_invitations i
@@ -196,11 +196,11 @@ export async function handleAcceptWorkspaceInvitation(
   if (invitation.ownerId === context.userId)
     throw new HttpError(400, "You already own this Workspace");
   const now = new Date().toISOString();
-  const results = await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  const results = await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "UPDATE workspace_invitations SET status='accepted',accepted_by_user_id=?1,accepted_at=?2,updated_at=?2 WHERE id=?3 AND status='pending' AND expires_at>?2",
     ).bind(context.userId, now, invitation.id),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_person_grants(workspace_id,user_id,granted_by_user_id,status,created_at,updated_at)
        SELECT ?1,?2,?3,'active',?4,?4 WHERE EXISTS (SELECT 1 FROM workspace_invitations WHERE id=?5 AND status='accepted' AND accepted_by_user_id=?2 AND accepted_at=?4)
        ON CONFLICT(workspace_id,user_id) DO UPDATE SET status='active',granted_by_user_id=excluded.granted_by_user_id,updated_at=excluded.updated_at`,
@@ -211,14 +211,14 @@ export async function handleAcceptWorkspaceInvitation(
       now,
       invitation.id,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_member_overrides(workspace_id,user_id,policy_json,updated_at)
        SELECT ?1,?2,'{"schemaVersion":1,"mode":"chat","workers":{}}',?3
        WHERE EXISTS (SELECT 1 FROM workspace_person_grants WHERE workspace_id=?1 AND user_id=?2 AND updated_at=?3)
          AND NOT EXISTS (SELECT 1 FROM workspace_member_access WHERE workspace_id=?1)
        ON CONFLICT(workspace_id,user_id) DO NOTHING`,
     ).bind(invitation.workspaceId, context.userId, now),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_audit_log(id,workspace_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at)
        SELECT ?1,?2,'user',?3,'workspace.person_grant.created','user',?3,'{}',?4
        WHERE EXISTS (SELECT 1 FROM workspace_person_grants WHERE workspace_id=?2 AND user_id=?3 AND updated_at=?4)`,
@@ -245,16 +245,16 @@ export async function handleRevokePersonGrant(
   await ownedWorkspace(env, workspaceId, context.userId);
   if (request.method !== "POST") throw new HttpError(405, "Unsupported method");
   const now = new Date().toISOString();
-  const results = await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  const results = await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       "UPDATE workspace_person_grants SET status='revoked',updated_at=?3 WHERE workspace_id=?1 AND user_id=?2 AND status='active'",
     ).bind(workspaceId, personId, now),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE workspace_space_grants SET status='revoked',updated_at=?3
        WHERE workspace_id=?1 AND status IN ('active','suspended')
          AND space_id IN (SELECT id FROM spaces WHERE owner_user_id=?2)`,
     ).bind(workspaceId, personId, now),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_audit_log(id,workspace_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at)
        SELECT ?1,?2,'user',?3,'workspace.person_grant.revoked','user',?4,'{}',?5
        WHERE EXISTS (SELECT 1 FROM workspace_person_grants WHERE workspace_id=?2 AND user_id=?4 AND status='revoked' AND updated_at=?5)`,
@@ -306,7 +306,7 @@ export async function handlePersonGrantQuota(
       400,
       "maxConcurrentRequests must be 1-10 and maxRunSecondsPerMonth null or 60 to 2678400",
     );
-  const updated = await env.CONCLAVE_DB.prepare(
+  const updated = await env.SYNTILA_DB.prepare(
     `UPDATE workspace_person_grants
         SET max_concurrent_requests = COALESCE(?3, max_concurrent_requests),
             max_run_seconds_per_month = CASE WHEN ?4 = 1 THEN ?5 ELSE max_run_seconds_per_month END,

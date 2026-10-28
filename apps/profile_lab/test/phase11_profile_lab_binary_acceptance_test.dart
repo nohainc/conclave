@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_profile_lab/profile_lab_test_sandbox.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/repository_root.dart';
@@ -28,7 +28,7 @@ void main() {
       final candidate = LocalDraftProfileCandidate.fromProfileMap(profile);
       final engine = File(
         '$repository/apps/profile_lab/assets/engines/'
-        'conclave_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+        'syntila_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
       );
       expect(engine.existsSync(), isTrue);
       expect(engine.statSync().mode & 0x49, isNonZero);
@@ -147,7 +147,7 @@ case "$*" in
   *cancellation*|*timeout*) sleep 30 ;;
 esac
 case "$*" in
-  *acceptance-write.txt*) printf 'conclave-profile-lab-write-verified\n' > acceptance-write.txt ;;
+  *acceptance-write.txt*) printf 'syntila-profile-lab-write-verified\n' > acceptance-write.txt ;;
 esac
 printf '{"sessionId":"phase11-session","text":"OK"}\n'
 ''');

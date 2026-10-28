@@ -1,13 +1,13 @@
 # Local development does not send real email unless a local test binding is
 # deliberately supplied. These optional overrides use non-deliverable addresses
 # so tests never depend on production sender authorization.
-CONCLAVE_EMAIL_FROM=conclave@conclave.test
-CONCLAVE_EMAIL_FALLBACK_FROM=fallback@conclave.test
-CONCLAVE_EMAIL_FROM_NAME="Syntila (Local)"
+SYNTILA_EMAIL_FROM=syntila@syntila.test
+SYNTILA_EMAIL_FALLBACK_FROM=fallback@syntila.test
+SYNTILA_EMAIL_FROM_NAME="Syntila (Local)"
 
 # Optional social sign-in for isolated local mode. Create a separate OAuth app
 # per provider with the callback http://localhost:8787/api/auth/callback/<provider>.
-# CONCLAVE_AUTH_GITHUB_CLIENT_ID=
-# CONCLAVE_AUTH_GITHUB_CLIENT_SECRET=
-# CONCLAVE_AUTH_GOOGLE_CLIENT_ID=
-# CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET=
+# SYNTILA_AUTH_GITHUB_CLIENT_ID=
+# SYNTILA_AUTH_GITHUB_CLIENT_SECRET=
+# SYNTILA_AUTH_GOOGLE_CLIENT_ID=
+# SYNTILA_AUTH_GOOGLE_CLIENT_SECRET=

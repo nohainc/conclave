@@ -25,14 +25,14 @@ void main() {
 
   test('the generic Worker Engine protocol has no Cloud dependency', () {
     final engine = _source(
-      '../../packages/conclave_cli_worker_runtime/lib/src/cli_worker_engine_supervisor.dart',
+      '../../packages/syntila_cli_worker_runtime/lib/src/cli_worker_engine_supervisor.dart',
     );
 
     expect(engine, isNot(contains('cloud_connection')));
     expect(engine, isNot(contains('workspace_gateway')));
     // Whole-word match: a bare substring would also hit unrelated identifiers.
     expect(engine, isNot(contains(RegExp(r'\bd1\b', caseSensitive: false))));
-    expect(engine, contains('conclave_worker_protocol'));
+    expect(engine, contains('syntila_worker_protocol'));
   });
 
   test('service stop is separate from host registration', () {

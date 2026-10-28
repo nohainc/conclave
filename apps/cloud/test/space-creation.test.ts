@@ -9,15 +9,15 @@ import {
 vi.mock("../src/collaboration-events.js", () => ({
   publishCollaborationEvent: async (
     env: {
-      CONCLAVE_DB: { batch?: (statements: unknown[]) => Promise<unknown> };
+      SYNTILA_DB: { batch?: (statements: unknown[]) => Promise<unknown> };
     },
     _type: string,
     _space: string,
     _entity: string,
     options: { mutations?: { run: () => Promise<unknown> }[] } = {},
   ) => {
-    if (env.CONCLAVE_DB.batch)
-      await env.CONCLAVE_DB.batch(options.mutations ?? []);
+    if (env.SYNTILA_DB.batch)
+      await env.SYNTILA_DB.batch(options.mutations ?? []);
     else for (const statement of options.mutations ?? []) await statement.run();
   },
 }));
@@ -47,14 +47,14 @@ describe("Space creation", () => {
     };
 
     const response = await handleCreateSpace(
-      new Request("https://conclave.test/api/spaces", {
+      new Request("https://syntila.test/api/spaces", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "Unattached Space" }),
       }),
       {
-        CONCLAVE_ENVIRONMENT: "development",
-        CONCLAVE_DB: db,
+        SYNTILA_ENVIRONMENT: "development",
+        SYNTILA_DB: db,
         TEST_AUTHENTICATION: async () => ({
           userId: "user-1",
           user: {
@@ -105,14 +105,14 @@ describe("Space creation", () => {
       },
     };
     const response = await handleCreateThread(
-      new Request("https://conclave.test/api/spaces/space-1/threads", {
+      new Request("https://syntila.test/api/spaces/space-1/threads", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: "Authentication work" }),
       }),
       {
-        CONCLAVE_ENVIRONMENT: "development",
-        CONCLAVE_DB: db,
+        SYNTILA_ENVIRONMENT: "development",
+        SYNTILA_DB: db,
         TEST_AUTHENTICATION: async () => ({
           userId: "user-1",
           user: {
@@ -228,10 +228,10 @@ describe("Space creation", () => {
     });
 
     const getRes = await handleGetSpace(
-      new Request("https://conclave.test/api/spaces/space-1"),
+      new Request("https://syntila.test/api/spaces/space-1"),
       {
-        CONCLAVE_ENVIRONMENT: "development",
-        CONCLAVE_DB: db,
+        SYNTILA_ENVIRONMENT: "development",
+        SYNTILA_DB: db,
         TEST_AUTHENTICATION: auth,
       } as never,
       "space-1",
@@ -249,7 +249,7 @@ describe("Space creation", () => {
     expect(getBody.space.settings.threadOrder).toEqual(["ws-1", "ws-2"]);
 
     const updateRes = await handleUpdateSpace(
-      new Request("https://conclave.test/api/spaces/space-1", {
+      new Request("https://syntila.test/api/spaces/space-1", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -258,8 +258,8 @@ describe("Space creation", () => {
         }),
       }),
       {
-        CONCLAVE_ENVIRONMENT: "development",
-        CONCLAVE_DB: db,
+        SYNTILA_ENVIRONMENT: "development",
+        SYNTILA_DB: db,
         TEST_AUTHENTICATION: auth,
       } as never,
       "space-1",
@@ -278,14 +278,14 @@ describe("Space creation", () => {
 
     await expect(
       handleUpdateSpace(
-        new Request("https://conclave.test/api/spaces/space-1", {
+        new Request("https://syntila.test/api/spaces/space-1", {
           method: "PATCH",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ settings: { showAiHistory: "yes" } }),
         }),
         {
-          CONCLAVE_ENVIRONMENT: "development",
-          CONCLAVE_DB: db,
+          SYNTILA_ENVIRONMENT: "development",
+          SYNTILA_DB: db,
           TEST_AUTHENTICATION: auth,
         } as never,
         "space-1",

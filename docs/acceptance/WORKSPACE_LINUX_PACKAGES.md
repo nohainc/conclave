@@ -47,7 +47,7 @@ Published on 2026-10-26 from `15233c7a59d19c488124b4ff1208378293dbf993`:
   passed native builds, signed test-repository upgrades, production signing,
   GitHub Pages deployment, and fresh public HTTPS APT installation on both
   Ubuntu 22.04 amd64 and ARM64 runners.
-- [Public APT repository](https://nohainc.github.io/conclave/) and
+- [Public APT repository](https://nohainc.github.io/syntila/) and
   [GitHub release](https://github.com/nohainc/conclave/releases/tag/workspace-linux-v1.0.3)
   provide version 1.0.3. Both downloaded Debian packages were independently
   verified against the signature-bound SHA256 indexes after deployment.

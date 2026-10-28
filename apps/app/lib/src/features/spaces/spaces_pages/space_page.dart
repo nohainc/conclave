@@ -306,13 +306,13 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                               child: isOwner && !_editing
                                   ? PopupMenuButton<String>(
                                       color:
-                                          ConclaveMenuStyle.background(_isDark),
+                                          SyntilaMenuStyle.background(_isDark),
                                       surfaceTintColor: Colors.transparent,
                                       elevation: 12,
                                       shadowColor:
-                                          ConclaveMenuStyle.shadow(_isDark),
-                                      shape: ConclaveMenuStyle.shape(_isDark),
-                                      menuPadding: ConclaveMenuStyle.padding,
+                                          SyntilaMenuStyle.shadow(_isDark),
+                                      shape: SyntilaMenuStyle.shape(_isDark),
+                                      menuPadding: SyntilaMenuStyle.padding,
                                       icon: const Icon(Icons.more_vert),
                                       tooltip: 'Space actions',
                                       splashRadius: 18,
@@ -329,13 +329,13 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                         PopupMenuItem(
                                           height: 36,
                                           textStyle:
-                                              ConclaveMenuStyle.popupTextStyle(
+                                              SyntilaMenuStyle.popupTextStyle(
                                                   _isDark),
                                           value: 'edit',
                                           child: Row(
                                             children: [
                                               Icon(Icons.edit_outlined,
-                                                  color: ConclaveColors
+                                                  color: SyntilaColors
                                                       .textSecondary(_isDark),
                                                   size: 18),
                                               const SizedBox(width: 8),
@@ -346,13 +346,13 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                         PopupMenuItem(
                                           height: 36,
                                           textStyle:
-                                              ConclaveMenuStyle.popupTextStyle(
+                                              SyntilaMenuStyle.popupTextStyle(
                                                   _isDark),
                                           value: 'archive',
                                           child: Row(
                                             children: [
                                               Icon(Icons.archive_outlined,
-                                                  color: ConclaveColors
+                                                  color: SyntilaColors
                                                       .textSecondary(_isDark),
                                                   size: 18),
                                               const SizedBox(width: 8),
@@ -363,18 +363,18 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                         PopupMenuItem(
                                           height: 36,
                                           textStyle:
-                                              ConclaveMenuStyle.popupTextStyle(
+                                              SyntilaMenuStyle.popupTextStyle(
                                                   _isDark),
                                           value: 'delete',
                                           child: const Row(
                                             children: [
                                               Icon(Icons.delete_outline,
                                                   size: 18,
-                                                  color: ConclaveColors.error),
+                                                  color: SyntilaColors.error),
                                               SizedBox(width: 8),
                                               Text('Delete',
                                                   style: TextStyle(
-                                                      color: ConclaveColors
+                                                      color: SyntilaColors
                                                           .error)),
                                             ],
                                           ),

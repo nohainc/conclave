@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/src/cli_streaming_runner.dart';
+import 'package:syntila_cli_worker_runtime/src/cli_streaming_runner.dart';
 import 'package:test/test.dart';
 
 void main() {

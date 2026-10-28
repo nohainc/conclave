@@ -18,7 +18,7 @@ it("forwards authentication, raw bodies and queries to the fixed hosted Cloud", 
         headers: {
           "content-type": "application/json",
           origin: "http://localhost:3000",
-          cookie: "conclave-dev-Secure-better-auth.session_token=fixture",
+          cookie: "syntila-dev-Secure-better-auth.session_token=fixture",
         },
         body: source,
       },
@@ -41,7 +41,7 @@ it("forwards authentication, raw bodies and queries to the fixed hosted Cloud", 
     },
   );
   expect(result.headers.get("set-cookie")).toBe(
-    "conclave-dev-Secure-better-auth.session_token=fixture; SameSite=Lax; HttpOnly; Path=/",
+    "syntila-dev-Secure-better-auth.session_token=fixture; SameSite=Lax; HttpOnly; Path=/",
   );
   expect(result.headers.get("cache-control")).toBe("no-store");
 });
@@ -89,11 +89,11 @@ it("does not forward retired workstream history requests", async () => {
   });
 });
 it("maps cookie names reversibly and rejects non-API paths", async () => {
-  expect(upstreamCookie("a=1; conclave-dev-Host-auth=value")).toBe(
+  expect(upstreamCookie("a=1; syntila-dev-Host-auth=value")).toBe(
     "a=1; __Host-auth=value",
   );
   expect(localCookie("__Host-auth=value; Secure; Path=/; HttpOnly")).toBe(
-    "conclave-dev-Host-auth=value; Path=/; HttpOnly",
+    "syntila-dev-Host-auth=value; Path=/; HttpOnly",
   );
   expect(
     (

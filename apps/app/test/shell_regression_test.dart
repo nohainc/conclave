@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/features/navigation/app_menu.dart';
-import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/app_top_hud.dart';
-import 'package:conclave_app/src/features/navigation/space_tree.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/features/navigation/app_menu.dart';
+import 'package:syntila_app/src/features/navigation/app_sidebar.dart';
+import 'package:syntila_app/src/features/navigation/app_top_hud.dart';
+import 'package:syntila_app/src/features/navigation/space_tree.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 void main() {
   final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -72,13 +72,13 @@ void main() {
     selectedThread: wsRunning,
     expandedSpaceIds: {'p-1'},
     viewerDisplayName: 'Vitalii Noha',
-    viewerEmail: 'vitalii@conclave.ax',
+    viewerEmail: 'vitalii@syntila',
     workspaces: [testWorkspace],
   );
 
   Widget wrapWithMaterial(Widget child, {ThemeData? theme}) {
     return MaterialApp(
-      theme: theme ?? ConclaveBrand.darkTheme(),
+      theme: theme ?? SyntilaBrand.darkTheme(),
       home: Scaffold(body: child),
     );
   }
@@ -173,7 +173,7 @@ void main() {
         selectedThread: wsRunning,
         expandedSpaceIds: const {'p-1'},
         viewerDisplayName: 'Vitalii Noha',
-        viewerEmail: 'vitalii@conclave.ax',
+        viewerEmail: 'vitalii@syntila',
         workspaces: const [testWorkspace],
         unreadNotifications: unreadNotifier,
       );
@@ -197,7 +197,7 @@ void main() {
       expect(find.byType(Badge), findsOneWidget);
       expect(find.text('5'), findsOneWidget);
       final badge = tester.widget<Badge>(find.byType(Badge));
-      expect(badge.backgroundColor, ConclaveColors.primary);
+      expect(badge.backgroundColor, SyntilaColors.primary);
       expect(badge.textColor, Colors.white);
       expect(find.bySemanticsLabel('5 unread notifications'), findsOneWidget);
 
@@ -407,7 +407,7 @@ void main() {
       // Space tree displays open folder icon when expanded
       expect(
         find.byWidgetPredicate(
-            (w) => w is ConclaveFolderIcon && w.isExpanded == true),
+            (w) => w is SyntilaFolderIcon && w.isExpanded == true),
         findsOneWidget,
       );
 
@@ -455,10 +455,10 @@ void main() {
 
       Widget buildAppScaffold() {
         return MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: LayoutBuilder(
             builder: (context, constraints) {
-              final isDesktop = ConclaveBrand.isDesktop(constraints.maxWidth);
+              final isDesktop = SyntilaBrand.isDesktop(constraints.maxWidth);
 
               return Scaffold(
                 key: scaffoldKey,

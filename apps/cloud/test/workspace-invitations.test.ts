@@ -20,7 +20,7 @@ function fixture() {
   sqlite.exec(`INSERT INTO users(id,email,display_name,created_at,updated_at)
       VALUES('owner','owner@test','Owner','now','now'),('guest','guest@test','Guest','now','now'),('other','other@test','Other','now','now');
     INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('workspace','owner','Mac','now','now');`);
-  const env = { CONCLAVE_DB: db } as SecurityEnv;
+  const env = { SYNTILA_DB: db } as SecurityEnv;
   const manage = (
     method: string,
     user: string,

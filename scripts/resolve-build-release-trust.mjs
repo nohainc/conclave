@@ -3,12 +3,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function resolveBuildReleaseTrust(root, env = process.env) {
-  let value = env.CONCLAVE_RELEASE_TRUST_KEYS_JSON;
+  let value = env.SYNTILA_RELEASE_TRUST_KEYS_JSON;
   if (!value) {
     const hosted = join(root, ".development/hosted-release-trust.json");
     if (!existsSync(hosted)) {
       throw new Error(
-        "Supply CONCLAVE_RELEASE_TRUST_KEYS_JSON or configure hosted application-release trust before building.",
+        "Supply SYNTILA_RELEASE_TRUST_KEYS_JSON or configure hosted application-release trust before building.",
       );
     }
     value = readFileSync(hosted, "utf8");

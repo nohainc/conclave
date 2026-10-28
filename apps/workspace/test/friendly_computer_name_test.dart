@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/friendly_computer_name.dart';
-import 'package:conclave_workspace/platform_runtime.dart';
+import 'package:syntila_workspace/friendly_computer_name.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
 import 'package:test/test.dart';
 
 class _MockPlatformRuntime implements PlatformRuntime {

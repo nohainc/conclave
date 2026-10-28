@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_profile_lab/controllers/profile_lab_controller.dart';
-import 'package:conclave_profile_lab/profile_admin_api_client.dart';
-import 'package:conclave_profile_lab/profile_lab_auth.dart';
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
-import 'package:conclave_profile_lab/profile_lab_session_store.dart';
+import 'package:syntila_profile_lab/controllers/profile_lab_controller.dart';
+import 'package:syntila_profile_lab/profile_admin_api_client.dart';
+import 'package:syntila_profile_lab/profile_lab_auth.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_session_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -220,7 +220,7 @@ void main() {
       sessionId: 'origin-bound-session',
       userId: 'admin-1',
       displayName: 'Test Admin',
-      email: 'test@conclave.test',
+      email: 'test@syntila.test',
       expiresAt: DateTime.now().toUtc().add(const Duration(days: 1)),
     );
     sessionValues['profile-lab-human-session'] = 'saved-session';

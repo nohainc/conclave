@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show WorkerProfileSnapshotAdmission, WorkerTrustPolicy, canonicalJson;
 import 'package:crypto/crypto.dart';
-import 'package:conclave_workspace/worker_profile_store.dart';
+import 'package:syntila_workspace/worker_profile_store.dart';
 import 'package:test/test.dart';
 
 import 'support/worker_profile_fixture.dart';
@@ -15,7 +15,7 @@ void main() {
   late Map<String, Object?> profile;
 
   setUp(() async {
-    temporary = await Directory.systemTemp.createTemp('conclave-profile-v9-');
+    temporary = await Directory.systemTemp.createTemp('syntila-profile-v9-');
     store = WorkerProfileStore(
       profilesRoot: Directory('${temporary.path}/Profiles'),
       trustPolicy: WorkerTrustPolicy(),

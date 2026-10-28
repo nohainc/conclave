@@ -28,7 +28,7 @@ async function eligibility(
   userId: string,
   spaceId: string,
 ): Promise<Eligibility> {
-  const space = await env.CONCLAVE_DB.prepare(
+  const space = await env.SYNTILA_DB.prepare(
     "SELECT s.owner_user_id AS ownerUserId FROM spaces s JOIN space_memberships m ON m.space_id = s.id WHERE s.id = ?1 AND m.user_id = ?2",
   )
     .bind(spaceId, userId)
@@ -43,7 +43,7 @@ async function eligibility(
     return { eligible: false, workspaceId, reason: "not_space_owner" };
   if (!workspaceId)
     return { eligible: false, workspaceId: null, reason: "no_workspace" };
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     "SELECT id FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status != 'revoked'",
   )
     .bind(workspaceId, userId)
@@ -58,7 +58,7 @@ async function listFolders(
   spaceId: string,
   workspaceId: string,
 ) {
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT f.folder_id AS id, f.display_name AS displayName, f.status,
             f.checked_at AS checkedAt,
             CASE WHEN a.folder_id IS NULL THEN 0 ELSE 1 END AS attached
@@ -135,7 +135,7 @@ export async function handleSpaceAdditionalFolders(
   );
   if ((folderIds as string[]).some((id) => !available.has(id)))
     throw new HttpError(409, "A selected folder is no longer allowed");
-  const db = env.CONCLAVE_DB;
+  const db = env.SYNTILA_DB;
   const now = new Date().toISOString();
   await db.batch([
     db

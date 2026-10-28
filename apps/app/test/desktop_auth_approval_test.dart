@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'ax_fixture_data.dart';
@@ -49,7 +49,7 @@ void main() {
   testWidgets('desktop approval uses the signed-in account without a code',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const _SignedInDesktopAuthFixture(),
         initialUri: Uri(
@@ -79,7 +79,7 @@ void main() {
   testWidgets('approval names and returns to Profile Lab for its audience',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const _ProfileLabDesktopAuthFixture(),
         initialUri: Uri(
@@ -106,7 +106,7 @@ void main() {
   testWidgets('a remotely canceled intent explains how to close the page',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: _CanceledDesktopAuthFixture(),
         initialUri: Uri(
@@ -129,7 +129,7 @@ void main() {
       'desktop approval view allows switching accounts and preserves approval return target',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
-      home: ConclaveAppShell(
+      home: SyntilaAppShell(
         services: const DefaultPlatformServices(),
         dataSource: const _SignedInDesktopAuthFixture(),
         initialUri: Uri(

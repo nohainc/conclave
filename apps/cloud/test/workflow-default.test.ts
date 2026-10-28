@@ -37,7 +37,7 @@ it("persists scoped defaults, rejects disabled workflows, and falls back to Chat
       VALUES ('ws','owner','Workspace','now','now');
       INSERT INTO user_workflow_settings VALUES ('owner','ws','now');
     `);
-    const env = { CONCLAVE_DB: db } as SecurityEnv;
+    const env = { SYNTILA_DB: db } as SecurityEnv;
     const request = (method: string, user = "owner", body?: unknown) =>
       new Request("https://cloud.test/api/user/workflow-default", {
         method,

@@ -1,11 +1,11 @@
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_workflow_configurations.dart';
 import 'workflows_page_test.dart' show WorkflowSource;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
-import 'package:conclave_app/src/features/common/workspace_release.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/workspace/workspaces_page.dart';
+import 'package:syntila_app/src/features/common/workspace_release.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 
 import 'ax_fixture_snapshot.dart';
 

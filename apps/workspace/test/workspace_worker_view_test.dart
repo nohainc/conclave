@@ -1,8 +1,8 @@
 import 'package:test/test.dart';
 
-import 'package:conclave_protocol/worker_descriptor.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/workspace_worker_view.dart';
+import 'package:syntila_protocol/worker_descriptor.dart';
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/workspace_worker_view.dart';
 
 void main() {
   const descriptor = WorkerDescriptor(

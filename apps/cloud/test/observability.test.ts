@@ -8,7 +8,7 @@ import {
   tryLogDiagnosticEvent,
   tryLogTraceEvent,
 } from "../src/observability.js";
-import { parseDiagnosticEvent } from "@conclave/protocol";
+import { parseDiagnosticEvent } from "@syntila/protocol";
 
 describe("observability", () => {
   it("redacts secrets and bounds diagnostic values", () => {
@@ -29,7 +29,7 @@ describe("observability", () => {
 
   it("never emits human or runtime credentials from credential-shaped fields", () => {
     const humanCredential = "conclave_dhs_human-secret";
-    const runtimeCredential = "conclave_workspace_tok_runtime-secret";
+    const runtimeCredential = "syntila_workspace_tok_runtime-secret";
     const record = structuredLogRecord(
       "info",
       "workspace.auth",
@@ -122,7 +122,7 @@ describe("observability", () => {
 
   it("uses Cloudflare's generated Ray ID to correlate forwarded requests", () => {
     const request = new Request(
-      "https://app.conclave.test/api/workspace-gateway/connect",
+      "https://app.syntila.test/api/workspace-gateway/connect",
       { headers: { "cf-ray": "ray-123-lhr" } },
     );
     expect(requestIdFor(request)).toBe("ray-123-lhr");
@@ -132,17 +132,17 @@ describe("observability", () => {
   it("requires a trusted Origin for browser realtime upgrades", () => {
     expect(
       isTrustedRealtimeOrigin(
-        new Request("https://app.conclave.test/api/realtime", {
+        new Request("https://app.syntila.test/api/realtime", {
           headers: { origin: "https://evil.example" },
         }),
       ),
     ).toBe(false);
     expect(
       isTrustedRealtimeOrigin(
-        new Request("https://api.conclave.test/api/realtime", {
-          headers: { origin: "https://app.conclave.test" },
+        new Request("https://api.syntila.test/api/realtime", {
+          headers: { origin: "https://app.syntila.test" },
         }),
-        ["https://app.conclave.test"],
+        ["https://app.syntila.test"],
       ),
     ).toBe(true);
   });

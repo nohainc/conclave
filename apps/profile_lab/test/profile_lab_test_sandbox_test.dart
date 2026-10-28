@@ -1,10 +1,10 @@
 import 'dart:io';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show cliWorkerEngineVersion;
-import 'package:conclave_profile_lab/bundled_cli_worker_engine_loader.dart';
-import 'package:conclave_profile_lab/profile_lab_test_sandbox.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_profile_lab/bundled_cli_worker_engine_loader.dart';
+import 'package:syntila_profile_lab/profile_lab_test_sandbox.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/worker_profile_fixture.dart';
@@ -107,7 +107,7 @@ case "$*" in
   *cancellation*|*timeout*) sleep 30 ;;
 esac
 case "$*" in
-  *acceptance-write.txt*) printf 'conclave-profile-lab-write-verified\n' > acceptance-write.txt ;;
+  *acceptance-write.txt*) printf 'syntila-profile-lab-write-verified\n' > acceptance-write.txt ;;
 esac
 printf '{"sessionId":"fixture-session","text":"OK"}\n'
 ''');

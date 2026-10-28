@@ -17,8 +17,8 @@ vi.mock("../src/routes/handlers.js", async (importOriginal) => ({
   }),
   recordAudit: async () => {},
 }));
-vi.mock("@conclave/security", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@conclave/security")>()),
+vi.mock("@syntila/security", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@syntila/security")>()),
   authorizeWorkspaceOwner: async () => {
     if (!state.owner)
       throw Object.assign(new Error("Owner required"), { status: 403 });
@@ -30,7 +30,7 @@ describe("Workspace grant access editing", () => {
   async function update(permissions: unknown) {
     const writes: unknown[][] = [];
     const env = {
-      CONCLAVE_DB: {
+      SYNTILA_DB: {
         prepare: () => ({
           bind(...values: unknown[]) {
             writes.push(values);

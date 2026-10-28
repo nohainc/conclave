@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_workspace/tool_profile_release_verifier.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/tool_profile_release_verifier.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
 
@@ -39,8 +39,8 @@ void main() {
         return process;
       }
 
-      final registered = await startLoop('conclave-engine-test');
-      final unrelated = await startLoop('conclave-engine-test');
+      final registered = await startLoop('syntila-engine-test');
+      final unrelated = await startLoop('syntila-engine-test');
       final registry = Directory('${root.path}/runtime');
       await registry.create();
       await File('${registry.path}/assignment.worker-process.json')

@@ -149,7 +149,7 @@ transport in Phase 1.
 
 Every normalized event requires:
 
-- `protocol: conclave.execution-events`, `protocolVersion: 1.0`, and
+- `protocol: syntila.execution-events`, `protocolVersion: 1.0`, and
   `schemaVersion: 1`;
 - `eventId`, event type, category, delivery class, UTC `occurredAt`, and a
   positive source `sequence`;

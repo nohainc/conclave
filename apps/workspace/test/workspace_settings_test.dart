@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_settings.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace_settings.dart';
 import 'package:test/test.dart';
 
 void main() {

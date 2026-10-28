@@ -89,7 +89,7 @@ const selector = z
   });
 const envName = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/);
 const approvedEnvName = envName.refine(
-  (name) => !/^(?:CONCLAVE_|CLOUD_|WORKER_)/i.test(name),
+  (name) => !/^(?:SYNTILA_|CLOUD_|WORKER_)/i.test(name),
   "Reserved environment name",
 );
 const placeholderNames = [
@@ -1300,7 +1300,7 @@ export function validateToolProfileV1(input: unknown): ToolProfileV1 {
 
 function rejectPlaintextCredentialMaterial(profile: ToolProfileV1): void {
   const reservedEnvironmentName =
-    /^(?:CONCLAVE_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)/i;
+    /^(?:SYNTILA_|CLOUD_|WORKER_|WORKSPACE_|SECRET_STORE_)/i;
   if (
     profile.environment.passthrough.some((name) =>
       reservedEnvironmentName.test(name),

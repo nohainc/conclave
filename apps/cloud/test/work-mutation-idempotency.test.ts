@@ -15,7 +15,7 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
     bindings: Record<string, { workerId: string }>,
   ) => ({
     issues: [],
-    primaryWorkspaceId: (await env.CONCLAVE_DB.prepare(
+    primaryWorkspaceId: (await env.SYNTILA_DB.prepare(
       "SELECT workspace_id AS workspaceId FROM workspace_worker_inventory WHERE worker_id=?1",
     )
       .bind(Object.values(bindings)[0]!.workerId)
@@ -63,9 +63,9 @@ function fixture() {
     return { status: async () => ({ status: "queued" }) };
   });
   const env = {
-    CONCLAVE_DB: db,
-    CONCLAVE_RUN_WORKFLOW: { create, get },
-    CONCLAVE_THREAD_COORDINATOR: { getByName: () => ({ fetch: enqueue }) },
+    SYNTILA_DB: db,
+    SYNTILA_RUN_WORKFLOW: { create, get },
+    SYNTILA_THREAD_COORDINATOR: { getByName: () => ({ fetch: enqueue }) },
   } as unknown as SecurityEnv;
   const request = (
     prompt = "Implement this",

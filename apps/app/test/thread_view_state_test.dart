@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
 
 void main() {
   test('thread view state round trips locally without cloud fields', () {

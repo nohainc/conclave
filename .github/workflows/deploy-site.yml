@@ -45,7 +45,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ../../node_modules/.bin/wrangler deploy --config wrangler.jsonc --name "conclave-ax-site-pr-${PR_NUMBER}"
+        run: ../../node_modules/.bin/wrangler deploy --config wrangler.jsonc --name "syntila-site-pr-${PR_NUMBER}"
 
   cleanup-preview:
     name: Delete closed preview
@@ -65,7 +65,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -uo pipefail
-          name="conclave-ax-site-pr-${PR_NUMBER}"
+          name="syntila-site-pr-${PR_NUMBER}"
           if npx --yes wrangler@4.149.0 delete "$name" --config wrangler.jsonc --force; then
             echo "Deleted preview Worker $name."
           elif npx --yes wrangler@4.149.0 whoami > /dev/null 2>&1; then

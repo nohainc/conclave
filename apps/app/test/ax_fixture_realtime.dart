@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:conclave_app/src/realtime/realtime_client.dart';
+import 'package:syntila_app/src/realtime/realtime_client.dart';
 
 /// In-process transport keeps widget regressions independent of live Cloud.
 class TestRealtime implements RealtimeClient {

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/thread_marker.dart';
+import 'package:syntila_workspace/thread_marker.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -9,7 +9,7 @@ void main() {
   const store = ThreadMarkerStore();
 
   setUp(() async {
-    directory = await Directory.systemTemp.createTemp('conclave-marker-');
+    directory = await Directory.systemTemp.createTemp('syntila-marker-');
   });
 
   tearDown(() => directory.delete(recursive: true));

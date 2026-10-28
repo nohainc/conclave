@@ -1,4 +1,4 @@
-import { computePackageDigest } from "@conclave/security";
+import { computePackageDigest } from "@syntila/security";
 import {
   HttpError,
   artifactName,
@@ -21,7 +21,7 @@ export async function userStorageUsage(
   env: SecurityEnv,
   userId: string,
 ): Promise<{ usedBytes: number; fileCount: number; quotaBytes: number }> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT COALESCE(SUM(size_bytes), 0) AS usedBytes, COUNT(*) AS fileCount
       FROM user_files WHERE user_id = ?1`,
   )
@@ -179,7 +179,7 @@ export async function storeWorkRequestFile(
     workRequestId?: string;
   },
 ): Promise<{ digest: string; previewText?: string; previewImage?: string }> {
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "File storage is not configured");
   const { body, mediaType, previewImage } = input.upload;
   // Best effort under concurrency: parallel uploads may each pass this check
@@ -211,7 +211,7 @@ export async function storeWorkRequestFile(
         httpMetadata: { contentType: "application/json" },
       },
     );
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT OR REPLACE INTO user_files
       (id, user_id, thread_id, space_id, name, media_type, size_bytes, created_at)
       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
@@ -242,7 +242,7 @@ export async function verifyWorkRequestFile(
   userId: string,
   sizeBytes: unknown,
 ): Promise<{ digest: string; previewText?: string; previewImage?: string }> {
-  const object = await env.CONCLAVE_ARTIFACTS?.head(workRequestFileKey(fileId));
+  const object = await env.SYNTILA_ARTIFACTS?.head(workRequestFileKey(fileId));
   const meta = object?.customMetadata;
   if (
     !object ||
@@ -254,7 +254,7 @@ export async function verifyWorkRequestFile(
     throw new HttpError(400, "Attached file was not found or does not match");
   const preview =
     meta.hasPreview === "1"
-      ? await env.CONCLAVE_ARTIFACTS?.get(
+      ? await env.SYNTILA_ARTIFACTS?.get(
           `${workRequestFileKey(fileId)}/preview`,
         )
       : null;
@@ -335,7 +335,7 @@ export async function normalizeDiscussionAttachments(
         userId,
         file.sizeBytes,
       );
-      const object = await env.CONCLAVE_ARTIFACTS!.head(
+      const object = await env.SYNTILA_ARTIFACTS!.head(
         workRequestFileKey(file.fileId),
       );
       return {
@@ -361,7 +361,7 @@ export async function handleDownloadThreadFile(
 ): Promise<Response> {
   await authorizeThreadAccess(request, env, threadId, "view", accessContext);
   if (!isWorkRequestFileId(fileId)) throw new HttpError(404, "File not found");
-  const reference = await env.CONCLAVE_DB.prepare(
+  const reference = await env.SYNTILA_DB.prepare(
     `SELECT 1 AS present FROM discussion_messages dm, json_each(dm.attachments_json) f
     WHERE dm.thread_id = ?1 AND json_extract(f.value, '$.fileId') = ?2
     UNION ALL SELECT 1 AS present FROM work_requests wr, json_each(wr.input_json, '$.attachments') f
@@ -370,7 +370,7 @@ export async function handleDownloadThreadFile(
     .bind(threadId, fileId)
     .first();
   if (!reference) throw new HttpError(404, "File not found");
-  const object = await env.CONCLAVE_ARTIFACTS?.get(workRequestFileKey(fileId));
+  const object = await env.SYNTILA_ARTIFACTS?.get(workRequestFileKey(fileId));
   if (!object || object.customMetadata?.threadId !== threadId)
     throw new HttpError(404, "File not found");
   return new Response(object.body, {

@@ -1,8 +1,8 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_marker.dart';
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_marker.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -10,7 +10,7 @@ void main() {
   late ThreadDirectoryLifecycle lifecycle;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('conclave-work-lifecycle-');
+    root = await Directory.systemTemp.createTemp('syntila-work-lifecycle-');
     lifecycle = ThreadDirectoryLifecycle(
       pathResolver: ThreadPathResolver(root),
     );
@@ -114,7 +114,7 @@ void main() {
   test('creates an independent empty directory on another Workspace root',
       () async {
     final destinationRoot =
-        await Directory.systemTemp.createTemp('conclave-destination-');
+        await Directory.systemTemp.createTemp('syntila-destination-');
     addTearDown(() => destinationRoot.delete(recursive: true));
     final source = await lifecycle.ensureForExecution(
       spaceId: 'space-1',

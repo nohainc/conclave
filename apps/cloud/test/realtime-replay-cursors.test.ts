@@ -49,7 +49,7 @@ function harness() {
   };
   const gateway = new RealtimeGateway(
     {} as never,
-    { CONCLAVE_DB: db } as never,
+    { SYNTILA_DB: db } as never,
   );
   const replay = (scope: RealtimeScope) =>
     Reflect.get(gateway, "replayScope").call(

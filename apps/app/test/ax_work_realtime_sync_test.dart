@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_realtime_sync.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_realtime_sync.dart';
 import 'ax_fixture_data.dart';
 
 AxWorkRequest work(String id, {String status = 'running'}) => AxWorkRequest(

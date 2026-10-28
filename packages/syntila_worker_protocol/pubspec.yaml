@@ -1,0 +1,13 @@
+name: syntila_worker_protocol
+description: Local Worker Protocol 4.0 models and validation shared by Workspace and the CLI Worker Engine.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.5.0 <4.0.0"
+
+dependencies:
+  crypto: ^3.0.6
+
+dev_dependencies:
+  test: ^1.25.0

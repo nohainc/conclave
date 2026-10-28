@@ -1,7 +1,7 @@
 import {
   type BuiltinWorkflowDefinition,
   type TurnExecutionConfig,
-} from "@conclave/core";
+} from "@syntila/core";
 import { HttpError } from "./http-security.js";
 
 export function resolveWorkflowStepExecutionConfig(

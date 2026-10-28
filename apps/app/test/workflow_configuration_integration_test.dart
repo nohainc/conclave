@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/ax_session_catalogs.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_workflow_configurations.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/ax_session_catalogs.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_workflow_configurations.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'workflows_page_test.dart' show WorkflowSource;
 import 'workflow_editor_test.dart' show worker;
 

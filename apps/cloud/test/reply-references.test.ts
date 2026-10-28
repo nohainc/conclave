@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@syntila/core";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import {
   REPLY_EXCERPT_MAX_CHARS,

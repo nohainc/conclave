@@ -1,5 +1,5 @@
 import { loadConversationWorkflowStepRuns } from "./conversation-workflow-step-runs.js";
-import type { WorkflowRun } from "@conclave/core";
+import type { WorkflowRun } from "@syntila/core";
 
 /** Call after authorizing the enclosing request collection. Lifecycle has one owner: Work Request. */
 export async function loadConversationWorkflowRuns(

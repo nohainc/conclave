@@ -18,7 +18,7 @@ remain authoritative; the event ID only identifies the diagnostic record.
 
 The public TypeScript contract is
 `packages/protocol/src/diagnostic-events.ts`. The Dart runtime contract is
-`packages/conclave_worker_protocol/lib/src/diagnostic_events.dart`.
+`packages/syntila_worker_protocol/lib/src/diagnostic_events.dart`.
 
 ## Context allowlist
 

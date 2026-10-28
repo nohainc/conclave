@@ -12,7 +12,7 @@ import 'profile_lab_paths.dart';
 class ProfileLabSessionStore {
   ProfileLabSessionStore(this.paths, {MethodChannel? channel})
       : _channel = channel ??
-            const MethodChannel('com.conclaveax.profile-lab/keychain'),
+            const MethodChannel('com.syntila.profile-lab/keychain'),
         _isMacOS = Platform.isMacOS,
         _inMemoryForTesting = false;
 
@@ -26,7 +26,7 @@ class ProfileLabSessionStore {
 
   @visibleForTesting
   ProfileLabSessionStore.inMemoryForTesting(this.paths)
-      : _channel = const MethodChannel('com.conclaveax.profile-lab/keychain'),
+      : _channel = const MethodChannel('com.syntila.profile-lab/keychain'),
         _isMacOS = true,
         _inMemoryForTesting = true;
 

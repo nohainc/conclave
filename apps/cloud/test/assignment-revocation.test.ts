@@ -71,8 +71,8 @@ async function seed(status: string) {
   const calls: Array<Record<string, unknown>> = [];
   const gateway = (online: boolean) =>
     ({
-      CONCLAVE_DB: f.db as never,
-      CONCLAVE_WORKSPACE_GATEWAY: {
+      SYNTILA_DB: f.db as never,
+      SYNTILA_WORKSPACE_GATEWAY: {
         idFromName: (name: string) => name,
         get: () => ({
           fetch: async (_url: string, init: { body: string }) => {

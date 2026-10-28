@@ -9,16 +9,16 @@ const profileLabLocalCloudOrigin = 'http://localhost:8787';
 /// Environment-derived Cloud default and the origin policy shared by clients.
 class ProfileLabCloudConfig {
   static const _environmentOrigin = String.fromEnvironment(
-    'CONCLAVE_CLOUD_URL',
+    'SYNTILA_CLOUD_URL',
     defaultValue: profileLabProductionCloudOrigin,
   );
 
   /// Build-time target, set by the build scripts with
-  /// `--dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT=local|production`.
+  /// `--dart-define=SYNTILA_PROFILE_LAB_ENVIRONMENT=local|production`.
   /// A build talks to exactly one Cloud; local builds are pinned to the local
-  /// API and ignore any saved override or `CONCLAVE_CLOUD_URL`.
+  /// API and ignore any saved override or `SYNTILA_CLOUD_URL`.
   static const environment = String.fromEnvironment(
-    'CONCLAVE_PROFILE_LAB_ENVIRONMENT',
+    'SYNTILA_PROFILE_LAB_ENVIRONMENT',
     defaultValue: 'production',
   );
   static const isLocalBuild = environment == 'local';

@@ -38,7 +38,7 @@ function fixture() {
      INSERT INTO execution_workspaces(id,owner_user_id,name,created_at,updated_at) VALUES('A','U','First','now','now'),('B','U','Second','now','now'),('F','V','Foreign','now','now');
      INSERT INTO user_workflow_settings VALUES('U','A','now');`,
   );
-  const env = { CONCLAVE_DB: db } as SecurityEnv;
+  const env = { SYNTILA_DB: db } as SecurityEnv;
   const url = (path: string, workspaceId?: string) =>
     `https://cloud.test/api/user/${path}${workspaceId ? `?workspaceId=${workspaceId}` : ""}`;
   const send = (

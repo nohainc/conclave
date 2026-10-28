@@ -112,7 +112,7 @@ FLUTTER_ENGINE_VERSION="$(<"${FLUTTER_ROOT}/bin/internal/engine.version")"
 if [[ "$ISOLATED" == true ]]; then
   node "$ROOT_DIR/scripts/setup-development-auth.mjs"
   for provider in GOOGLE GITHUB; do
-    if ! grep -Eq "^CONCLAVE_AUTH_${provider}_CLIENT_ID=.+" "$ROOT_DIR/apps/cloud/.dev.vars" 2>/dev/null; then
+    if ! grep -Eq "^SYNTILA_AUTH_${provider}_CLIENT_ID=.+" "$ROOT_DIR/apps/cloud/.dev.vars" 2>/dev/null; then
       label="$(printf '%s' "${provider:0:1}${provider:1}" | tr '[:upper:]' '[:lower:]')"
       echo "Note: ${label} sign-in is not configured for this local backend (see docs/deployment/CLOUDFLARE.md#${label}-sign-in)."
     fi
@@ -136,7 +136,7 @@ exec pnpm exec wrangler dev \\
   --port "${PORT}" \\
   --ip "${IP}" \\
   --var "BETTER_AUTH_URL:${API_URL}" \\
-  --var "CONCLAVE_APP_URL:${WEB_URL}" \\
+  --var "SYNTILA_APP_URL:${WEB_URL}" \\
   --var "BETTER_AUTH_TRUSTED_ORIGINS:${API_URL},${WEB_URL},http://localhost:${PORT},http://127.0.0.1:${PORT},https://app.conclaveax.com"
 EOF
 chmod +x "${RUNNER_API}"
@@ -157,14 +157,14 @@ if [[ "${DEVICE}" == "chrome" || "${DEVICE}" == "web-server" ]] && [[ "${LOCAL_C
   mkdir -p "${CHROME_PROFILE_DIR}"
   WEB_BROWSER_FLAGS="--web-browser-flag=--user-data-dir=${CHROME_PROFILE_DIR}"
 fi
-RUNNER_FLUTTER="/tmp/conclave-flutter-dev-${PORT}.sh"
+RUNNER_FLUTTER="/tmp/syntila-flutter-dev-${PORT}.sh"
 cat << EOF > "${RUNNER_FLUTTER}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
 echo -e "\033[1m\033[0;32m[Syntila Flutter Web]\033[0m ${WEB_CONTROLS}\n"
 export FLUTTER_PREBUILT_ENGINE_VERSION="${FLUTTER_ENGINE_VERSION}"
-exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" ${WEB_BROWSER_FLAGS} --dart-define="CONCLAVE_API_URL=${API_URL}/api"
+exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" ${WEB_BROWSER_FLAGS} --dart-define="SYNTILA_API_URL=${API_URL}/api"
 EOF
 chmod +x "${RUNNER_FLUTTER}"
 

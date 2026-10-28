@@ -15,7 +15,7 @@ export {
   type AuthenticatedIdentity,
 } from "./identity-service.js";
 export {
-  provisionConclaveUser,
+  provisionSyntilaUser,
   type ProvisioningDatabase,
 } from "./provisioning-service.js";
 export {

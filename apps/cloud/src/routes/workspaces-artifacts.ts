@@ -1,6 +1,6 @@
 import { MAX_ARTIFACT_UPLOAD_BYTES } from "./handlers.js";
 
-import { computePackageDigest } from "@conclave/security";
+import { computePackageDigest } from "@syntila/security";
 import { createEventPublisher } from "../event-publisher.js";
 import {
   HttpError,
@@ -36,7 +36,7 @@ export async function handleUploadArtifact(
     "spaces:read",
     accessContext,
   );
-  const scope = await env.CONCLAVE_DB.prepare(
+  const scope = await env.SYNTILA_DB.prepare(
     `SELECT p.workspace_id AS workspaceId
        FROM spaces p JOIN runs r ON r.space_id = p.id
       WHERE p.id = ?1 AND r.id = ?2 AND p.workspace_id = ?3`,
@@ -57,7 +57,7 @@ export async function handleUploadArtifact(
     url.searchParams.get("artifactId") ??
     request.headers.get("x-artifact-id") ??
     `artifact-${crypto.randomUUID()}`;
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     "SELECT * FROM artifacts WHERE id = ?1",
   )
     .bind(artifactId)
@@ -85,7 +85,7 @@ export async function handleUploadArtifact(
   }
   const digest = suppliedDigest ?? computedDigest;
   const storageKey = `artifact-objects/${workspaceId}/${crypto.randomUUID()}`;
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (!bucket) throw new HttpError(503, "Artifact storage is not configured");
   await bucket.put(storageKey, body, {
     httpMetadata: { contentType: mediaType },
@@ -93,7 +93,7 @@ export async function handleUploadArtifact(
   });
   const now = new Date().toISOString();
   try {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT INTO artifacts
        (id, workspace_id, space_id, run_id, task_id, attempt_id, assignment_id,
         media_type, content_digest, storage_kind, storage_key, inline_content,
@@ -120,7 +120,7 @@ export async function handleUploadArtifact(
     await bucket.delete(storageKey).catch(() => undefined);
     throw error;
   }
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT * FROM artifacts WHERE id = ?1",
   )
     .bind(artifactId)
@@ -155,7 +155,7 @@ export async function handleGetArtifact(
   artifactId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT * FROM artifacts WHERE id = ?1",
   )
     .bind(artifactId)
@@ -182,7 +182,7 @@ export async function handleGetArtifact(
       headers: { "content-type": String(row.media_type) },
     });
   }
-  const object = await env.CONCLAVE_ARTIFACTS.get(String(row.storage_key));
+  const object = await env.SYNTILA_ARTIFACTS.get(String(row.storage_key));
   if (!object) throw new HttpError(404, "Artifact content not found");
   const provenance = parseJson<Record<string, unknown>>(
     row.provenance_json,

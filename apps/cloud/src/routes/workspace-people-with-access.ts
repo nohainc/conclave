@@ -22,13 +22,13 @@ export async function handlePeopleWithAccess(
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
   if (request.method !== "GET") throw new HttpError(405, "Unsupported method");
-  const workspace = await env.CONCLAVE_DB.prepare(
+  const workspace = await env.SYNTILA_DB.prepare(
     "SELECT id FROM execution_workspaces WHERE id = ?1 AND owner_user_id = ?2 AND status != 'revoked'",
   )
     .bind(workspaceId, context.userId)
     .first();
   if (!workspace) throw new HttpError(404, "Workspace not found");
-  const grants = await env.CONCLAVE_DB.prepare(
+  const grants = await env.SYNTILA_DB.prepare(
     `SELECT g.user_id AS userId, u.display_name AS displayName, u.email, g.status,
             g.created_at AS grantedAt, g.max_concurrent_requests AS maxConcurrentRequests, g.max_run_seconds_per_month AS maxRunSecondsPerMonth,
             EXISTS (SELECT 1 FROM workspace_member_overrides o
@@ -47,7 +47,7 @@ export async function handlePeopleWithAccess(
       maxRunSecondsPerMonth: number | null;
       custom: number;
     }>();
-  const usage = await env.CONCLAVE_DB.prepare(
+  const usage = await env.SYNTILA_DB.prepare(
     `SELECT requested_by_user_id AS userId,
             COUNT(*) AS requests,
             ROUND(SUM(MAX(0, (julianday(updated_at) - julianday(created_at)) * 86400))) AS approxSeconds,
@@ -63,7 +63,7 @@ export async function handlePeopleWithAccess(
       approxSeconds: number | null;
       lastUsedAt: string | null;
     }>();
-  const monthRows = await env.CONCLAVE_DB.prepare(
+  const monthRows = await env.SYNTILA_DB.prepare(
     `SELECT requested_by_user_id AS userId,
             ROUND(SUM(MAX(0, (julianday(updated_at) - julianday(created_at)) * 86400))) AS seconds
      FROM worker_assignments
@@ -75,7 +75,7 @@ export async function handlePeopleWithAccess(
   const monthSeconds = new Map(
     monthRows.results.map((row) => [row.userId, row.seconds ?? 0]),
   );
-  const workers = await env.CONCLAVE_DB.prepare(
+  const workers = await env.SYNTILA_DB.prepare(
     `SELECT DISTINCT requested_by_user_id AS userId, workspace_worker_id AS workerId
      FROM worker_assignments
      WHERE execution_workspace_id = ?1 AND requested_by_user_id IS NOT NULL AND workspace_worker_id IS NOT NULL`,

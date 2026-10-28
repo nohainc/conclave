@@ -5,7 +5,7 @@ import 'workspace_configuration.dart';
 
 typedef LaunchctlRunner = Future<ProcessResult> Function(List<String> args);
 
-/// Pure-Dart macOS LaunchAgent manager for `conclave-workspace run`.
+/// Pure-Dart macOS LaunchAgent manager for `syntila-workspace run`.
 ///
 /// Installs and supervises the user agent directly in `~/Library/LaunchAgents`,
 /// avoiding any Flutter UI or `SMAppService` framework dependency.
@@ -41,7 +41,7 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
     if (!RegExp(r'^[A-Za-z0-9._-]{8,128}$').hasMatch(id)) {
       throw StateError('Invalid installation identity');
     }
-    return 'com.conclaveax.workspace.$id';
+    return 'com.syntila.workspace.$id';
   }
 
   File _plistFile(String label) =>
@@ -207,10 +207,10 @@ class MacOsWorkspaceServiceManager implements WorkspaceServiceManager {
     final label = await _serviceLabel();
     final plist = _plistFile(label);
     final engine = File(
-      '${executable.parent.path}/assets/engines/conclave-agent',
+      '${executable.parent.path}/assets/engines/syntila-agent',
     );
     final fallbackEngine = File(
-      '${executable.parent.path}/conclave-agent',
+      '${executable.parent.path}/syntila-agent',
     );
     final enginePresent = engine.existsSync() || fallbackEngine.existsSync();
 

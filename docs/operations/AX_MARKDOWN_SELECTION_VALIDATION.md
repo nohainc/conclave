@@ -1,7 +1,7 @@
 # AX Markdown Selection Validation
 
 Syntila renders authored and Worker Markdown through the shared
-`ConclaveMarkdownBody` widget. Each message owns one Flutter `SelectionArea`;
+`SyntilaMarkdownBody` widget. Each message owns one Flutter `SelectionArea`;
 `MarkdownBody.selectable` remains disabled so paragraphs, lists, tables, and
 the custom syntax-highlighted code block participate in the same selection
 boundary.
@@ -11,13 +11,13 @@ boundary.
 Run the focused renderer suite from `apps/app`:
 
 ```bash
-flutter test test/conclave_markdown_body_test.dart test/conclave_code_block_test.dart
+flutter test test/syntila_markdown_body_test.dart test/syntila_code_block_test.dart
 ```
 
 Run the same focused suite through Chrome's web test platform:
 
 ```bash
-flutter test --platform chrome test/conclave_markdown_body_test.dart test/conclave_code_block_test.dart
+flutter test --platform chrome test/syntila_markdown_body_test.dart test/syntila_code_block_test.dart
 ```
 
 Safari and Firefox remain manual browser checks; they are not available as

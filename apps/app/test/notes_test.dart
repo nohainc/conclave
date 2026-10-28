@@ -2,14 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
-import 'package:conclave_app/src/features/notes/note_editor.dart';
-import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
-import 'package:conclave_app/src/features/notes/notes_page.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/sync/persistence/ax_thread_view_state_store.dart';
+import 'package:syntila_app/src/features/notes/note_editor.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
+import 'package:syntila_app/src/features/notes/notes_page.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
 import 'ax_fixture_data.dart';
 
 /// In-memory notes with the Cloud's revision rule.
@@ -129,9 +129,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('notes-toggle')));
     await tester.pumpAndSettle();
-    final preview = tester.widget<ConclaveMarkdownBody>(find.descendant(
+    final preview = tester.widget<SyntilaMarkdownBody>(find.descendant(
         of: find.byKey(const ValueKey('note-preview')),
-        matching: find.byType(ConclaveMarkdownBody)));
+        matching: find.byType(SyntilaMarkdownBody)));
     expect(preview.preserveBlankLines, isTrue);
     expect(preview.data, body);
     await tester.tap(find.byKey(const ValueKey('note-edit')));

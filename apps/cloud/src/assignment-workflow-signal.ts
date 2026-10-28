@@ -37,12 +37,12 @@ interface WorkflowInstanceLike {
 }
 
 export interface WorkflowSignalEnv {
-  readonly CONCLAVE_DB: D1Database;
-  readonly CONCLAVE_RUN_WORKFLOW?: {
+  readonly SYNTILA_DB: D1Database;
+  readonly SYNTILA_RUN_WORKFLOW?: {
     get(id: string): Promise<WorkflowInstanceLike>;
   };
   /** Settles the request if its Workflow never finishes it. */
-  readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
+  readonly SYNTILA_THREAD_COORDINATOR?: DurableObjectNamespace;
 }
 
 export type WorkflowSignalOutcome =
@@ -79,7 +79,7 @@ export async function signalAssignmentTerminal(
   now: () => Date = () => new Date(),
 ): Promise<WorkflowSignalOutcome> {
   try {
-    const row = await env.CONCLAVE_DB.prepare(
+    const row = await env.SYNTILA_DB.prepare(
       `SELECT wa.id, wa.status, wa.attempt_id, wa.task_id, wa.run_id,
               wa.workflow_signaled_at, r.workflow_instance_id
          FROM worker_assignments wa
@@ -94,7 +94,7 @@ export async function signalAssignmentTerminal(
     // the request; the Thread coordinator checks after a grace period.
     await scheduleLostWorkflowCheck(env, assignmentId);
     const stamp = async (): Promise<void> => {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `UPDATE worker_assignments SET workflow_signaled_at = ?1
           WHERE id = ?2 AND workflow_signaled_at IS NULL`,
       )
@@ -105,9 +105,9 @@ export async function signalAssignmentTerminal(
       await stamp();
       return "no_instance";
     }
-    if (!env.CONCLAVE_RUN_WORKFLOW) return "failed";
+    if (!env.SYNTILA_RUN_WORKFLOW) return "failed";
     try {
-      const instance = await env.CONCLAVE_RUN_WORKFLOW.get(
+      const instance = await env.SYNTILA_RUN_WORKFLOW.get(
         row.workflow_instance_id,
       );
       const payload: AssignmentTerminalEventPayload = {
@@ -122,7 +122,7 @@ export async function signalAssignmentTerminal(
         payload,
       });
     } catch {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `UPDATE worker_assignments
             SET workflow_signal_attempts = workflow_signal_attempts + 1
           WHERE id = ?1 AND workflow_signaled_at IS NULL`,
@@ -164,7 +164,7 @@ export async function sweepUnsignaledTerminals(
   const now = options.now ?? new Date();
   const limit = options.limit ?? 50;
   const cutoff = new Date(now.getTime() - SWEEP_WINDOW_MS).toISOString();
-  const { results } = await env.CONCLAVE_DB.prepare(
+  const { results } = await env.SYNTILA_DB.prepare(
     `SELECT id FROM worker_assignments
       WHERE workflow_signaled_at IS NULL
         AND status IN (${TERMINAL_SQL})

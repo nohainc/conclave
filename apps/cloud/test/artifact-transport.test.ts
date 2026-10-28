@@ -129,7 +129,7 @@ function createArtifactEnvironment() {
     },
   };
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
+    SYNTILA_ENVIRONMENT: "development",
     TEST_AUTHENTICATION: async () => ({
       userId: "user-1",
       user: {
@@ -143,8 +143,8 @@ function createArtifactEnvironment() {
       sessionId: "session-1",
       clientType: "web",
     }),
-    CONCLAVE_DB: db,
-    CONCLAVE_ARTIFACTS: bucket,
+    SYNTILA_DB: db,
+    SYNTILA_ARTIFACTS: bucket,
   } as unknown as Env;
   return { env, artifacts, objects };
 }
@@ -154,13 +154,13 @@ describe("artifact transport", () => {
     const { env, objects } = createArtifactEnvironment();
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1&artifactId=artifact-1&name=build%20output.zip",
+        "https://syntila.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1&artifactId=artifact-1&name=build%20output.zip",
         {
           method: "POST",
           headers: {
             "content-type": "application/zip",
             "content-length": "4",
-            origin: "https://conclave.test",
+            origin: "https://syntila.test",
           },
           body: "data",
         },
@@ -183,13 +183,13 @@ describe("artifact transport", () => {
   it("retries an interrupted/reconnected upload idempotently", async () => {
     const { env, objects } = createArtifactEnvironment();
     const url =
-      "https://conclave.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1&artifactId=artifact-retry";
+      "https://syntila.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1&artifactId=artifact-retry";
     const request = () =>
       new Request(url, {
         method: "POST",
         headers: {
           "content-type": "text/plain",
-          origin: "https://conclave.test",
+          origin: "https://syntila.test",
         },
         body: "retryable",
       });
@@ -207,12 +207,12 @@ describe("artifact transport", () => {
     const { env, objects } = createArtifactEnvironment();
     const response = await worker.fetch(
       new Request(
-        "https://conclave.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1",
+        "https://syntila.test/api/workspaces/workspace-1/artifacts?spaceId=space-1&runId=run-1",
         {
           method: "POST",
           headers: {
             "content-length": String(64 * 1024 * 1024 + 1),
-            origin: "https://conclave.test",
+            origin: "https://syntila.test",
           },
           body: "small body",
         },
@@ -243,7 +243,7 @@ describe("artifact transport", () => {
     objects.set(key, new TextEncoder().encode("safe"));
 
     const denied = await worker.fetch(
-      new Request("https://conclave.test/api/artifacts/artifact-1"),
+      new Request("https://syntila.test/api/artifacts/artifact-1"),
       {
         ...env,
         TEST_AUTHENTICATION: async () => ({
@@ -260,10 +260,10 @@ describe("artifact transport", () => {
     expect(denied.status).toBe(200);
 
     const expired = await worker.fetch(
-      new Request("https://conclave.test/api/artifacts/artifact-1"),
+      new Request("https://syntila.test/api/artifacts/artifact-1"),
       {
         ...env,
-        CONCLAVE_ENVIRONMENT: "production",
+        SYNTILA_ENVIRONMENT: "production",
         TEST_AUTHENTICATION: undefined,
       } as unknown as Env,
     );

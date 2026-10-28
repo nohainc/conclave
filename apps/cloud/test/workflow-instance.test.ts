@@ -5,7 +5,7 @@ function envWithWorkflowInstance(existing: string | null) {
   const statements: string[] = [];
   let stored = existing;
   const env = {
-    CONCLAVE_DB: {
+    SYNTILA_DB: {
       prepare(sql: string) {
         statements.push(sql);
         return {

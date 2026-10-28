@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_profile_lab/profile_lab_auth.dart';
-import 'package:conclave_profile_lab/profile_lab_paths.dart';
-import 'package:conclave_profile_lab/profile_lab_session_store.dart';
+import 'package:syntila_profile_lab/profile_lab_auth.dart';
+import 'package:syntila_profile_lab/profile_lab_paths.dart';
+import 'package:syntila_profile_lab/profile_lab_session_store.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -44,7 +44,7 @@ void main() {
         sessionId: 'session-sample-1',
         userId: 'admin-1',
         displayName: 'Security Admin',
-        email: 'admin@conclave.test',
+        email: 'admin@syntila.test',
         expiresAt: DateTime.now().toUtc().add(const Duration(days: 30)),
       );
 
@@ -81,7 +81,7 @@ void main() {
         'sessionId': 'session-legacy',
         'userId': 'admin-1',
         'displayName': 'Legacy Admin',
-        'email': 'admin@conclave.test',
+        'email': 'admin@syntila.test',
         'audience': 'conclave.profile-lab.management',
         'expiresAt': DateTime.now()
             .toUtc()

@@ -56,7 +56,7 @@ export async function gatewayFixture(
           delete: async (key: string) => storage.delete(key),
         },
       } as never,
-      { CONCLAVE_DB: f.db as never, ...options.env } as never,
+      { SYNTILA_DB: f.db as never, ...options.env } as never,
     );
   const gateway = makeGateway();
   const headers = {
@@ -93,12 +93,12 @@ export async function gatewayFixture(
           sessionId,
           events: [
             {
-              contract: "conclave.desktop-auth-transport",
+              contract: "syntila.desktop-auth-transport",
               version: "1.0",
               eventId: `event-${counter}`,
               occurredAt: at,
               message: {
-                protocol: "conclave.workspace-runtime-protocol",
+                protocol: "syntila.workspace-runtime-protocol",
                 protocolVersion: "5.1",
                 messageId: `message-${counter}`,
                 timestamp: at,

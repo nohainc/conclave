@@ -1,7 +1,7 @@
 import type {
   ConversationHistoryEntry,
   ConversationHistoryPage,
-} from "@conclave/core";
+} from "@syntila/core";
 import { authorizeThreadAccess } from "./thread-policy.js";
 import { HttpError, json, type SecurityEnv } from "./http-security.js";
 
@@ -13,7 +13,7 @@ export async function handleListConversationHistory(
   accessContext?: ExecutionContext,
 ): Promise<Response> {
   await authorizeThreadAccess(request, env, threadId, "view", accessContext);
-  const scope = await env.CONCLAVE_DB.prepare(
+  const scope = await env.SYNTILA_DB.prepare(
     "SELECT id FROM conversations WHERE id = ?1 AND thread_id = ?2",
   )
     .bind(conversationId, threadId)
@@ -32,7 +32,7 @@ export async function handleListConversationHistory(
   const limit = integer("limit", 50);
   if (limit < 1 || limit > 100)
     throw new HttpError(400, "limit must be between 1 and 100");
-  const revision = await env.CONCLAVE_DB.prepare(
+  const revision = await env.SYNTILA_DB.prepare(
     "SELECT COALESCE(MAX(sequence),0) AS revision FROM conversation_history_entries WHERE conversation_id = ?1",
   )
     .bind(conversationId)
@@ -44,7 +44,7 @@ export async function handleListConversationHistory(
       400,
       "History cursor is outside this Conversation history",
     );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT id, conversation_id AS conversationId, sequence,
  schema_version AS schemaVersion, kind, event_type AS eventType, actor_type AS actorType,
  actor_id AS actorId, work_request_id AS workRequestId, turn_id AS turnId, artifact_id AS artifactId,

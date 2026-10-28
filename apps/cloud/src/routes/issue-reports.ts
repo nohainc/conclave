@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SecurityContext } from "@conclave/security";
+import type { SecurityContext } from "@syntila/security";
 import {
   HttpError,
   json,
@@ -326,7 +326,7 @@ async function loadExecutionEvidence(
   env: SecurityEnv,
   requestId: string,
 ): Promise<ExecutionEvidence> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT wr.id AS requestId, wr.thread_id AS threadId,
             wr.requested_by_user_id AS requestedByUserId, wr.status AS requestStatus,
             wr.updated_at AS requestUpdatedAt,
@@ -417,7 +417,7 @@ async function enrichProviderVersion(
   evidence: ExecutionEvidence,
 ): Promise<ExecutionEvidence> {
   if (!evidence.workspaceId || !evidence.workerId) return evidence;
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT provider_tool_version AS providerToolVersion
        FROM workspace_worker_inventory
       WHERE workspace_id = ?1 AND worker_id = ?2
@@ -548,7 +548,7 @@ async function issueSupportContext(
   ctx?: ExecutionContext,
 ): Promise<SecurityContext> {
   const actor = await securityContext(request, env, ctx);
-  const allowed = (env.CONCLAVE_ISSUE_SUPPORT_USER_IDS ?? "")
+  const allowed = (env.SYNTILA_ISSUE_SUPPORT_USER_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
@@ -566,7 +566,7 @@ async function recordEvent(
   status: { from?: string; to?: string } = {},
 ): Promise<void> {
   try {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT INTO issue_report_events
          (id, report_id, actor_user_id, event_type, from_status, to_status, details_json, created_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
@@ -592,7 +592,7 @@ async function existingReport(
   reporterUserId: string,
   attemptKey: string,
 ): Promise<ReportRow | null> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT id, public_reference AS publicReference,
             reporter_user_id AS reporterUserId, workspace_id AS workspaceId,
             request_id AS requestId, assignment_id AS assignmentId,
@@ -629,7 +629,7 @@ export async function handleCreateIssueReport(
   const existing = await existingReport(env, actor.userId, attemptKey);
   if (existing) return json(userReportResponse(existing), { status: 200 });
 
-  const recent = await env.CONCLAVE_DB.prepare(
+  const recent = await env.SYNTILA_DB.prepare(
     `SELECT COUNT(*) AS count FROM issue_reports
       WHERE reporter_user_id = ?1 AND created_at >= ?2`,
   )
@@ -645,7 +645,7 @@ export async function handleCreateIssueReport(
   const diagnostic = diagnosticFor(evidence, now);
   const diagnosticState: DiagnosticState = "partial";
   const statements = [
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO issue_reports
          (id, public_reference, reporter_user_id, workspace_id, request_id,
           assignment_id, attempt_key, component, error_code, failure_stage, fingerprint,
@@ -678,12 +678,12 @@ export async function handleCreateIssueReport(
       evidence.providerToolVersion,
       evidence.applicationVersion,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO issue_report_diagnostics
          (report_id, schema_version, diagnostic_json, created_at)
        VALUES (?1, 1, ?2, ?3)`,
     ).bind(reportId, JSON.stringify(diagnostic), now),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO issue_report_events
          (id, report_id, actor_user_id, event_type, to_status, details_json, created_at)
        VALUES (?1, ?2, ?3, 'report.created', 'open', ?4, ?5)`,
@@ -696,14 +696,14 @@ export async function handleCreateIssueReport(
     ),
   ];
   try {
-    await env.CONCLAVE_DB.batch(statements);
+    await env.SYNTILA_DB.batch(statements);
   } catch {
     const duplicate = await existingReport(env, actor.userId, attemptKey);
     if (duplicate) return json(userReportResponse(duplicate), { status: 200 });
     throw new HttpError(503, "Issue report could not be stored");
   }
 
-  const bucket = env.CONCLAVE_ARTIFACTS;
+  const bucket = env.SYNTILA_ARTIFACTS;
   if (bucket) {
     const key = `issue-reports/${reportId}/diagnostics.json`;
     const body = JSON.stringify(diagnostic);
@@ -713,7 +713,7 @@ export async function handleCreateIssueReport(
       });
       const digest = createHash("sha256").update(body).digest("hex");
       try {
-        await env.CONCLAVE_DB.prepare(
+        await env.SYNTILA_DB.prepare(
           `UPDATE issue_report_diagnostics
               SET bundle_key = ?1, bundle_sha256 = ?2 WHERE report_id = ?3`,
         )
@@ -768,7 +768,7 @@ export async function handleGetIssueReport(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const actor = await securityContext(request, env, ctx);
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT id, public_reference AS publicReference,
             reporter_user_id AS reporterUserId, workspace_id AS workspaceId,
             request_id AS requestId, assignment_id AS assignmentId,
@@ -782,7 +782,7 @@ export async function handleGetIssueReport(
   if (!row) throw new HttpError(404, "Issue report not found");
   const report = reportRow(row);
   if (report.reporterUserId !== actor.userId) {
-    const requestRow = await env.CONCLAVE_DB.prepare(
+    const requestRow = await env.SYNTILA_DB.prepare(
       "SELECT thread_id AS threadId FROM work_requests WHERE id = ?1",
     )
       .bind(report.requestId)
@@ -805,7 +805,7 @@ export async function handleGetIssueReportForRequest(
   const requestId = boundedToken(url.searchParams.get("requestId"));
   const assignmentId = boundedToken(url.searchParams.get("assignmentId"));
   if (!requestId) throw new HttpError(400, "requestId is required");
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT id, public_reference AS publicReference,
             reporter_user_id AS reporterUserId, workspace_id AS workspaceId,
             request_id AS requestId, assignment_id AS assignmentId,
@@ -877,7 +877,7 @@ export async function handleListAdminIssueReports(
     }
   }
   params.push(limit);
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `${reportSelect()}${filters.length ? ` WHERE ${filters.join(" AND ")}` : ""}
        ORDER BY ir.created_at DESC, ir.id DESC LIMIT ?`,
   )
@@ -941,14 +941,14 @@ export async function handleGetAdminIssueReport(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const actor = await issueSupportContext(request, env, ctx);
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `${reportSelect()} WHERE ir.id = ?1`,
   )
     .bind(reportId)
     .first<Record<string, unknown>>();
   if (!row) throw new HttpError(404, "Issue report not found");
   const report = reportRow(row);
-  const diagnostic = await env.CONCLAVE_DB.prepare(
+  const diagnostic = await env.SYNTILA_DB.prepare(
     `SELECT schema_version AS schemaVersion, diagnostic_json AS diagnosticJson,
             bundle_key AS bundleKey, bundle_sha256 AS bundleSha256,
             created_at AS createdAt
@@ -956,7 +956,7 @@ export async function handleGetAdminIssueReport(
   )
     .bind(report.id)
     .first<Record<string, unknown>>();
-  const events = await env.CONCLAVE_DB.prepare(
+  const events = await env.SYNTILA_DB.prepare(
     `SELECT id, actor_user_id AS actorUserId, event_type AS eventType,
             from_status AS fromStatus, to_status AS toStatus,
             details_json AS detailsJson, created_at AS createdAt
@@ -1116,7 +1116,7 @@ export async function handlePatchAdminIssueReport(
       : boundedToken(value.groupId, 128);
   if (groupWasSupplied && !requestedGroupId)
     throw new HttpError(400, "Invalid incident group");
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     "SELECT status, incident_group_id AS incidentGroupId FROM issue_reports WHERE id = ?1",
   )
     .bind(reportId)
@@ -1138,7 +1138,7 @@ export async function handlePatchAdminIssueReport(
       `Cannot change issue status from ${currentStatus} to ${nextStatus}`,
     );
   if (requestedGroupId != null) {
-    const group = await env.CONCLAVE_DB.prepare(
+    const group = await env.SYNTILA_DB.prepare(
       "SELECT id FROM issue_report_groups WHERE id = ?1",
     )
       .bind(requestedGroupId)
@@ -1147,7 +1147,7 @@ export async function handlePatchAdminIssueReport(
   }
   const now = new Date().toISOString();
   const statements = [
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "UPDATE issue_reports SET status = ?1, incident_group_id = ?2, updated_at = ?3 WHERE id = ?4",
     ).bind(
       nextStatus,
@@ -1157,7 +1157,7 @@ export async function handlePatchAdminIssueReport(
       now,
       reportId,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO issue_report_events
          (id, report_id, actor_user_id, event_type, from_status, to_status, details_json, created_at)
        VALUES (?1, ?2, ?3, 'report.status_changed', ?4, ?5, ?6, ?7)`,
@@ -1177,7 +1177,7 @@ export async function handlePatchAdminIssueReport(
       : requestedGroupId;
   if (existing.incidentGroupId !== nextGroupId) {
     statements.push(
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO issue_report_events
            (id, report_id, actor_user_id, event_type, details_json, created_at)
          VALUES (?1, ?2, ?3, 'report.group_changed', ?4, ?5)`,
@@ -1195,15 +1195,15 @@ export async function handlePatchAdminIssueReport(
     for (const groupId of [existing.incidentGroupId, nextGroupId]) {
       if (groupId != null) {
         statements.push(
-          env.CONCLAVE_DB.prepare(
+          env.SYNTILA_DB.prepare(
             "UPDATE issue_report_groups SET updated_at = ?1 WHERE id = ?2",
           ).bind(now, groupId),
         );
       }
     }
   }
-  await env.CONCLAVE_DB.batch(statements);
-  const updated = await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch(statements);
+  const updated = await env.SYNTILA_DB.prepare(
     `${reportSelect()} WHERE ir.id = ?1`,
   )
     .bind(reportId)
@@ -1225,7 +1225,7 @@ export async function handleListAdminIssueReportGroups(
     Math.max(Number(new URL(request.url).searchParams.get("limit") ?? 100), 1),
     200,
   );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT g.id, g.public_reference AS publicReference, g.label, g.fingerprint,
             g.created_at AS createdAt, g.updated_at AS updatedAt,
             COUNT(r.id) AS reportCount, MIN(r.created_at) AS firstOccurrence,
@@ -1296,7 +1296,7 @@ export async function handleCreateAdminIssueReportGroup(
   const id = `issue-group-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const reference = groupReference();
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO issue_report_groups (id, public_reference, label, fingerprint, created_by_user_id, created_at, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)`,
   )
@@ -1325,7 +1325,7 @@ export async function handleGetAdminIssueReportGroup(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await issueSupportContext(request, env, ctx);
-  const group = await env.CONCLAVE_DB.prepare(
+  const group = await env.SYNTILA_DB.prepare(
     `SELECT id, public_reference AS publicReference, label, fingerprint,
             created_at AS createdAt, updated_at AS updatedAt
        FROM issue_report_groups WHERE id = ?1`,
@@ -1333,7 +1333,7 @@ export async function handleGetAdminIssueReportGroup(
     .bind(groupId)
     .first<Record<string, unknown>>();
   if (!group) throw new HttpError(404, "Incident group not found");
-  const reports = await env.CONCLAVE_DB.prepare(
+  const reports = await env.SYNTILA_DB.prepare(
     `${reportSelect()} WHERE ir.incident_group_id = ?1 ORDER BY ir.created_at DESC, ir.id DESC`,
   )
     .bind(groupId)

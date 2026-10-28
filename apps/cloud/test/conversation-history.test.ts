@@ -93,7 +93,7 @@ it("scopes reads before history access and paginates against a stable high-water
   const conversation = String(
     f.sqlite.prepare("SELECT id FROM conversations").get()!.id,
   );
-  const env = { CONCLAVE_DB: f.db } as unknown as SecurityEnv;
+  const env = { SYNTILA_DB: f.db } as unknown as SecurityEnv;
   const req = (query = "") =>
     new Request(
       `https://cloud.test/api/threads/W/conversations/${conversation}/history${query}`,

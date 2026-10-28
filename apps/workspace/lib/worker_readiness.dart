@@ -4,8 +4,8 @@ import 'dart:io';
 import 'worker_check_progress.dart';
 import 'workspace_notifier.dart';
 
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show ToolProfileResolution;
 
 import 'local_worker_registry.dart';
@@ -715,7 +715,7 @@ class WorkerReadinessMonitor extends WorkspaceNotifier {
       event: issueCode == null
           ? 'profile.probe.completed'
           : 'profile.probe.failed',
-      workspaceVersion: conclaveWorkspaceAppVersion,
+      workspaceVersion: syntilaWorkspaceAppVersion,
       engineVersion: cliWorkerEngineVersion,
       profileDefinitionId: profileDefinitionId,
       profileReleaseVersion: profileReleaseVersion,

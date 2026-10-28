@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_cli_worker_engine/conclave_cli_worker_engine.dart';
+import 'package:syntila_cli_worker_engine/syntila_cli_worker_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -38,7 +38,7 @@ void main() {
 
   test('rejects host and cloud secret environment requests', () {
     for (final name in [
-      'CONCLAVE_CLOUD_SECRET',
+      'SYNTILA_CLOUD_SECRET',
       'CLOUD_API_KEY',
       'WORKSPACE_TOKEN',
     ]) {
@@ -127,10 +127,10 @@ void main() {
 
   test('confines session state files to the Engine state directory', () async {
     final root = await Directory.systemTemp.createTemp(
-      'conclave-session-state-',
+      'syntila-session-state-',
     );
     final outside = File(
-      '${root.parent.path}/conclave-session-outside-${root.hashCode}',
+      '${root.parent.path}/syntila-session-outside-${root.hashCode}',
     );
     final store = EngineSessionStore(root);
     addTearDown(() async {
@@ -161,7 +161,7 @@ void main() {
     'session mappings are scoped and Profile format compatibility is explicit',
     () async {
       final directory = await Directory.systemTemp.createTemp(
-        'conclave-session-scope-',
+        'syntila-session-scope-',
       );
       addTearDown(() => directory.delete(recursive: true));
       final store = EngineSessionStore(directory);

@@ -62,9 +62,9 @@ beforeEach(() => {
       : null;
   });
   env = {
-    CONCLAVE_DB: store.db,
+    SYNTILA_DB: store.db,
     BETTER_AUTH_SECRET: "test",
-    CONCLAVE_ENVIRONMENT: "development",
+    SYNTILA_ENVIRONMENT: "development",
   } as SecurityEnv;
 });
 afterEach(() => {
@@ -229,7 +229,7 @@ it("profile hooks publish replayable ID-only signals solely to established peers
   ]);
   const options = buildBetterAuthOptions({
     ...env,
-    CONCLAVE_ENVIRONMENT: "development",
+    SYNTILA_ENVIRONMENT: "development",
   });
   await options.databaseHooks.user.update.after({ id: "b" });
   expect(

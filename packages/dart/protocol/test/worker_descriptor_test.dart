@@ -1,4 +1,4 @@
-import 'package:conclave_protocol/worker_descriptor.dart';
+import 'package:syntila_protocol/worker_descriptor.dart';
 import 'package:test/test.dart';
 
 void main() {

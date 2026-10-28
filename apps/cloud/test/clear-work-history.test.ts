@@ -20,7 +20,7 @@ import {
   type WorkerRouteDependencies,
 } from "../src/routes/router.js";
 import { HttpError, json } from "../src/routes/handlers.js";
-import { RealtimeEventEnvelopeSchema } from "@conclave/protocol";
+import { RealtimeEventEnvelopeSchema } from "@syntila/protocol";
 import type { SecurityEnv } from "../src/routes/handlers.js";
 
 it("routes through production handler registration and clears remote history", async () => {
@@ -40,7 +40,7 @@ it("routes through production handler registration and clears remote history", a
       new Request("https://test/api/threads/W/work-history/clear", {
         method: "POST",
       }),
-      { CONCLAVE_DB: f.db } as unknown as Env,
+      { SYNTILA_DB: f.db } as unknown as Env,
       undefined,
       routeHandlers,
       {
@@ -110,7 +110,7 @@ it("resets AI context during active work without deleting remote history", async
       new Request("https://test/api/threads/W/work-history/clear", {
         method: "POST",
       }),
-      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      { SYNTILA_DB: f.db } as unknown as SecurityEnv,
       "W",
     );
     expect(
@@ -146,7 +146,7 @@ it("emits a clear event that the protocol's realtime envelope accepts", async ()
       new Request("https://test/api/threads/W/work-history/clear", {
         method: "POST",
       }),
-      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      { SYNTILA_DB: f.db } as unknown as SecurityEnv,
       "W",
     );
 
@@ -191,7 +191,7 @@ it("clears the whole Conversation remotely, including Work history", async () =>
     vi.mocked(publishCollaborationEvent).mockClear();
     const response = await handleClearChatHistory(
       new Request("https://test/api/threads/W/chat/clear", { method: "POST" }),
-      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      { SYNTILA_DB: f.db } as unknown as SecurityEnv,
       "W",
     );
     expect(response.status).toBe(200);
@@ -230,7 +230,7 @@ it("refuses to clear the Conversation while Work is active", async () => {
         new Request("https://test/api/threads/W/chat/clear", {
           method: "POST",
         }),
-        { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+        { SYNTILA_DB: f.db } as unknown as SecurityEnv,
         "W",
       ),
     ).rejects.toMatchObject({ status: 409 });
@@ -252,7 +252,7 @@ it("announces a retried work-history clear even when the receipt replays", async
       ),
     );
     f.sqlite.exec("UPDATE work_requests SET status='completed' WHERE id='R'");
-    const env = { CONCLAVE_DB: f.db } as unknown as SecurityEnv;
+    const env = { SYNTILA_DB: f.db } as unknown as SecurityEnv;
     const clear = () =>
       handleClearWorkHistory(
         new Request("https://test/api/threads/W/work-history/clear", {
@@ -299,7 +299,7 @@ it("keeps cleared AI exchanges readable but out of later Worker context", async 
       new Request("https://test/api/threads/W/work-history/clear", {
         method: "POST",
       }),
-      { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+      { SYNTILA_DB: f.db } as unknown as SecurityEnv,
       "W",
     );
 
@@ -336,7 +336,7 @@ it("refuses to edit an archived AI entry", async () => {
           method: "PATCH",
           body: JSON.stringify({ body: "changed" }),
         }),
-        { CONCLAVE_DB: f.db } as unknown as SecurityEnv,
+        { SYNTILA_DB: f.db } as unknown as SecurityEnv,
         "A1",
       ),
     ).rejects.toMatchObject({ status: 409 });

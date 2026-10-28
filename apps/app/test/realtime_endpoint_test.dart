@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/realtime/realtime_client.dart';
+import 'package:syntila_app/src/realtime/realtime_client.dart';
 
 void main() {
   for (final source in [

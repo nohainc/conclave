@@ -75,11 +75,11 @@ class LinuxCredentialStoreSelector {
   }
 
   LinuxCredentialStoreKind preferred() {
-    final configured = environment['CONCLAVE_WORKSPACE_SECRET_STORE'];
+    final configured = environment['SYNTILA_WORKSPACE_SECRET_STORE'];
     if (configured != null && configured.isNotEmpty) {
       return LinuxCredentialStoreKind.parse(configured) ??
           (throw StateError(
-              'CONCLAVE_WORKSPACE_SECRET_STORE must be secret-service or file'));
+              'SYNTILA_WORKSPACE_SECRET_STORE must be secret-service or file'));
     }
     final bus = environment['DBUS_SESSION_BUS_ADDRESS'];
     return bus != null && bus.isNotEmpty && _secretServiceAvailable()

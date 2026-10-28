@@ -2753,7 +2753,7 @@ h3 {
   width: 35%;
 }
 
-.th-conclave {
+.th-syntila {
   width: 40%;
   background: linear-gradient(
     180deg,
@@ -2762,7 +2762,7 @@ h3 {
   ) !important;
 }
 
-.conclave-badge {
+.syntila-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2785,18 +2785,18 @@ h3 {
   color: var(--color-muted);
 }
 
-.td-conclave {
+.td-syntila {
   background: rgba(94, 75, 216, 0.05);
   border-left: 1px solid var(--color-line-glow);
 }
 
-.td-conclave strong {
+.td-syntila strong {
   display: block;
   color: var(--color-ink);
   font-weight: 700;
 }
 
-.td-conclave small {
+.td-syntila small {
   display: block;
   color: var(--color-accent-light);
   font-size: 0.75rem;
@@ -2807,7 +2807,7 @@ h3 {
   background-color: var(--color-surface-hover);
 }
 
-.comparison-table tr:hover td.td-conclave {
+.comparison-table tr:hover td.td-syntila {
   background-color: rgba(94, 75, 216, 0.12);
 }
 

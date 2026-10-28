@@ -34,7 +34,7 @@ it("requires reset approval before reserving or changing a failed request", asyn
         sessionStrategy: "resume",
       }),
     }),
-    { CONCLAVE_DB: { prepare } } as unknown as SecurityEnv,
+    { SYNTILA_DB: { prepare } } as unknown as SecurityEnv,
     "R",
   );
   expect(response.status).toBe(409);

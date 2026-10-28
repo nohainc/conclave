@@ -90,7 +90,7 @@ describe("email template architecture", () => {
       expect(rendered.html).toContain("<!doctype html>");
       expect(rendered.html).toContain("Syntila");
       expect(rendered.html).toContain(
-        "https://app.conclaveax.com/assets/assets/branding/conclave_email_logo.png",
+        "https://app.conclaveax.com/assets/assets/branding/syntila_email_logo.png",
       );
       expect(rendered.html).toContain(
         "@media only screen and (max-width:620px)",
@@ -136,7 +136,7 @@ describe("email template architecture", () => {
       appUrl: "https://app.conclaveax.com",
     });
     expect(rendered.html).not.toContain("auth@auth.earthuc.com");
-    expect(rendered.html).not.toContain("CONCLAVE_EMAIL");
+    expect(rendered.html).not.toContain("SYNTILA_EMAIL");
   });
 
   it("returns a versioned result with safe metadata and deterministic content", () => {
@@ -186,7 +186,7 @@ describe("email template architecture", () => {
   it("renders completely before sending and never calls the binding on failure", async () => {
     let calls = 0;
     const env = {
-      CONCLAVE_EMAIL: {
+      SYNTILA_EMAIL: {
         send: async () => {
           calls += 1;
           return { messageId: "message-1" };
@@ -227,7 +227,7 @@ describe("email template architecture", () => {
 
     await sendRenderedEmail(
       {
-        CONCLAVE_EMAIL: transport,
+        SYNTILA_EMAIL: transport,
       },
       { to: "ada@example.com", rendered },
     );
@@ -236,7 +236,7 @@ describe("email template architecture", () => {
     expect(transport.messages[0]).toMatchObject({
       to: "ada@example.com",
       subject: "Welcome to Syntila — your account is ready",
-      from: { email: "conclave@conclaveax.com", name: "Syntila" },
+      from: { email: "syntila@conclaveax.com", name: "Syntila" },
     });
   });
 

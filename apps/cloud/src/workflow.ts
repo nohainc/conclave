@@ -14,7 +14,7 @@ import {
   type StepKind,
   type StepResult,
   type WorkRequestSnapshot,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   renderWorkStepPrompt,
   workStepPromptInputs,
@@ -42,7 +42,7 @@ import {
 import type {
   AssignmentLifecycleStatus,
   ThreadBindingId,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   prepareWorkerStepExecution,
   completeWorkerStepExecution,
@@ -224,7 +224,7 @@ export function inputGateDecision(
   return { outcome: "waiting" };
 }
 
-export interface ConclaveWorkflowParams {
+export interface SyntilaWorkflowParams {
   readonly runId: string;
   readonly goalId: string;
   readonly idempotencyKey: string;
@@ -242,7 +242,7 @@ export interface ConclaveWorkflowParams {
   readonly retryAdoptSpaceFolder?: boolean;
 }
 
-export interface ConclaveWorkflowCheckpoint {
+export interface SyntilaWorkflowCheckpoint {
   readonly runId: string;
   readonly goalId: string;
   readonly idempotencyKey: string;
@@ -253,7 +253,7 @@ export interface ConclaveWorkflowCheckpoint {
 }
 
 type ExecutionEnv = Env & {
-  readonly CONCLAVE_THREAD_COORDINATOR?: DurableObjectNamespace;
+  readonly SYNTILA_THREAD_COORDINATOR?: DurableObjectNamespace;
 };
 
 interface AssignmentRow {
@@ -335,15 +335,15 @@ function parseWorkflowStepResult(value: unknown): StepResult | null {
   }
 }
 
-export class ConclaveRunWorkflow extends WorkflowEntrypoint<
+export class SyntilaRunWorkflow extends WorkflowEntrypoint<
   Env,
-  ConclaveWorkflowParams
+  SyntilaWorkflowParams
 > {
   private async persistTerminalRun(
     runId: string,
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db) return;
     const now = new Date().toISOString();
     await db
@@ -356,13 +356,13 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
 
   /** Extends the active Thread lease of this Work Request. Best effort. */
   private async renewThreadLease(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
   ): Promise<void> {
     if (!params.workRequestId || !params.threadId) return;
     try {
       const runtimeEnv = this.env as ExecutionEnv;
-      const db = runtimeEnv.CONCLAVE_DB;
-      const namespace = runtimeEnv.CONCLAVE_THREAD_COORDINATOR;
+      const db = runtimeEnv.SYNTILA_DB;
+      const namespace = runtimeEnv.SYNTILA_THREAD_COORDINATOR;
       if (!db || !namespace) return;
       const lease = await db
         .prepare(
@@ -399,7 +399,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
    * still marks the request completed.
    */
   private async finishWorkRequest(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     status: "completed" | "failed" | "cancelled",
     workflowStep: WorkflowStep,
   ): Promise<void> {
@@ -410,13 +410,13 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   private async finishWorkRequestNow(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
     if (!params.workRequestId || !params.threadId) return;
     const runtimeEnv = this.env as ExecutionEnv;
-    const db = runtimeEnv.CONCLAVE_DB;
-    const namespace = runtimeEnv.CONCLAVE_THREAD_COORDINATOR;
+    const db = runtimeEnv.SYNTILA_DB;
+    const namespace = runtimeEnv.SYNTILA_THREAD_COORDINATOR;
     if (!db) return;
     const request = await db
       .prepare(
@@ -478,10 +478,10 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   private async persistWorkflowTasks(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     tasks: readonly PlannedWorkflowTask[],
   ): Promise<void> {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db || !params.workRequestId) return;
     const now = new Date().toISOString();
     const statements = tasks.flatMap((task) => [
@@ -516,7 +516,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   private async publishWorkEvent(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     type:
       | "work_request.started"
       | "work_request.completed"
@@ -537,7 +537,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       const spaceId =
         params.spaceId ??
         (
-          await (this.env as ExecutionEnv).CONCLAVE_DB.prepare(
+          await (this.env as ExecutionEnv).SYNTILA_DB.prepare(
             "SELECT space_id AS spaceId FROM threads WHERE id = ?1",
           )
             .bind(threadId)
@@ -547,7 +547,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       // Lets clients skip "finished" notices for the person who asked.
       const requestedByUserId = type.startsWith("work_request.")
         ? ((
-            await (this.env as ExecutionEnv).CONCLAVE_DB.prepare(
+            await (this.env as ExecutionEnv).SYNTILA_DB.prepare(
               "SELECT requested_by_user_id AS userId FROM work_requests WHERE id = ?1",
             )
               .bind(workRequestId)
@@ -585,7 +585,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     status: PlannedWorkflowTask["status"] = task.status,
     attempt: number = task.attempt,
   ): Promise<void> {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db) return;
     await db
       .prepare(
@@ -613,13 +613,13 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
    * input routes only shorten the bounded waits.
    */
   private async awaitWorkRequestInputs(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     step: WorkflowStep,
   ): Promise<
     | { outcome: "none" | "delivered" }
     | { outcome: "failed" | "cancelled"; message: string }
   > {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db || !params.workRequestId || params.retryStepKind)
       return { outcome: "none" };
     for (let round = 0; ; round += 1) {
@@ -650,16 +650,16 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   private async runVersioned(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     step: WorkflowStep,
-  ): Promise<ConclaveWorkflowCheckpoint> {
+  ): Promise<SyntilaWorkflowCheckpoint> {
     const definition = params.builtinWorkflow!;
     validateBuiltinWorkflowDefinition(definition);
     const workRequestId = params.workRequestId ?? `run-${params.runId}`;
     let promptInput = await this.loadWorkRequestPromptInput(params);
     let tasks = [...planWorkflowTasks(definition, workRequestId)];
     const stepResults: Partial<Record<StepKind, StepResult>> = {};
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (db && params.workRequestId) {
       const requestMode = await db
         .prepare("SELECT mode FROM work_requests WHERE id = ?1")
@@ -730,7 +730,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
           }),
         ),
     );
-    const started: ConclaveWorkflowCheckpoint = {
+    const started: SyntilaWorkflowCheckpoint = {
       runId: params.runId,
       goalId: params.goalId,
       idempotencyKey: params.idempotencyKey,
@@ -827,7 +827,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
       for (const result of results) {
         const cancellationRequested = await (
           this.env as ExecutionEnv
-        ).CONCLAVE_DB.prepare(
+        ).SYNTILA_DB.prepare(
           "SELECT cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
         )
           .bind(params.workRequestId)
@@ -895,7 +895,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   private async runWorkflowTask(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
     definition: BuiltinWorkflowDefinition,
     task: PlannedWorkflowTask,
     promptInput: Record<string, unknown>,
@@ -908,7 +908,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
     stepResult?: StepResult;
     error?: string;
   }> {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db || !params.workRequestId) {
       return {
         task,
@@ -1386,11 +1386,11 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   private async loadWorkRequestPromptInput(
-    params: ConclaveWorkflowParams,
+    params: SyntilaWorkflowParams,
   ): Promise<Record<string, unknown>> {
     const callerInput = params.input ?? {};
     if (!params.workRequestId) return callerInput;
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db) return callerInput;
     const row = await db
       .prepare(
@@ -1454,7 +1454,7 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   private async loadWorkRequestSnapshot(
     workRequestId: string,
   ): Promise<WorkRequestSnapshot | null> {
-    const db = (this.env as ExecutionEnv).CONCLAVE_DB;
+    const db = (this.env as ExecutionEnv).SYNTILA_DB;
     if (!db) return null;
     const row = await db
       .prepare(
@@ -1485,9 +1485,9 @@ export class ConclaveRunWorkflow extends WorkflowEntrypoint<
   }
 
   override async run(
-    event: WorkflowEvent<ConclaveWorkflowParams>,
+    event: WorkflowEvent<SyntilaWorkflowParams>,
     step: WorkflowStep,
-  ): Promise<ConclaveWorkflowCheckpoint> {
+  ): Promise<SyntilaWorkflowCheckpoint> {
     let params = event.payload;
     if (params.workRequestId) {
       const snapshot = await this.loadWorkRequestSnapshot(params.workRequestId);

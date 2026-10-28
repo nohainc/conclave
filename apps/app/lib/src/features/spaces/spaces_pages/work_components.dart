@@ -92,13 +92,13 @@ Future<T?> _showAnchoredMenu<T>({
             data: Theme.of(buttonContext),
             child: Padding(
               key: measureKey,
-              padding: ConclaveMenuStyle.padding,
+              padding: SyntilaMenuStyle.padding,
               child: IntrinsicWidth(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     for (final item in items)
-                      item is ConclaveMenuEntry<T>
+                      item is SyntilaMenuEntry<T>
                           ? item.child
                           : SizedBox(height: item.height),
                   ],
@@ -123,12 +123,12 @@ Future<T?> _showAnchoredMenu<T>({
   return showMenu<T>(
     context: buttonContext,
     popUpAnimationStyle: AnimationStyle.noAnimation,
-    color: ConclaveColors.composerBackground(isDark),
+    color: SyntilaColors.composerBackground(isDark),
     surfaceTintColor: Colors.transparent,
     elevation: 12,
-    shadowColor: ConclaveMenuStyle.shadow(isDark),
-    shape: ConclaveMenuStyle.shape(isDark),
-    menuPadding: ConclaveMenuStyle.padding,
+    shadowColor: SyntilaMenuStyle.shadow(isDark),
+    shape: SyntilaMenuStyle.shape(isDark),
+    menuPadding: SyntilaMenuStyle.padding,
     constraints: BoxConstraints(minHeight: menuHeight, maxHeight: menuHeight),
     position: RelativeRect.fromRect(
       Rect.fromLTWH(rect.left, anchorBottom - menuHeight, rect.width, 0),
@@ -290,7 +290,7 @@ class _WorkComposer extends StatelessWidget {
                 const Icon(
                   Icons.chat_bubble_outline_rounded,
                   size: 42,
-                  color: ConclaveColors.neutral,
+                  color: SyntilaColors.neutral,
                 ),
                 const SizedBox(height: 12),
                 Text(
@@ -298,7 +298,7 @@ class _WorkComposer extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    color: ConclaveColors.textSecondary(isDark),
+                    color: SyntilaColors.textSecondary(isDark),
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -307,7 +307,7 @@ class _WorkComposer extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: ConclaveColors.neutral,
+                    color: SyntilaColors.neutral,
                   ),
                 ),
               ],
@@ -482,7 +482,7 @@ class _WorkComposer extends StatelessWidget {
     // page content background (canvas).
     final selectedForeground = colors.onSurface;
     final inactiveForeground = colors.onSurface;
-    final activeBackground = ConclaveColors.canvas(isDark);
+    final activeBackground = SyntilaColors.canvas(isDark);
     final canSelect = canExecute && !submitting;
     final menuWorkflows = singleList ? workflows : otherWorkflows;
     final menuSelected =
@@ -534,10 +534,10 @@ class _WorkComposer extends StatelessWidget {
 
     PopupMenuEntry<String> workflowEntry(
             AxBuiltinWorkflow item, BuildContext menuContext) =>
-        ConclaveMenuEntry<String>(
+        SyntilaMenuEntry<String>(
           value: item.reference,
           child: MenuItemButton(
-            style: ConclaveMenuStyle.item(
+            style: SyntilaMenuStyle.item(
                 Theme.of(context).brightness == Brightness.dark),
             leadingIcon: Icon(
               item.reference == selectedWorkflow?.reference
@@ -550,7 +550,7 @@ class _WorkComposer extends StatelessWidget {
             ),
             onPressed: () => Navigator.pop(menuContext, item.reference),
             child: Text(item.name,
-                style: ConclaveMenuStyle.textStyle.copyWith(
+                style: SyntilaMenuStyle.textStyle.copyWith(
                     color: item.reference == selectedWorkflow?.reference
                         ? selectedForeground
                         : inactiveForeground)),
@@ -576,10 +576,10 @@ class _WorkComposer extends StatelessWidget {
                       buttonContext: buttonContext,
                       itemHeight: 36.0,
                       items: [
-                        ConclaveMenuEntry<String>(
+                        SyntilaMenuEntry<String>(
                           value: 'files',
                           child: MenuItemButton(
-                            style: ConclaveMenuStyle.item(
+                            style: SyntilaMenuStyle.item(
                                 Theme.of(context).brightness ==
                                     Brightness.dark),
                             leadingIcon:
@@ -588,21 +588,21 @@ class _WorkComposer extends StatelessWidget {
                                 ? () => Navigator.pop(buttonContext, 'files')
                                 : null,
                             child: const Text('Add files',
-                                style: ConclaveMenuStyle.textStyle),
+                                style: SyntilaMenuStyle.textStyle),
                           ),
                         ),
                         if (onHistoryNavigate != null)
-                          ConclaveMenuEntry<String>(
+                          SyntilaMenuEntry<String>(
                             value: 'history',
                             child: MenuItemButton(
-                              style: ConclaveMenuStyle.item(
+                              style: SyntilaMenuStyle.item(
                                   Theme.of(context).brightness ==
                                       Brightness.dark),
                               leadingIcon: const Icon(Icons.history, size: 16),
                               onPressed: () =>
                                   Navigator.pop(buttonContext, 'history'),
                               child: const Text('Request history',
-                                  style: ConclaveMenuStyle.textStyle),
+                                  style: SyntilaMenuStyle.textStyle),
                             ),
                           ),
                       ],
@@ -935,7 +935,7 @@ class _WorkComposer extends StatelessWidget {
               Expanded(
                 child: SelectableText(
                   submitError!,
-                  style: ConclaveMessageTypography.fromTheme(Theme.of(context))
+                  style: SyntilaMessageTypography.fromTheme(Theme.of(context))
                       .copyWith(color: colors.error),
                 ),
               ),
@@ -1094,7 +1094,7 @@ class AxWorkerUsagePanel extends StatelessWidget {
               children: [
                 Container(
                   color: attached
-                      ? ConclaveColors.composerRail(
+                      ? SyntilaColors.composerRail(
                           Theme.of(context).brightness == Brightness.dark)
                       : null,
                   padding: attached
@@ -1215,7 +1215,7 @@ class AxWorkerUsagePanel extends StatelessWidget {
                       key: const ValueKey('worker-usage-bottom-line'),
                       height: 1,
                       thickness: 1,
-                      color: ConclaveColors.composerRail(
+                      color: SyntilaColors.composerRail(
                           Theme.of(context).brightness == Brightness.dark),
                     ),
                   ),
@@ -1228,7 +1228,7 @@ class AxWorkerUsagePanel extends StatelessWidget {
             child: _ComposerPanelLayer(
               backgroundKey: const ValueKey('worker-usage-layer-background'),
               horizontalInset: 40,
-              background: ConclaveColors.composerBackground(
+              background: SyntilaColors.composerBackground(
                   Theme.of(context).brightness == Brightness.dark),
               joinsInput: joinsInput,
               child: ConstrainedBox(
@@ -1303,8 +1303,8 @@ class _UsageTable extends StatelessWidget {
           Expanded(
             child: LinearProgressIndicator(
                 value: (window.usedPercent / 100).clamp(0.0, 1.0),
-                color: ConclaveColors.primaryForeground(dark),
-                backgroundColor: ConclaveColors.surfaceHover(dark),
+                color: SyntilaColors.primaryForeground(dark),
+                backgroundColor: SyntilaColors.surfaceHover(dark),
                 stopIndicatorColor: Colors.transparent,
                 minHeight: 6,
                 semanticsLabel: '${window.group ?? ''} ${window.label} usage',
@@ -1356,7 +1356,7 @@ class _MemoizedWorkMarkdown extends StatefulWidget {
 class _MemoizedWorkMarkdownState extends State<_MemoizedWorkMarkdown> {
   late Widget _body;
 
-  Widget _createBody() => ConclaveMarkdownBody(
+  Widget _createBody() => SyntilaMarkdownBody(
         key: widget.key,
         data: widget.data,
         fitContent: widget.fitContent,
@@ -1500,7 +1500,7 @@ class _WorkTimelineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final colors = Theme.of(context).colorScheme;
-    final metaColor = ConclaveColors.textSecondary(isDark);
+    final metaColor = SyntilaColors.textSecondary(isDark);
 
     final timestamp = DateTime.tryParse(request.createdAt)?.toLocal();
     final timeLabel =
@@ -1718,14 +1718,14 @@ class _WorkTimelineCard extends StatelessWidget {
               )
             : CircleAvatar(
                 radius: 12,
-                backgroundColor: ConclaveColors.primarySoftColor(isDark),
+                backgroundColor: SyntilaColors.primarySoftColor(isDark),
                 child: Text(effectiveIconLabel.substring(0, 1).toUpperCase(),
                     style: TextStyle(fontSize: 12, color: metaColor)),
               ))
         : Opacity(
             opacity: senderIconOpacity,
             child: Image.asset(
-              ConclaveBrandAssets.logoPng32,
+              SyntilaBrandAssets.logoPng32,
               width: 24,
               height: 24,
               fit: BoxFit.contain,
@@ -1758,7 +1758,7 @@ class _WorkTimelineCard extends StatelessWidget {
                     bubble: Container(
                       decoration: BoxDecoration(
                         color: isOwnRequest
-                            ? ConclaveColors.ownMessageBackground(isDark)
+                            ? SyntilaColors.ownMessageBackground(isDark)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(10),
                       ),
@@ -1777,13 +1777,13 @@ class _WorkTimelineCard extends StatelessWidget {
                                 CircleAvatar(
                                   radius: 12,
                                   backgroundColor:
-                                      ConclaveColors.primarySoftColor(isDark),
+                                      SyntilaColors.primarySoftColor(isDark),
                                   child: Text(
                                     requesterInitials,
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: ConclaveColors.primaryForeground(
+                                      color: SyntilaColors.primaryForeground(
                                           isDark),
                                     ),
                                   ),
@@ -1794,7 +1794,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: ConclaveColors.textSecondary(isDark),
+                                    color: SyntilaColors.textSecondary(isDark),
                                   ),
                                 ),
                               ],
@@ -2025,7 +2025,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                     ? SelectableText(
                                         message,
                                         style:
-                                            ConclaveMessageTypography.fromTheme(
+                                            SyntilaMessageTypography.fromTheme(
                                                     Theme.of(context))
                                                 .copyWith(color: colors.error),
                                       )
@@ -2502,7 +2502,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: const Text('Delete message?'),
         content: const Text(
             'Are you sure you want to delete this message? This action cannot be undone.'),
@@ -2512,7 +2512,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: ConclaveDialogStyle.destructiveButton(),
+            style: SyntilaDialogStyle.destructiveButton(),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
@@ -2535,14 +2535,14 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
           Icon(removed ? Icons.delete_outline : Icons.info_outline,
               size: 16,
               color: removed
-                  ? ConclaveColors.errorText(isDark)
-                  : ConclaveColors.textSecondary(isDark)),
+                  ? SyntilaColors.errorText(isDark)
+                  : SyntilaColors.textSecondary(isDark)),
           const SizedBox(width: 8),
           Expanded(
               child: Text(
                   '${removed ? "${widget.item.author} · ${widget.item.sentAt ?? ""}\n" : ""}${widget.item.text}${!removed ? " · ${widget.item.sentAt ?? ""}" : ""}',
                   style: TextStyle(
-                      color: ConclaveColors.textSecondary(isDark),
+                      color: SyntilaColors.textSecondary(isDark),
                       fontSize: 13))),
         ]),
       );
@@ -2560,7 +2560,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
             .toUpperCase()
         : 'U';
 
-    final metaColor = ConclaveColors.textSecondary(isDark);
+    final metaColor = SyntilaColors.textSecondary(isDark);
     final sent = widget.item.date;
     final sentLabel =
         sent == null ? widget.item.sentAt : _relativeChatTimestamp(sent);
@@ -2654,7 +2654,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                       bubble: Container(
                         decoration: BoxDecoration(
                           color: isMe
-                              ? ConclaveColors.ownMessageBackground(isDark)
+                              ? SyntilaColors.ownMessageBackground(isDark)
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -2672,18 +2672,18 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                                   CircleAvatar(
                                     radius: 12,
                                     backgroundColor:
-                                        ConclaveColors.primarySoftColor(isDark),
+                                        SyntilaColors.primarySoftColor(isDark),
                                     child: widget.item.isAiAnswer
                                         ? Icon(Icons.auto_awesome_rounded,
                                             size: 13,
-                                            color: ConclaveColors
+                                            color: SyntilaColors
                                                 .primaryForeground(isDark))
                                         : Text(
                                             initials,
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.bold,
-                                              color: ConclaveColors
+                                              color: SyntilaColors
                                                   .primaryForeground(isDark),
                                             ),
                                           ),
@@ -2695,7 +2695,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
                                       color:
-                                          ConclaveColors.textSecondary(isDark),
+                                          SyntilaColors.textSecondary(isDark),
                                     ),
                                   ),
                                 ],
@@ -2862,10 +2862,10 @@ class _TimelineActionsMenu extends StatelessWidget {
       splashRadius: buttonSize / 2,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 160, maxWidth: 340),
-      color: ConclaveMenuStyle.background(isDark),
+      color: SyntilaMenuStyle.background(isDark),
       surfaceTintColor: Colors.transparent,
-      shape: ConclaveMenuStyle.shape(isDark),
-      menuPadding: ConclaveMenuStyle.padding,
+      shape: SyntilaMenuStyle.shape(isDark),
+      menuPadding: SyntilaMenuStyle.padding,
       onOpened: () => menuOpenChanged(true),
       onCanceled: () => menuOpenChanged(false),
       onSelected: (index) {
@@ -2884,7 +2884,7 @@ class _TimelineActionsMenu extends StatelessWidget {
               const SizedBox(width: 8),
               Flexible(
                   child: Text(actions[index].tooltip,
-                      style: ConclaveMenuStyle.textStyle)),
+                      style: SyntilaMenuStyle.textStyle)),
             ]),
           ),
       ],
@@ -3010,7 +3010,7 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
       backgroundKey: const ValueKey('request-history-layer-background'),
       joinsInput: widget.joinsInput,
       horizontalInset: 40,
-      background: ConclaveColors.composerBackground(isDark),
+      background: SyntilaColors.composerBackground(isDark),
       child: TapRegion(
         onTapOutside: (_) => widget.onClosed(),
         child: Focus(
@@ -3060,7 +3060,7 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
                             onTap: () => _select(index),
                             child: Container(
                               color: index == _selected
-                                  ? ConclaveColors.navigationSelectedColor(
+                                  ? SyntilaColors.navigationSelectedColor(
                                       isDark)
                                   : null,
                               padding: const EdgeInsets.symmetric(
@@ -3082,7 +3082,7 @@ class _RequestHistoryPanelState extends State<_RequestHistoryPanel> {
                     key: const ValueKey('request-history-bottom-line'),
                     height: 1,
                     thickness: 1,
-                    color: ConclaveColors.composerRail(isDark),
+                    color: SyntilaColors.composerRail(isDark),
                   ),
                 ),
               ],
@@ -3149,7 +3149,7 @@ class _QueuedMessagesPanel extends StatelessWidget {
       backgroundKey: const ValueKey('work-queue-layer-background'),
       // Span the input's central area, between the 40px composer rails.
       horizontalInset: 40,
-      background: ConclaveColors.composerBackground(isDark),
+      background: SyntilaColors.composerBackground(isDark),
       child: Container(
         key: const ValueKey('work-queue-panel'),
         constraints: const BoxConstraints(maxHeight: 192),
@@ -3164,11 +3164,11 @@ class _QueuedMessagesPanel extends StatelessWidget {
                 key: const ValueKey('work-queue-panel-divider'),
                 height: 1,
                 thickness: 1,
-                color: ConclaveColors.navigationBorder(isDark),
+                color: SyntilaColors.navigationBorder(isDark),
               ),
             Container(
               key: const ValueKey('work-queue-header'),
-              color: ConclaveColors.composerRail(isDark),
+              color: SyntilaColors.composerRail(isDark),
               padding: const EdgeInsets.fromLTRB(12, 2, 4, 0),
               child: Row(children: [
                 Expanded(
@@ -3262,7 +3262,7 @@ class _QueuedMessagesPanel extends StatelessWidget {
                 key: const ValueKey('work-queue-bottom-line'),
                 height: 1,
                 thickness: 1,
-                color: ConclaveColors.composerRail(isDark),
+                color: SyntilaColors.composerRail(isDark),
               ),
             ),
           ],
@@ -3301,7 +3301,7 @@ class _ComposerPanelLayer extends StatelessWidget {
                 key: backgroundKey,
                 decoration: BoxDecoration(
                   color: background ??
-                      ConclaveColors.composerRail(
+                      SyntilaColors.composerRail(
                           Theme.of(context).brightness == Brightness.dark),
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(10),
@@ -3372,7 +3372,7 @@ class _ReplyComposerBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = ConclaveColors.textSecondary(isDark);
+    final muted = SyntilaColors.textSecondary(isDark);
     return Semantics(
       container: true,
       label: 'Replying to ${reference.authorName}',
@@ -3426,7 +3426,7 @@ class _ReplyQuote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final muted = ConclaveColors.textSecondary(isDark);
+    final muted = SyntilaColors.textSecondary(isDark);
     final excerpt = reference.excerpt.isEmpty
         ? 'Original message unavailable'
         : replyExcerpt(reference.excerpt);

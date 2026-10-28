@@ -17,7 +17,7 @@ function fixture(t) {
   t.onTestFinished(() => rmSync(root, { recursive: true, force: true }));
   const directory = join(root, "space-1", "thread-1");
   mkdirSync(directory, { recursive: true });
-  const source = join(directory, ".conclave-workstream.json");
+  const source = join(directory, ".syntila-workstream.json");
   const old = {
     schemaVersion: 1,
     projectId: "space-1",

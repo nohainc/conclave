@@ -22,7 +22,7 @@ it("requires ownership and confirmation, scopes Workspace selection, resets work
  INSERT INTO worker_scheduling(worker_id,state,updated_at) VALUES('worker-a','disabled','now');
  INSERT INTO spaces(id,owner_user_id,name,created_at,updated_at) VALUES('s','owner','Space','now','now'),('independent','owner','Independent','now','now');
  INSERT INTO space_memberships(id,space_id,user_id,role,created_at,updated_at) VALUES('o','s','owner','owner','now','now'),('m','s','member','collaborator','now','now');`);
-    const env = { CONCLAVE_DB: db, BETTER_AUTH_SECRET: "test" } as SecurityEnv;
+    const env = { SYNTILA_DB: db, BETTER_AUTH_SECRET: "test" } as SecurityEnv;
     const handle = (body?: object, spaceId?: string, user = "owner") =>
       handleWorkflowWorkspace(
         new Request("https://test/api/user/workflow-workspace", {

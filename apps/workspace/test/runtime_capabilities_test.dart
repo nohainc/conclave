@@ -1,4 +1,4 @@
-import 'package:conclave_workspace/runtime_capabilities.dart';
+import 'package:syntila_workspace/runtime_capabilities.dart';
 import 'package:test/test.dart';
 
 void main() {

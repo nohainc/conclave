@@ -3,7 +3,7 @@ import type { WorkspaceRuntimeMessage } from "./workspace-runtime.js";
 
 /** Wire contract version for desktop account management and runtime transports. */
 export const DESKTOP_AUTH_TRANSPORT_CONTRACT =
-  "conclave.desktop-auth-transport" as const;
+  "syntila.desktop-auth-transport" as const;
 export const DESKTOP_AUTH_TRANSPORT_VERSION = "1.0" as const;
 export const DESKTOP_AUTH_INTENT_VERSION = "1.1" as const;
 

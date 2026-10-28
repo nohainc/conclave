@@ -1,17 +1,17 @@
 import 'dart:io';
 
-import 'package:conclave_workspace/linux_credentials.dart';
-import 'package:conclave_workspace/linux_service_manager.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/sleep_inhibitor.dart';
-import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:conclave_workspace/workspace_paths.dart';
+import 'package:syntila_workspace/linux_credentials.dart';
+import 'package:syntila_workspace/linux_service_manager.dart';
+import 'package:syntila_workspace/secure_credentials.dart';
+import 'package:syntila_workspace/sleep_inhibitor.dart';
+import 'package:syntila_workspace/workspace_lifecycle_store.dart';
+import 'package:syntila_workspace/workspace_paths.dart';
 import 'package:test/test.dart';
 
 void main() {
   final posix = !Platform.isWindows;
   late Directory root;
-  setUp(() => root = Directory.systemTemp.createTempSync('conclave-linux-'));
+  setUp(() => root = Directory.systemTemp.createTempSync('syntila-linux-'));
   tearDown(() => root.deleteSync(recursive: true));
 
   group('XDG state root', () {
@@ -89,7 +89,7 @@ void main() {
             state,
             environment: const {
               'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
-              'CONCLAVE_WORKSPACE_SECRET_STORE': 'file',
+              'SYNTILA_WORKSPACE_SECRET_STORE': 'file',
             },
           ).preferred(),
           LinuxCredentialStoreKind.file,
@@ -128,7 +128,7 @@ void main() {
 
     test('platform store uses the recorded file store on Linux', () async {
       final store = PlatformSecureCredentialStore(
-        service: 'com.conclaveax.workspace.test',
+        service: 'com.syntila.workspace.test',
         platform: 'linux',
         credentialDirectory: Directory('${root.path}/state/Credentials'),
       );

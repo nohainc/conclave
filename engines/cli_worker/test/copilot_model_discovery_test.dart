@@ -1,4 +1,4 @@
-import 'package:conclave_cli_worker_engine/src/model_discovery.dart';
+import 'package:syntila_cli_worker_engine/src/model_discovery.dart';
 import 'package:test/test.dart';
 
 /// `copilot --model` output from GitHub Copilot CLI 1.0.103 on Windows.

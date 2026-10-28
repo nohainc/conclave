@@ -54,7 +54,7 @@ describe("v8 architecture guard rejects retired source patterns", () => {
     ["Host identifier field", "hostId"],
     ["Host database column", "host_id"],
     ["Host API route", "/api/hosts/123"],
-    ["Host environment variable", "CONCLAVE_HOST_RUNTIME_ID"],
+    ["Host environment variable", "SYNTILA_HOST_RUNTIME_ID"],
   ])("rejects %s", (_description, source) => {
     expect(violationsFor(source)).toContain("retired Host product naming");
   });
@@ -92,7 +92,7 @@ describe("v8 architecture guard rejects retired source patterns", () => {
     ["pairing-intent table", "workspace_pairing_intents"],
     ["pairing-intent API", "/api/workspace-pairing-intents"],
     ["pairing-intent handler", "handleCreateWorkspacePairingIntent"],
-    ["pairing token prefix", "conclave_pair_"],
+    ["pairing token prefix", "syntila_pair_"],
     ["Workspace pairing service", "WorkspacePairingService"],
   ])("rejects retired Workspace pairing flow: %s", (_description, source) => {
     expect(violationsFor(source)).toContain(
@@ -108,7 +108,7 @@ describe("v8 architecture guard rejects retired source patterns", () => {
     ["enrollment route", "/api/workspaces/id/enrollments"],
     ["enrollment handler", "handleCreateWorkspaceEnrollment"],
     ["Workspace enrollment factory", "createWorkspaceEnrollment"],
-    ["enrollment token prefix", "conclave_enroll_"],
+    ["enrollment token prefix", "syntila_enroll_"],
     ["AX enrollment model", "AxWorkspaceEnrollment"],
   ])(
     "rejects retired Workspace token enrollment: %s",
@@ -122,7 +122,7 @@ describe("v8 architecture guard rejects retired source patterns", () => {
   it.each([
     [
       "Profile Lab package import",
-      "import 'package:conclave_profile_lab/lab.dart';",
+      "import 'package:syntila_profile_lab/lab.dart';",
     ],
     [
       "Profile Lab local import",
@@ -150,7 +150,7 @@ describe("v8 architecture guard rejects retired source patterns", () => {
   );
 
   it.each([
-    ["ED25519 signing seed variable", "CONCLAVE_WORKSPACE_ED25519_SEED"],
+    ["ED25519 signing seed variable", "SYNTILA_WORKSPACE_ED25519_SEED"],
     ["Ed25519PrivateKey class reference", "Ed25519PrivateKey"],
   ])(
     "rejects desktop private key signing material: %s",

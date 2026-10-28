@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeActivityPayload, parseExecutionEvent } from "../src/index.js";
 
 const baseEvent = {
-  protocol: "conclave.execution-events",
+  protocol: "syntila.execution-events",
   protocolVersion: "1.0",
   schemaVersion: 1,
   eventId: "event-1",

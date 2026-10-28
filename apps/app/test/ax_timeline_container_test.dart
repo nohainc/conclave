@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 
 void main() {
   testWidgets('virtualizes large variable-height timelines', (tester) async {

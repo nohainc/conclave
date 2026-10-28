@@ -218,7 +218,7 @@ class ThreadMutationCoordinator {
     required int fencingToken,
   }) async {
     final fenceFile =
-        File(_join(directory.path, '.conclave-thread-fence.json'));
+        File(_join(directory.path, '.syntila-thread-fence.json'));
     Map<String, Object?>? previous;
     if (await fenceFile.exists()) {
       try {

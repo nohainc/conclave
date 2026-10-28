@@ -42,7 +42,7 @@ it("authenticates actual human sessions and isolates GET/PUT/DELETE ownership", 
       )
       .run(JSON.stringify(configuration(false)));
     const env = {
-      CONCLAVE_DB: db,
+      SYNTILA_DB: db,
       BETTER_AUTH_SECRET: "test-secret",
     } as SecurityEnv;
     const request = (method: string, user?: string, body?: unknown) =>

@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'windows_native.dart';
 
-import 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart';
+import 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart';
 
 /// Operating-system services used by the Workspace.
 ///
@@ -116,7 +116,7 @@ final class PosixRuntime implements PlatformRuntime {
     Process? process;
     try {
       handshakeDirectory = await Directory.systemTemp.createTemp(
-        'conclave-process-group-',
+        'syntila-process-group-',
       );
       final handshake = File('${handshakeDirectory.path}/ready');
       const groupSetup = r'''

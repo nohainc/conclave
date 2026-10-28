@@ -8,7 +8,7 @@ import 'speech_dictation.dart';
 SpeechDictation createSpeechDictation() => WebSpeechDictation();
 
 class WebSpeechDictation implements SpeechDictation {
-  static const _preferenceKey = 'conclave-dictation-language-v1';
+  static const _preferenceKey = 'syntila-dictation-language-v1';
 
   web.SpeechRecognition? _recognition;
 

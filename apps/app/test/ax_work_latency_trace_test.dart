@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/ax/ax_work_latency_trace.dart';
+import 'package:syntila_app/src/ax/ax_work_latency_trace.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -26,7 +26,7 @@ void main() {
         ]));
     expect(marks[axTraceWebReceived]!,
         greaterThanOrEqualTo(marks[axTraceWebSubmitted]!));
-    expect(lines.single, startsWith('[conclave.latency] {'));
+    expect(lines.single, startsWith('[syntila.latency] {'));
     expect(lines.single, isNot(contains('key-1')));
   });
 

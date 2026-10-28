@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
 
 /// Transport cursors are independent of navigation and execution ownership.
 class RealtimeCursors {

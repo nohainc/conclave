@@ -32,7 +32,7 @@ String workspaceManagerEndpoint(Directory runtime) {
   if (!RegExp(r'^[A-Za-z0-9._-]{8,128}$').hasMatch(id)) {
     throw StateError('Workspace installation identity is missing or invalid');
   }
-  return r'\\.\pipe\conclave-workspace-' + id;
+  return r'\\.\pipe\syntila-workspace-' + id;
 }
 
 /// Enforces the byte bound before decoding or retaining an unterminated frame.

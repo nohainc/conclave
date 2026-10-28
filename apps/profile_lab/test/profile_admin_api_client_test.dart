@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_profile_lab/profile_admin_api_client.dart';
-import 'package:conclave_profile_lab/profile_lab_auth.dart';
+import 'package:syntila_profile_lab/profile_admin_api_client.dart';
+import 'package:syntila_profile_lab/profile_lab_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

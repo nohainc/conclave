@@ -2,11 +2,11 @@ import {
   isRevocationAssignmentStatus,
   isTerminalAssignmentStatus,
   type AssignmentLifecycleStatus,
-} from "@conclave/core";
+} from "@syntila/core";
 import type {
   AssignmentCancelPayload,
   AssignmentFailurePayload,
-} from "@conclave/workspace-runtime-protocol";
+} from "@syntila/workspace-runtime-protocol";
 import {
   recordAssignmentCancelled,
   recordAssignmentError,
@@ -363,8 +363,8 @@ export async function escalateUnconfirmedRevocations(
 }
 
 export interface RevocationEnv {
-  readonly CONCLAVE_DB: D1Database;
-  readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
+  readonly SYNTILA_DB: D1Database;
+  readonly SYNTILA_WORKSPACE_GATEWAY?: DurableObjectNamespace;
 }
 
 interface RevokingAssignment {
@@ -388,10 +388,10 @@ export async function deliverRevocation(
   assignmentId: string,
   reason?: string,
 ): Promise<boolean> {
-  const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
+  const gateway = env.SYNTILA_WORKSPACE_GATEWAY;
   if (!gateway) return false;
   try {
-    const row = await env.CONCLAVE_DB.prepare(
+    const row = await env.SYNTILA_DB.prepare(
       `SELECT execution_workspace_id, runtime_identity_id, workspace_worker_id,
               run_id, task_id, attempt_id, idempotency_key, error_json
          FROM worker_assignments
@@ -429,7 +429,7 @@ export async function deliverRevocation(
     const acknowledgement = (await response.json()) as { cancelled?: unknown };
     if (acknowledgement.cancelled !== true) return false;
     await finalizeAssignmentRevocation(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       assignmentId,
       row.attempt_id,
     );
@@ -449,10 +449,10 @@ async function notifyServiceOfFence(
   assignmentId: string,
   reason: string,
 ): Promise<void> {
-  const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
+  const gateway = env.SYNTILA_WORKSPACE_GATEWAY;
   if (!gateway) return;
   try {
-    const row = await env.CONCLAVE_DB.prepare(
+    const row = await env.SYNTILA_DB.prepare(
       `SELECT execution_workspace_id, runtime_identity_id, workspace_worker_id,
               run_id, task_id, attempt_id, idempotency_key
          FROM worker_assignments WHERE id = ?1`,
@@ -504,7 +504,7 @@ export async function revokeAssignment(
     onlyFrom?: readonly AssignmentLifecycleStatus[];
   },
 ): Promise<RevokeResult> {
-  const begun = await beginAssignmentRevocation(env.CONCLAVE_DB, input);
+  const begun = await beginAssignmentRevocation(env.SYNTILA_DB, input);
   if (begun.outcome === "finalized") {
     // Fenced: nothing can launch, but a Service still holding the queued
     // command should release it now instead of waiting for a denial.

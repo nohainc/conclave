@@ -4,7 +4,7 @@ import { format } from "prettier";
 
 const schema = JSON.parse(
   await readFile(
-    "packages/protocol/schema/conclave-message.schema.json",
+    "packages/protocol/schema/syntila-message.schema.json",
     "utf8",
   ),
 );

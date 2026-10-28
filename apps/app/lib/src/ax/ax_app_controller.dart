@@ -273,20 +273,20 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  /// Release builds pass `--dart-define=CONCLAVE_APP_VERSION=<version>`.
-  static const conclaveAppVersion = String.fromEnvironment(
-    'CONCLAVE_APP_VERSION',
+  /// Release builds pass `--dart-define=SYNTILA_APP_VERSION=<version>`.
+  static const syntilaAppVersion = String.fromEnvironment(
+    'SYNTILA_APP_VERSION',
     defaultValue: '0.1.0',
   );
 
-  Future<void> _showAboutConclave() {
+  Future<void> _showAboutSyntila() {
     final dialogContext = navigatorKey.currentState?.context ?? context;
     return showDialog<void>(
       context: dialogContext,
       builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
-            ConclaveBrand.logoMark(size: 26),
+            SyntilaBrand.logoMark(size: 26),
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
@@ -314,12 +314,12 @@ extension _AxAppController on _AxAppStateMixin {
               const SizedBox(height: 16),
               Builder(builder: (context) {
                 final dark = Theme.of(context).brightness == Brightness.dark;
-                final foreground = ConclaveColors.primaryForeground(dark);
+                final foreground = SyntilaColors.primaryForeground(dark);
                 return Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: ConclaveColors.primarySoftColor(dark),
+                    color: SyntilaColors.primarySoftColor(dark),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
@@ -330,7 +330,7 @@ extension _AxAppController on _AxAppStateMixin {
                       const SizedBox(width: 6),
                       Flexible(
                         child: Text(
-                          'Version $conclaveAppVersion',
+                          'Version $syntilaAppVersion',
                           style: TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
@@ -735,7 +735,7 @@ extension _AxAppController on _AxAppStateMixin {
       });
     final width = navigatorKey.currentState?.overlay?.context.size?.width ??
         MediaQuery.sizeOf(dialogContext).width;
-    final isDesktop = ConclaveBrand.isDesktop(width);
+    final isDesktop = SyntilaBrand.isDesktop(width);
     final sidebarWidth = _desktopSidebarCollapsed ? 50.0 : _desktopSidebarWidth;
     Widget buildInbox(BuildContext context) => ListenableBuilder(
           listenable: store.invitations,
@@ -1124,8 +1124,8 @@ extension _AxAppController on _AxAppStateMixin {
     if (!realtimeStarted) {
       realtimeStarted = true;
       final apiBaseUrl =
-          const String.fromEnvironment('CONCLAVE_API_URL').isNotEmpty
-              ? const String.fromEnvironment('CONCLAVE_API_URL')
+          const String.fromEnvironment('SYNTILA_API_URL').isNotEmpty
+              ? const String.fromEnvironment('SYNTILA_API_URL')
               : '/api';
       unawaited(
         realtimeClient.connect(

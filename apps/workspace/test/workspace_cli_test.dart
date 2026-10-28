@@ -1,14 +1,14 @@
 import 'dart:io';
 import 'dart:convert';
 
-import 'package:conclave_workspace/desktop_auth.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/workspace_cli.dart';
-import 'package:conclave_workspace/linux_service_manager.dart';
-import 'package:conclave_workspace/workspace_background_service.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:conclave_workspace/workspace_settings.dart';
+import 'package:syntila_workspace/desktop_auth.dart';
+import 'package:syntila_workspace/secure_credentials.dart';
+import 'package:syntila_workspace/workspace_cli.dart';
+import 'package:syntila_workspace/linux_service_manager.dart';
+import 'package:syntila_workspace/workspace_background_service.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/workspace_lifecycle_store.dart';
+import 'package:syntila_workspace/workspace_settings.dart';
 import 'package:test/test.dart';
 
 class _MemoryCredentials implements SecureCredentialStore {
@@ -186,7 +186,7 @@ void main() {
       request: (_, __) async => throw const SocketException('down'),
     ).run(['--data-dir', root.path, 'register']);
     expect(code, 1);
-    expect(err.toString(), contains('conclave-workspace login'));
+    expect(err.toString(), contains('syntila-workspace login'));
   });
 
   test(
@@ -372,7 +372,7 @@ void main() {
         err: err,
         hostManager: (state) => LinuxWorkspaceServiceManager(
           dataDirectory: state,
-          executable: File('/bin/conclave-workspace'),
+          executable: File('/bin/syntila-workspace'),
           unitDirectory: Directory('${root.path}/units'),
           systemctl: (args) async => ProcessResult(
             0,
@@ -448,7 +448,7 @@ void main() {
       ]) {
         final result = await runDown(args);
         expect(result.$1, 69);
-        expect(result.$3, contains('conclave-workspace setup'));
+        expect(result.$3, contains('syntila-workspace setup'));
       }
     });
 
@@ -628,7 +628,7 @@ void main() {
       await regStore.write(const WorkspaceRegistration(
         workspaceRuntimeId: 'rt-1',
         workspaceId: 'ws-1',
-        cloudUrl: 'https://conclave.test',
+        cloudUrl: 'https://syntila.test',
         name: 'Test WS',
         hostname: 'testhost',
         installationId: 'inst-1',

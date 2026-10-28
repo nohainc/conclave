@@ -2,14 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'package:http/http.dart' as http;
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/ax/ax_stores.dart';
-import 'package:conclave_app/src/ax/sync/ax_idempotency.dart';
-import 'package:conclave_app/src/ax/sync/ax_discussion_cache.dart';
-import 'package:conclave_app/src/ax/sync/ax_work_history.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_stores.dart';
+import 'package:syntila_app/src/ax/sync/ax_idempotency.dart';
+import 'package:syntila_app/src/ax/sync/ax_discussion_cache.dart';
+import 'package:syntila_app/src/ax/sync/ax_work_history.dart';
 import 'ax_fixture_data.dart';
 
 class _Source extends AxFixtureDataSource {

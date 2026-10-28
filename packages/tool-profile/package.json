@@ -1,5 +1,5 @@
 {
-  "name": "@conclave/tool-profile",
+  "name": "@syntila/tool-profile",
   "version": "0.1.0",
   "private": true,
   "type": "module",

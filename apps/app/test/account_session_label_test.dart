@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/account_session_label.dart';
+import 'package:syntila_app/src/ax/account_session_label.dart';
 
 void main() {
   test('summarizes browsers despite shared compatibility tokens', () {

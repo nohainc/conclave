@@ -1,12 +1,12 @@
 import 'dart:convert';
 
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/features/workspace/workspace_member_access_section.dart';
+import 'package:syntila_app/src/features/workspace/workspace_member_access_section.dart';
 import 'workflow_editor_test.dart' show worker;
 
 class AccessSource implements AxWorkspaceMemberAccessDataSource {

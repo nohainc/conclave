@@ -73,34 +73,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
-  conclave_cli_worker_runtime:
-    dependency: "direct main"
-    description:
-      path: "../../packages/conclave_cli_worker_runtime"
-      relative: true
-    source: path
-    version: "0.1.0"
-  conclave_protocol:
-    dependency: "direct main"
-    description:
-      path: "../../packages/dart/protocol"
-      relative: true
-    source: path
-    version: "0.1.0"
-  conclave_tool_profile_v1:
-    dependency: "direct main"
-    description:
-      path: "../../packages/tool_profile_v1"
-      relative: true
-    source: path
-    version: "0.1.0"
-  conclave_worker_protocol:
-    dependency: "direct main"
-    description:
-      path: "../../packages/conclave_worker_protocol"
-      relative: true
-    source: path
-    version: "0.1.0"
   convert:
     dependency: transitive
     description:
@@ -373,6 +345,34 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  syntila_cli_worker_runtime:
+    dependency: "direct main"
+    description:
+      path: "../../packages/syntila_cli_worker_runtime"
+      relative: true
+    source: path
+    version: "0.1.0"
+  syntila_protocol:
+    dependency: "direct main"
+    description:
+      path: "../../packages/dart/protocol"
+      relative: true
+    source: path
+    version: "0.1.0"
+  syntila_tool_profile_v1:
+    dependency: "direct main"
+    description:
+      path: "../../packages/tool_profile_v1"
+      relative: true
+    source: path
+    version: "0.1.0"
+  syntila_worker_protocol:
+    dependency: "direct main"
+    description:
+      path: "../../packages/syntila_worker_protocol"
+      relative: true
+    source: path
+    version: "0.1.0"
   term_glyph:
     dependency: transitive
     description:

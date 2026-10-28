@@ -16,7 +16,7 @@ import {
   serviceReadinessPayload,
   type AssignmentCancelPayload,
   type WorkspaceRuntimeMessage,
-} from "@conclave/workspace-runtime-protocol";
+} from "@syntila/workspace-runtime-protocol";
 import {
   applyServiceReadiness,
   authenticatedReadiness,
@@ -32,7 +32,7 @@ import {
 import {
   RealtimeEventPayloadSchema,
   normalizeActivityPayload,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 import { recordAssignmentStartup } from "./assignment-startup.js";
 import { publishAssignmentPhase } from "./assignment-phase-events.js";
 import { createEventPublisher } from "./event-publisher.js";
@@ -53,7 +53,7 @@ import {
 import {
   ASSIGNMENT_ACTIVE_STATUSES,
   assignmentStatusForEvidence,
-} from "@conclave/core";
+} from "@syntila/core";
 import { shouldPersistWorkerActivity } from "./worker-activity-history.js";
 import {
   recordAssignmentCancelled,
@@ -191,9 +191,9 @@ export class WorkspaceGateway implements DurableObject {
     private readonly env: WorkspaceGatewayEnv,
   ) {
     this.runtimeAuthenticator = new WorkspaceRuntimeAuthenticator(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
     );
-    this.sessionStore = new WorkspaceRuntimeSessionStore(env.CONCLAVE_DB);
+    this.sessionStore = new WorkspaceRuntimeSessionStore(env.SYNTILA_DB);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -335,7 +335,7 @@ export class WorkspaceGateway implements DurableObject {
         protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
         connectedAt: now,
       });
-      await this.env.CONCLAVE_DB.prepare(
+      await this.env.SYNTILA_DB.prepare(
         "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
       )
         .bind(now, this.executionWorkspaceId)
@@ -366,7 +366,7 @@ export class WorkspaceGateway implements DurableObject {
         if (!raw || typeof raw !== "object") continue;
         const envelope = raw as Record<string, unknown>;
         if (
-          envelope.contract !== "conclave.desktop-auth-transport" ||
+          envelope.contract !== "syntila.desktop-auth-transport" ||
           envelope.version !== "1.0" ||
           typeof envelope.eventId !== "string" ||
           !envelope.message
@@ -476,7 +476,7 @@ export class WorkspaceGateway implements DurableObject {
       if (this.executionWorkspaceId)
         this.queueProjectionWrite(
           () =>
-            this.env.CONCLAVE_DB.prepare(
+            this.env.SYNTILA_DB.prepare(
               "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
             )
               .bind(now, this.executionWorkspaceId)
@@ -614,7 +614,7 @@ export class WorkspaceGateway implements DurableObject {
       const now = new Date().toISOString();
       await this.sessionStore.close(this.sessionId, now);
       if (this.executionWorkspaceId) {
-        await this.env.CONCLAVE_DB.prepare(
+        await this.env.SYNTILA_DB.prepare(
           "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
         )
           .bind(now, this.executionWorkspaceId)
@@ -751,7 +751,7 @@ export class WorkspaceGateway implements DurableObject {
 
     this.queueProjectionWrite(
       () =>
-        this.env.CONCLAVE_DB.prepare(
+        this.env.SYNTILA_DB.prepare(
           "UPDATE execution_workspaces SET status = 'online', updated_at = ?1 WHERE id = ?2",
         )
           .bind(now, runtimeIdentity.executionWorkspaceId)
@@ -859,7 +859,7 @@ export class WorkspaceGateway implements DurableObject {
     if (this.executionWorkspaceId) {
       this.queueProjectionWrite(
         () =>
-          this.env.CONCLAVE_DB.prepare(
+          this.env.SYNTILA_DB.prepare(
             "UPDATE execution_workspaces SET status = 'offline', updated_at = ?1 WHERE id = ?2",
           )
             .bind(now, this.executionWorkspaceId)
@@ -971,7 +971,7 @@ export class WorkspaceGateway implements DurableObject {
             runtimeId: this.workspaceRuntimeId ?? message.workspaceRuntimeId,
             capabilities: facts.capabilities,
           });
-          await this.env.CONCLAVE_DB.prepare(
+          await this.env.SYNTILA_DB.prepare(
             `INSERT INTO workspace_runtime_facts
              (workspace_id, platform, architecture, hostname, app_version,
               runtime_capabilities_json, updated_at)
@@ -1141,7 +1141,7 @@ export class WorkspaceGateway implements DurableObject {
           // provider-start acknowledgement or a terminal outcome got here
           // first, this late acknowledgement is recorded and ignored; it
           // must never refresh updated_at or downgrade the assignment.
-          const transition = await transitionAssignment(this.env.CONCLAVE_DB, {
+          const transition = await transitionAssignment(this.env.SYNTILA_DB, {
             to: assignmentStatusForEvidence("admission"),
             now,
             fence: {
@@ -1159,7 +1159,7 @@ export class WorkspaceGateway implements DurableObject {
           (await this.terminalAssignmentMatches(message))
         ) {
           await recordAssignmentError(
-            this.env.CONCLAVE_DB,
+            this.env.SYNTILA_DB,
             message.assignmentId,
             {
               error: {
@@ -1214,7 +1214,7 @@ export class WorkspaceGateway implements DurableObject {
         // created, dispatched or acknowledged. That keeps the evidence when
         // it overtakes the acceptance acknowledgement (HTTP fallback, replay).
         if (!(await this.assignmentContextMatches(message))) return;
-        const transition = await transitionAssignment(this.env.CONCLAVE_DB, {
+        const transition = await transitionAssignment(this.env.SYNTILA_DB, {
           to: assignmentStatusForEvidence("provider_start"),
           now,
           startTaskId: message.taskId,
@@ -1250,7 +1250,7 @@ export class WorkspaceGateway implements DurableObject {
         // Fencing: the Service asks to launch the provider. Granted only while
         // Cloud has not revoked the assignment (see assignment-start-permit).
         if (!(await this.assignmentContextMatches(message))) return;
-        const decision = await grantStartPermit(this.env.CONCLAVE_DB, {
+        const decision = await grantStartPermit(this.env.SYNTILA_DB, {
           assignmentId: message.assignmentId!,
           attemptId: message.attemptId!,
           executionWorkspaceId: this.executionWorkspaceId ?? undefined,
@@ -1309,7 +1309,7 @@ export class WorkspaceGateway implements DurableObject {
         if (!(await this.assignmentContextMatches(message))) return;
         const report = assignmentStartupPayload.safeParse(message.payload);
         if (!report.success) return;
-        const outcome = await recordAssignmentStartup(this.env.CONCLAVE_DB, {
+        const outcome = await recordAssignmentStartup(this.env.SYNTILA_DB, {
           assignmentId: message.assignmentId!,
           attemptId: message.attemptId!,
           payload: report.data,
@@ -1355,7 +1355,7 @@ export class WorkspaceGateway implements DurableObject {
           });
           return;
         }
-        const assignment = await this.env.CONCLAVE_DB.prepare(
+        const assignment = await this.env.SYNTILA_DB.prepare(
           `SELECT id, execution_workspace_id, runtime_identity_id,
                   worker_type_id, workspace_worker_id, run_id, task_id,
                   -- Work Request assignments are not stamped with a thread.
@@ -1485,7 +1485,7 @@ export class WorkspaceGateway implements DurableObject {
         }
         const replayable = shouldPersistWorkerActivity(activityPayload.data);
         if (replayable) {
-          const conflict = await this.env.CONCLAVE_DB.prepare(
+          const conflict = await this.env.SYNTILA_DB.prepare(
             `SELECT source_event_id, provider_sequence
              FROM worker_activity_history
              WHERE assignment_id = ?1 AND attempt_id = ?2
@@ -1524,7 +1524,7 @@ export class WorkspaceGateway implements DurableObject {
         }
         const eventId = `assignment-activity:${message.assignmentId}:${message.attemptId}:${activityPayload.data.sourceEventId}`;
         const historyMutation = replayable
-          ? this.env.CONCLAVE_DB.prepare(
+          ? this.env.SYNTILA_DB.prepare(
               `INSERT OR IGNORE INTO worker_activity_history
                (history_id, assignment_id, workspace_id, attempt_id,
                 execution_id, worker_id, source_event_id, provider_sequence,
@@ -1632,7 +1632,7 @@ export class WorkspaceGateway implements DurableObject {
           context: { status: "completed" },
         });
         const completed = await recordAssignmentResult(
-          this.env.CONCLAVE_DB,
+          this.env.SYNTILA_DB,
           message.assignmentId!,
           message.payload as never,
           message.attemptId,
@@ -1668,7 +1668,7 @@ export class WorkspaceGateway implements DurableObject {
           });
         }
         const failed = await recordAssignmentError(
-          this.env.CONCLAVE_DB,
+          this.env.SYNTILA_DB,
           message.assignmentId!,
           message.payload as never,
           message.attemptId,
@@ -1739,14 +1739,14 @@ export class WorkspaceGateway implements DurableObject {
     cancellation: { status: "cancelled"; reason: string },
   ): Promise<boolean> {
     const finalized = await finalizeAssignmentRevocation(
-      this.env.CONCLAVE_DB,
+      this.env.SYNTILA_DB,
       message.assignmentId!,
       message.attemptId,
     );
     if (finalized === "finalized") return true;
     if (finalized !== "not_revoking") return false;
     return recordAssignmentCancelled(
-      this.env.CONCLAVE_DB,
+      this.env.SYNTILA_DB,
       message.assignmentId!,
       cancellation,
       message.attemptId,
@@ -1773,13 +1773,13 @@ export class WorkspaceGateway implements DurableObject {
     try {
       const at = new Date(now).toISOString();
       const lost = await applyEngineLivenessReport(
-        this.env.CONCLAVE_DB,
+        this.env.SYNTILA_DB,
         workspaceId,
         report,
         at,
       );
       if (lost.length === 0) return;
-      await failLostEngineAssignments(this.env.CONCLAVE_DB, lost, at);
+      await failLostEngineAssignments(this.env.SYNTILA_DB, lost, at);
       await this.resendPendingRevocations();
     } catch {
       // Best effort: the execution deadline still bounds the assignment.
@@ -1790,10 +1790,10 @@ export class WorkspaceGateway implements DurableObject {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
     await escalateUnconfirmedRevocations(
-      this.env.CONCLAVE_DB,
+      this.env.SYNTILA_DB,
       ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
     );
-    const { results } = await this.env.CONCLAVE_DB.prepare(
+    const { results } = await this.env.SYNTILA_DB.prepare(
       `SELECT id, execution_workspace_id, runtime_identity_id,
               workspace_worker_id, run_id, task_id, attempt_id,
               idempotency_key, error_json
@@ -1852,7 +1852,7 @@ export class WorkspaceGateway implements DurableObject {
     const terminalSince = new Date(
       Date.now() - 24 * 60 * 60 * 1000,
     ).toISOString();
-    const assignments = await this.env.CONCLAVE_DB.prepare(
+    const assignments = await this.env.SYNTILA_DB.prepare(
       `SELECT id AS assignment_id, status
        FROM worker_assignments
        WHERE execution_workspace_id = ?1
@@ -1872,7 +1872,7 @@ export class WorkspaceGateway implements DurableObject {
     // Omitted on a query failure so the Service keeps everything.
     let knownSpaceIds: string[] | undefined;
     try {
-      const spaces = await this.env.CONCLAVE_DB.prepare(
+      const spaces = await this.env.SYNTILA_DB.prepare(
         `SELECT DISTINCT g.space_id AS space_id
          FROM workspace_space_grants g
          JOIN spaces s ON s.id = g.space_id
@@ -2039,7 +2039,7 @@ export class WorkspaceGateway implements DurableObject {
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
     const row = message.assignmentId
-      ? await this.env.CONCLAVE_DB.prepare(
+      ? await this.env.SYNTILA_DB.prepare(
           "SELECT status FROM worker_assignments WHERE id = ?1",
         )
           .bind(message.assignmentId)
@@ -2109,7 +2109,7 @@ export class WorkspaceGateway implements DurableObject {
     ) {
       return false;
     }
-    const assignment = await this.env.CONCLAVE_DB.prepare(
+    const assignment = await this.env.SYNTILA_DB.prepare(
       `SELECT id, execution_workspace_id, runtime_identity_id,
               worker_type_id, workspace_worker_id, run_id, task_id,
               attempt_id, idempotency_key
@@ -2138,7 +2138,7 @@ export class WorkspaceGateway implements DurableObject {
     ) {
       return false;
     }
-    const assignment = await this.env.CONCLAVE_DB.prepare(
+    const assignment = await this.env.SYNTILA_DB.prepare(
       `SELECT id, execution_workspace_id, runtime_identity_id,
               worker_type_id, workspace_worker_id, run_id, task_id,
               attempt_id, idempotency_key
@@ -2161,7 +2161,7 @@ export class WorkspaceGateway implements DurableObject {
     message: WorkspaceRuntimeMessage,
   ): Promise<boolean> {
     if (!(await this.assignmentContextMatches(message))) return false;
-    const assignment = await this.env.CONCLAVE_DB.prepare(
+    const assignment = await this.env.SYNTILA_DB.prepare(
       "SELECT status FROM worker_assignments WHERE id = ?1",
     )
       .bind(message.assignmentId)
@@ -2181,7 +2181,7 @@ export class WorkspaceGateway implements DurableObject {
   private async serviceHasCapability(capability: string): Promise<boolean> {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return false;
-    const facts = await this.env.CONCLAVE_DB.prepare(
+    const facts = await this.env.SYNTILA_DB.prepare(
       "SELECT runtime_capabilities_json FROM workspace_runtime_facts WHERE workspace_id = ?1",
     )
       .bind(workspaceId)
@@ -2300,7 +2300,7 @@ export class WorkspaceGateway implements DurableObject {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
     try {
-      await this.env.CONCLAVE_DB.prepare(
+      await this.env.SYNTILA_DB.prepare(
         `INSERT INTO workspace_service_readiness
            (workspace_id, runtime_identity_id, session_id, sync_generation,
             state, ready_for_assignments, source, reason, updated_at)
@@ -2502,7 +2502,7 @@ export class WorkspaceGateway implements DurableObject {
     let flushed = 0;
     try {
       for (let pass = 0; pass < 8; pass += 1) {
-        const rows = await this.env.CONCLAVE_DB.prepare(
+        const rows = await this.env.SYNTILA_DB.prepare(
           `SELECT id, run_id, task_id, attempt_id, idempotency_key,
                   workspace_worker_id, command_payload_json
              FROM worker_assignments
@@ -2591,7 +2591,7 @@ export class WorkspaceGateway implements DurableObject {
     body: WorkspaceAssignmentCorrelation & { payload: unknown },
     options: { readonly claimCreated?: boolean },
   ): Promise<Response> {
-    const row = await this.env.CONCLAVE_DB.prepare(
+    const row = await this.env.SYNTILA_DB.prepare(
       `SELECT wa.id, wa.execution_workspace_id, wa.runtime_identity_id,
               wa.worker_type_id, wa.workspace_worker_id,
               wa.run_id, wa.task_id, wa.attempt_id,
@@ -2697,7 +2697,7 @@ export class WorkspaceGateway implements DurableObject {
     // point Cloud must treat the Service as possibly holding the command, so
     // every later stop goes through revocation instead of a bare terminal
     // write. If revocation won the race, the command is never written.
-    const persisted = await transitionAssignment(this.env.CONCLAVE_DB, {
+    const persisted = await transitionAssignment(this.env.SYNTILA_DB, {
       fence: {
         assignmentId: body.assignmentId,
         attemptId: body.attemptId,
@@ -2716,7 +2716,7 @@ export class WorkspaceGateway implements DurableObject {
       });
     }
     if (persisted.applied) {
-      await this.env.CONCLAVE_DB.prepare(
+      await this.env.SYNTILA_DB.prepare(
         `UPDATE worker_assignments SET start_permit_required = 1
           WHERE id = ?1 AND start_permit_required = 0 AND status = 'dispatched'`,
       )
@@ -2771,7 +2771,7 @@ export class WorkspaceGateway implements DurableObject {
       // the assignment fail without revocation. Only the `dispatched` status
       // this call set (or found) may be failed.
       await recordAssignmentError(
-        this.env.CONCLAVE_DB,
+        this.env.SYNTILA_DB,
         body.assignmentId,
         {
           error: {
@@ -3101,7 +3101,7 @@ export class WorkspaceGateway implements DurableObject {
     this.httpEvents.push({
       cursor: this.httpCursor,
       envelope: {
-        contract: "conclave.desktop-auth-transport",
+        contract: "syntila.desktop-auth-transport",
         version: "1.0",
         eventId: `srv-${this.httpCursor}`,
         occurredAt: new Date().toISOString(),

@@ -1,5 +1,5 @@
-import 'package:conclave_design/conclave_design.dart';
-import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:syntila_design/syntila_design.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
 import 'package:flutter/material.dart';
 import '../../ax/ax_models.dart';
 import '../../ax/ax_workflow_configuration.dart';

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@syntila/core";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import type { SecurityEnv } from "../src/routes/http-security.js";
 vi.mock("../src/routes/http-security.js", async (original) => ({
@@ -38,7 +38,7 @@ function fixture() {
       VALUES('worker-a','workspace','owner','chatgpt','enabled','ready',1,1,'now','now','now'),('worker-b','workspace','owner','gemini','enabled','ready',1,1,'now','now','now');
     INSERT INTO user_workflow_configurations(user_id,workspace_id,workflow_id,schema_version,configuration_json,updated_at)
       VALUES('owner','workspace','direct',1,'{"schemaVersion":1,"workflowId":"direct","enabled":true,"defaults":{"worker":"worker-a","model":"fast","effort":"low"},"stepOverrides":{}}','now');`);
-  const env = { CONCLAVE_DB: db } as SecurityEnv;
+  const env = { SYNTILA_DB: db } as SecurityEnv;
   const call = (
     method: string,
     user: string,

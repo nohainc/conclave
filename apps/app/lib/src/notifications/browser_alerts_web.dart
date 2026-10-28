@@ -7,7 +7,7 @@ import 'browser_alerts.dart';
 AxBrowserAlerts createAxBrowserAlerts() => WebAxBrowserAlerts();
 
 class WebAxBrowserAlerts implements AxBrowserAlerts {
-  static const _preferenceKey = 'conclave-browser-alerts-v1';
+  static const _preferenceKey = 'syntila-browser-alerts-v1';
 
   bool get _preferred {
     try {

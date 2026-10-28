@@ -90,7 +90,7 @@ describe("CI acceptance orchestration", () => {
   it.each(["profile-lab"])(
     "%s prepared build reuses preparation; default release cleans",
     (name) => {
-      const root = mkdtempSync(join(tmpdir(), "conclave-ci-"));
+      const root = mkdtempSync(join(tmpdir(), "syntila-ci-"));
       const appName = name.replaceAll("-", "_");
       const app = join(root, "apps", appName);
       const bin = join(root, "bin");
@@ -108,12 +108,12 @@ describe("CI acceptance orchestration", () => {
             "macos",
             "Runner",
             "LaunchAgents",
-            "com.conclaveax.workspace.service.plist",
+            "com.syntila.workspace.service.plist",
           ),
           `<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
-<key>Label</key><string>com.conclaveax.workspace.service</string>
-<key>AssociatedBundleIdentifiers</key><array><string>com.conclaveax.workspace</string></array>
+<key>Label</key><string>com.syntila.workspace.service</string>
+<key>AssociatedBundleIdentifiers</key><array><string>com.syntila.workspace</string></array>
 <key>BundleProgram</key><string>Contents/Helpers/workspace</string>
 <key>ProgramArguments</key><array><string>Contents/Helpers/workspace</string></array>
 <key>RunAtLoad</key><false/>
@@ -128,7 +128,7 @@ describe("CI acceptance orchestration", () => {
         app,
         "assets",
         "engines",
-        "conclave_cli_worker_engine",
+        "syntila_cli_worker_engine",
       );
       writeFileSync(engine, "#!/bin/sh\nexit 0\n");
       chmodSync(engine, 0o755);
@@ -154,7 +154,7 @@ describe("CI acceptance orchestration", () => {
                   : command === "codesign"
                     ? 'if [ "$1" = "-dv" ] || [ "$1" = "-d" ]; then exit 1; fi; exit 0'
                     : command === "PlistBuddy"
-                      ? 'if [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleExecutable" ]; then echo Syntila; elif [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleIdentifier" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :Label" ]; then echo com.conclaveax.workspace.service; elif [ "$1" = "-c" ] && [ "$2" = "Print :AssociatedBundleIdentifiers:0" ]; then echo com.conclaveax.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :BundleProgram" ]; then echo Contents/Helpers/workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :ProgramArguments:0" ]; then echo Contents/Helpers/workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :RunAtLoad" ]; then echo false; else exit 1; fi'
+                      ? 'if [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleExecutable" ]; then echo Syntila; elif [ "$1" = "-c" ] && [ "$2" = "Print :CFBundleIdentifier" ]; then echo com.syntila.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :Label" ]; then echo com.syntila.workspace.service; elif [ "$1" = "-c" ] && [ "$2" = "Print :AssociatedBundleIdentifiers:0" ]; then echo com.syntila.workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :BundleProgram" ]; then echo Contents/Helpers/workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :ProgramArguments:0" ]; then echo Contents/Helpers/workspace; elif [ "$1" = "-c" ] && [ "$2" = "Print :RunAtLoad" ]; then echo false; else exit 1; fi'
                       : command === "flutter"
                         ? `echo "flutter $*" >> "$CI_TEST_LOG"\nif [ "$1" = build ]; then app='build/macos/Build/Products/Release/Syntila ${name === "workspace" ? "Workspace" : "Profile Lab"}.app'; mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks"; printf '%s' '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Syntila</string></dict></plist>' > "$app/Contents/Info.plist"; touch "$app/Contents/MacOS/Syntila"; chmod 755 "$app/Contents/MacOS/Syntila"; fi`
                         : "exit 0";
@@ -193,8 +193,8 @@ describe("CI acceptance orchestration", () => {
         expect(readFileSync(log, "utf8")).toBe(
           "flutter build macos --release --dart-define=" +
             (name === "workspace"
-              ? "CONCLAVE_WORKSPACE_VERSION=1.0.0 --dart-define=CONCLAVE_WORKSPACE_ENVIRONMENT=production --dart-define=CONCLAVE_RELEASE_TRUST_KEYS_JSON={}"
-              : "CONCLAVE_PROFILE_LAB_VERSION=1.0.0 --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT=production") +
+              ? "SYNTILA_WORKSPACE_VERSION=1.0.0 --dart-define=SYNTILA_WORKSPACE_ENVIRONMENT=production --dart-define=SYNTILA_RELEASE_TRUST_KEYS_JSON={}"
+              : "SYNTILA_PROFILE_LAB_VERSION=1.0.0 --dart-define=SYNTILA_PROFILE_LAB_ENVIRONMENT=production") +
             "\n",
         );
         writeFileSync(log, "");
@@ -211,7 +211,7 @@ describe("CI acceptance orchestration", () => {
   );
 
   it("workspace macOS build is a pure Dart bundle; prepared reuses preparation", () => {
-    const root = mkdtempSync(join(tmpdir(), "conclave-ci-"));
+    const root = mkdtempSync(join(tmpdir(), "syntila-ci-"));
     const app = join(root, "apps", "workspace");
     const bin = join(root, "bin");
     const log = join(root, "commands");
@@ -221,7 +221,7 @@ describe("CI acceptance orchestration", () => {
     mkdirSync(bin);
     writeFileSync(join(app, "pubspec.yaml"), "version: 1.0.0\n");
     writeFileSync(join(app, ".dart_tool", "package_config.json"), "{}\n");
-    const engine = join(app, "assets", "engines", "conclave-agent");
+    const engine = join(app, "assets", "engines", "syntila-agent");
     writeFileSync(engine, "#!/bin/sh\nexit 0\n");
     chmodSync(engine, 0o755);
     const mocks = {
@@ -268,13 +268,13 @@ describe("CI acceptance orchestration", () => {
       const bundle = join(
         root,
         "dist",
-        "conclave-workspace",
+        "syntila-workspace",
         "macos",
-        "conclave-workspace",
+        "syntila-workspace",
       );
       for (const file of [
-        "conclave-workspace",
-        "assets/engines/conclave-agent",
+        "syntila-workspace",
+        "assets/engines/syntila-agent",
       ]) {
         expect(readFileSync(join(bundle, file)) !== undefined).toBe(true);
       }

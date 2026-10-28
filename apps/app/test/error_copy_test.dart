@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/ax_app.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/platform/platform_services.dart';
+import 'package:syntila_app/src/ax/ax_app.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/platform/platform_services.dart';
 import 'ax_fixture_data.dart';
 
 class _FailedReadModels extends AxFixtureDataSource {
@@ -29,7 +29,7 @@ void main() {
     addTearDown(() => tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null));
     await tester.pumpWidget(MaterialApp(
-        home: ConclaveAppShell(
+        home: SyntilaAppShell(
             services: const DefaultPlatformServices(),
             dataSource: _FailedReadModels())));
     await tester.pumpAndSettle();

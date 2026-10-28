@@ -45,8 +45,8 @@ async function fixture() {
       )
       .run(`m-${id}`, id, role);
   const env = {
-    CONCLAVE_ENVIRONMENT: "development",
-    CONCLAVE_DB: db,
+    SYNTILA_ENVIRONMENT: "development",
+    SYNTILA_DB: db,
     TEST_AUTHENTICATION: async (req: Request) => {
       const id = req.headers.get("test-user")!;
       return {
@@ -240,8 +240,8 @@ describe("shared thread history permissions", () => {
 
 it("atomically refuses cleanup when another contribution arrives after authorization", async () => {
   const f = await fixture();
-  const batch = f.env.CONCLAVE_DB.batch.bind(f.env.CONCLAVE_DB);
-  f.env.CONCLAVE_DB.batch = async (statements) => {
+  const batch = f.env.SYNTILA_DB.batch.bind(f.env.SYNTILA_DB);
+  f.env.SYNTILA_DB.batch = async (statements) => {
     f.sqlite
       .prepare(
         "INSERT INTO discussion_messages(id,thread_id,author_user_id,body,created_at) VALUES('racing',?,'other','Keep this','now')",

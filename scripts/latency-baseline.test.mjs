@@ -111,7 +111,7 @@ describe("latency baseline", () => {
 
   it("joins Web records and flags missing offsets", () => {
     const web = webRecordsFromText(
-      '[conclave.latency] {"requestId":"r1","submittedAt":"x","terminalStatus":"completed","marksMs":{"web_submitted":0,"web_submit_response":120,"web_received":9000}}',
+      '[syntila.latency] {"requestId":"r1","submittedAt":"x","terminalStatus":"completed","marksMs":{"web_submitted":0,"web_submit_response":120,"web_received":9000}}',
     );
     const events = [
       ev("cloud", "cloud_accepted", "2026-10-14T10:00:00.000Z", {

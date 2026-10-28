@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../ax/ax_data.dart';
-import '../common/conclave_markdown_body.dart';
+import '../common/syntila_markdown_body.dart';
 import '../common/composer_metrics.dart';
 import '../common/dictation/dictation_button.dart';
 import '../common/dictation/speech_dictation.dart';
@@ -350,7 +350,7 @@ class _NoteEditorState extends State<NoteEditor> {
       ),
       MenuAnchor(
         controller: _markdownMenu,
-        style: ConclaveMenuStyle.surface(
+        style: SyntilaMenuStyle.surface(
             Theme.of(context).brightness == Brightness.dark,
             composer: true),
         menuChildren: [
@@ -429,7 +429,7 @@ class _NoteEditorState extends State<NoteEditor> {
             key: const ValueKey('note-preview'),
             // Free space between the toolbar and the formatted note.
             padding: const EdgeInsets.only(top: 16),
-            child: ConclaveMarkdownBody(
+            child: SyntilaMarkdownBody(
                 data: _body.text, preserveBlankLines: true),
           ),
         ),

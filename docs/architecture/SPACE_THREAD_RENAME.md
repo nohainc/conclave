@@ -163,7 +163,7 @@ user text and leaving signed Profile payloads/signatures untouched. Ambiguous
 old/new metadata key collisions stop the conversion.
 
 The cutover requires both `CONFIRM_SPACE_THREAD_CUTOVER=YES` and a nonempty,
-verified backup path in `CONCLAVE_CUTOVER_BACKUP_FILE`, in addition to the usual
+verified backup path in `SYNTILA_CUTOVER_BACKUP_FILE`, in addition to the usual
 `CONFIRM_PRODUCTION_MIGRATION=YES`. Without these, it stops before remote changes.
 Stop writes and runtime executions for the coordinated cutover; do not equate a
 private backup file's presence with a completed rehearsal.
@@ -171,7 +171,7 @@ private backup file's presence with a completed rehearsal.
 ~~~sh
 CONFIRM_PRODUCTION_MIGRATION=YES \
 CONFIRM_SPACE_THREAD_CUTOVER=YES \
-CONCLAVE_CUTOVER_BACKUP_FILE=/private/tmp/conclave-pre-cutover-backup.sql \
+SYNTILA_CUTOVER_BACKUP_FILE=/private/tmp/syntila-pre-cutover-backup.sql \
 bash scripts/migrate-production-d1.sh
 ~~~
 

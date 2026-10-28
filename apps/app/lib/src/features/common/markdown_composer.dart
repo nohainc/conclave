@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 
-import 'conclave_markdown_body.dart';
+import 'syntila_markdown_body.dart';
 import 'dictation/dictation_button.dart';
 import 'dictation/speech_dictation.dart';
 import 'composer_metrics.dart';
@@ -364,15 +364,15 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     Widget item(String? tag, String label) => MenuItemButton(
           key: ValueKey('dictation-language-${tag ?? 'browser'}'),
-          style: ConclaveMenuStyle.item(dark),
+          style: SyntilaMenuStyle.item(dark),
           leadingIcon:
               Icon(_dictationLanguage == tag ? Icons.check : null, size: 16),
           onPressed: () => _selectDictationLanguage(tag),
-          child: Text(label, style: ConclaveMenuStyle.textStyle),
+          child: Text(label, style: SyntilaMenuStyle.textStyle),
         );
     return MenuAnchor(
       controller: _languageMenu,
-      style: ConclaveMenuStyle.surface(dark, composer: true),
+      style: SyntilaMenuStyle.surface(dark, composer: true),
       menuChildren: [
         item(null,
             'Browser default (${_dictationLanguageName(_dictation.browserLanguage)})'),
@@ -523,7 +523,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
               if (widget.showMarkdownControls)
                 MenuAnchor(
                   controller: _markdownMenu,
-                  style: ConclaveMenuStyle.surface(
+                  style: SyntilaMenuStyle.surface(
                       Theme.of(context).brightness == Brightness.dark,
                       composer: true),
                   menuChildren: [
@@ -749,7 +749,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
                 style: widget.chatStyle
-                    ? ConclaveMessageTypography.fromTheme(Theme.of(context))
+                    ? SyntilaMessageTypography.fromTheme(Theme.of(context))
                     : null,
                 minLines:
                     widget.chatStyle || widget.compact ? 1 : widget.minLines,
@@ -759,7 +759,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   hintText: widget.hintText,
                   // Same muted color as the message date/time.
                   hintStyle: const TextStyle(
-                    color: ConclaveColors.neutral,
+                    color: SyntilaColors.neutral,
                   ),
                   isDense: widget.chatStyle,
                   hoverColor: Colors.transparent,
@@ -833,7 +833,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   : ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 180),
                       child: SingleChildScrollView(
-                          child: ConclaveMarkdownBody(data: value.text)),
+                          child: SyntilaMarkdownBody(data: value.text)),
                     ),
             ),
           ),
@@ -872,7 +872,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
       ],
     );
 
-    final backgroundColor = ConclaveColors.composerBackground(
+    final backgroundColor = SyntilaColors.composerBackground(
       Theme.of(context).brightness == Brightness.dark,
     );
 
@@ -902,7 +902,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   width: 40,
                   // Distinct rail shade: OKLCH L 93% light / 24% dark.
                   child: ColoredBox(
-                    color: ConclaveColors.composerRail(
+                    color: SyntilaColors.composerRail(
                         Theme.of(context).brightness == Brightness.dark),
                   ),
                 ),
@@ -914,7 +914,7 @@ class _MarkdownComposerState extends State<MarkdownComposer> {
                   bottom: 0,
                   width: 40,
                   child: ColoredBox(
-                    color: ConclaveColors.composerRail(
+                    color: SyntilaColors.composerRail(
                         Theme.of(context).brightness == Brightness.dark),
                   ),
                 ),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_work_activity.dart';
-import 'package:conclave_app/src/ax/ax_work_models.dart';
-import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_work_activity.dart';
+import 'package:syntila_app/src/ax/ax_work_models.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 
 AxWorkRequest _request(String id, String assignmentId) => AxWorkRequest(
       id: id,
@@ -189,7 +189,7 @@ void main() {
               controller: controller,
               slivers: [
                 SliverToBoxAdapter(
-                  child: ConclaveMarkdownBody(data: markdown),
+                  child: SyntilaMarkdownBody(data: markdown),
                 ),
                 SliverList.builder(
                   itemCount: 100,

@@ -51,7 +51,7 @@ function environment(
       };
     },
   };
-  return { env: { CONCLAVE_DB: db } as never, writes };
+  return { env: { SYNTILA_DB: db } as never, writes };
 }
 
 const context = {

@@ -70,7 +70,7 @@ it("binds catalog ingestion to the current V9 Profile revision and tool version"
       ],
     };
     const publish = (revision: number, modelCatalog: unknown) =>
-      recordWorkspaceWorkerInventory({ CONCLAVE_DB: db } as never, "ws", {
+      recordWorkspaceWorkerInventory({ SYNTILA_DB: db } as never, "ws", {
         workers: [{ ...worker, revision, modelCatalog }],
       });
     const stored = () =>
@@ -98,7 +98,7 @@ it("binds catalog ingestion to the current V9 Profile revision and tool version"
     await publish(5, { ...catalog, providerToolVersion: "2.0.0" });
     expect(stored().catalog).toBeNull();
     await publish(6, catalog);
-    await recordWorkspaceWorkerInventory({ CONCLAVE_DB: db } as never, "ws", {
+    await recordWorkspaceWorkerInventory({ SYNTILA_DB: db } as never, "ws", {
       fullSnapshot: true,
       workers: [
         { ...worker, revision: 7 },

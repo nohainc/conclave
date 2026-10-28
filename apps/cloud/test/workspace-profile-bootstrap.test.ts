@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hashToken } from "@conclave/security";
+import { hashToken } from "@syntila/security";
 import { canonicalJson } from "../src/canonical-json.js";
 import { handleGetWorkspaceV9WorkerProfile } from "../src/routes/profile-admin.js";
 import { validateWorkerProfileCandidate } from "../src/worker-profile-registry.js";
@@ -78,7 +78,7 @@ describe("Workspace Profile download before Worker configuration", () => {
         };
       },
     };
-    env = { CONCLAVE_DB: db } as unknown as Env;
+    env = { SYNTILA_DB: db } as unknown as Env;
   });
 
   afterEach(() => sqlite.close());
@@ -90,7 +90,7 @@ describe("Workspace Profile download before Worker configuration", () => {
   } = {}) {
     return handleGetWorkspaceV9WorkerProfile(
       new Request(
-        `https://conclave.test/api/workers/${workerTypeId}/profile?workspaceRuntimeId=${runtimeId}`,
+        `https://syntila.test/api/workers/${workerTypeId}/profile?workspaceRuntimeId=${runtimeId}`,
         {
           headers: token ? { authorization: `Bearer ${token}` } : {},
         },

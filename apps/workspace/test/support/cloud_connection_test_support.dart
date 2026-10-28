@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:conclave_protocol/workspace_runtime_protocol.dart'
+import 'package:syntila_protocol/workspace_runtime_protocol.dart'
     show workspaceRuntimeProtocolVersion;
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/workspace_transport.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/workspace_transport.dart';
 
-export 'package:conclave_workspace/workspace_transport.dart'
+export 'package:syntila_workspace/workspace_transport.dart'
     show WorkspaceTransport;
 
 class FakeSocket implements WorkspaceTransport {
@@ -114,8 +114,8 @@ Future<void> completeHandshake(
   final legacy = connection.uri.path.contains('/workspace') &&
       !connection.uri.path.contains('workspace-gateway');
   final protocol = legacy
-      ? 'conclave.workspace-runtime-protocol'
-      : 'conclave.workspace-runtime-protocol';
+      ? 'syntila.workspace-runtime-protocol'
+      : 'syntila.workspace-runtime-protocol';
   final version = workspaceRuntimeProtocolVersion;
   final helloType = legacy ? 'workspace.hello' : 'workspace.hello';
   await waitFor(() => socket.sent.any((message) =>

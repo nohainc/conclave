@@ -112,12 +112,12 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
               mainAxisSize: MainAxisSize.min,
               children: [
                 PopupMenuButton<String>(
-                  color: ConclaveMenuStyle.background(isDark),
+                  color: SyntilaMenuStyle.background(isDark),
                   surfaceTintColor: Colors.transparent,
                   elevation: 12,
-                  shadowColor: ConclaveMenuStyle.shadow(isDark),
-                  shape: ConclaveMenuStyle.shape(isDark),
-                  menuPadding: ConclaveMenuStyle.padding,
+                  shadowColor: SyntilaMenuStyle.shadow(isDark),
+                  shape: SyntilaMenuStyle.shape(isDark),
+                  menuPadding: SyntilaMenuStyle.padding,
                   tooltip: 'Thread actions',
                   onSelected: (action) {
                     if (action == 'edit') {
@@ -140,14 +140,14 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       if (isOwner || thread.canDestroy)
                         ('delete', 'Delete', Icons.delete_outline),
                     ])
-                      ConclaveMenuEntry<String>(
+                      SyntilaMenuEntry<String>(
                         value: action,
                         child: MenuItemButton(
-                          style: ConclaveMenuStyle.item(isDark),
+                          style: SyntilaMenuStyle.item(isDark),
                           leadingIcon: Icon(icon, size: 16),
                           onPressed: () => Navigator.pop(menuContext, action),
                           child:
-                              Text(label, style: ConclaveMenuStyle.textStyle),
+                              Text(label, style: SyntilaMenuStyle.textStyle),
                         ),
                       ),
                   ],
@@ -301,7 +301,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                                                         horizontal: 6,
                                                         vertical: 2),
                                                 decoration: BoxDecoration(
-                                                  color: ConclaveColors
+                                                  color: SyntilaColors
                                                       .primarySoftColor(isDark),
                                                   borderRadius:
                                                       BorderRadius.circular(4),
@@ -311,7 +311,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                                                   style: TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.w600,
-                                                    color: ConclaveColors
+                                                    color: SyntilaColors
                                                         .primaryForeground(
                                                             isDark),
                                                   ),

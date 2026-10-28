@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/features/common/collapsible_own_message.dart';
+import 'package:syntila_app/src/features/common/collapsible_own_message.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

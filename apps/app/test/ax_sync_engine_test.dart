@@ -2,12 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/ax/sync/ax_sync_engine.dart';
-import 'package:conclave_app/src/ax/sync/ax_entity_store.dart';
-import 'package:conclave_app/src/ax/sync/ax_realtime_sync.dart';
+import 'package:syntila_app/src/ax/sync/ax_sync_engine.dart';
+import 'package:syntila_app/src/ax/sync/ax_entity_store.dart';
+import 'package:syntila_app/src/ax/sync/ax_realtime_sync.dart';
 
 void main() {
   late AxSyncEngine engine;

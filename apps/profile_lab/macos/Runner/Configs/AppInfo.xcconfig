@@ -8,7 +8,7 @@
 PRODUCT_NAME = Syntila Profile Lab
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.conclaveax.profile-lab
+PRODUCT_BUNDLE_IDENTIFIER = com.syntila.profile-lab
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 Syntila. All rights reserved.

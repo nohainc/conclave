@@ -24,7 +24,7 @@ wrangler r2 bucket create conclave-artifacts-production
 The v8 D1 database has already been provisioned and initialized from
 `apps/cloud/migrations-v8/0001_conclave_v8.sql`. A private copy of production
 rows was imported and checked against the source counts. The previous
-`conclave-production` database remains available as a rollback copy; do not
+`syntila-production` database remains available as a rollback copy; do not
 delete it until the v8 app has been deployed and its production checks pass.
 
 ### Forward migrations

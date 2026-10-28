@@ -4,12 +4,12 @@ const configPath = process.argv[2] ?? "infra/cloudflare/app.wrangler.jsonc";
 const config = await readFile(configPath, "utf8");
 
 const required = [
-  ["production environment", /"CONCLAVE_ENVIRONMENT"\s*:\s*"production"/],
-  ["AX custom domain", /"pattern"\s*:\s*"app\.conclaveax\.com"/],
-  ["D1 binding", /"binding"\s*:\s*"CONCLAVE_DB"/],
-  ["R2 artifact binding", /"binding"\s*:\s*"CONCLAVE_ARTIFACTS"/],
-  ["Workflow binding", /"binding"\s*:\s*"CONCLAVE_RUN_WORKFLOW"/],
-  ["Workspace Gateway binding", /"name"\s*:\s*"CONCLAVE_WORKSPACE_GATEWAY"/],
+  ["production environment", /"SYNTILA_ENVIRONMENT"\s*:\s*"production"/],
+  ["AX custom domain", /"pattern"\s*:\s*"app\.syntila\.com"/],
+  ["D1 binding", /"binding"\s*:\s*"SYNTILA_DB"/],
+  ["R2 artifact binding", /"binding"\s*:\s*"SYNTILA_ARTIFACTS"/],
+  ["Workflow binding", /"binding"\s*:\s*"SYNTILA_RUN_WORKFLOW"/],
+  ["Workspace Gateway binding", /"name"\s*:\s*"SYNTILA_WORKSPACE_GATEWAY"/],
 ];
 
 const missing = required
@@ -31,7 +31,7 @@ if (developmentResourceNames.length > 0) {
   );
 }
 
-if (/CONCLAVE_ALLOW_ANONYMOUS_DEV/.test(config)) {
+if (/SYNTILA_ALLOW_ANONYMOUS_DEV/.test(config)) {
   throw new Error(
     "Production security preflight failed: anonymous development access is configured",
   );

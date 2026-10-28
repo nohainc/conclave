@@ -1,4 +1,4 @@
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 
 /// Bundled provider mark for a Worker, or null when the provider is unknown.
@@ -84,7 +84,7 @@ class WorkerBrandIcon extends StatelessWidget {
           borderRadius: BorderRadius.circular(size * .28),
           border: transparentBackground
               ? null
-              : Border.all(color: ConclaveColors.borderDark),
+              : Border.all(color: SyntilaColors.borderDark),
         ),
         alignment: Alignment.center,
         child: asset == null

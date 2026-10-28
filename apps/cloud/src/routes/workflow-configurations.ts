@@ -10,7 +10,7 @@ import {
   resolveUserWorkflowConfiguration,
   validateWorkerExecutionSelection,
   type UserWorkflowConfiguration,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   HttpError,
   json,
@@ -18,7 +18,7 @@ import {
   type SecurityEnv,
 } from "./http-security.js";
 import { handleListWorkspaceWorkerInventory } from "./profiles.js";
-import type { WorkerExecutionOptions } from "@conclave/core";
+import type { WorkerExecutionOptions } from "@syntila/core";
 import {
   loadSpaceWorkflowDefault,
   loadUserWorkflowDefault,
@@ -40,7 +40,7 @@ export async function handleWorkflowConfigurations(
   spaceId?: string,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  const db = env.CONCLAVE_DB;
+  const db = env.SYNTILA_DB;
   if (spaceId) {
     const membership = await db
       .prepare(
@@ -195,7 +195,7 @@ export async function handleWorkflowConfigurations(
       : undefined;
   const old: Record<
     string,
-    import("@conclave/core").WorkflowSelection | undefined
+    import("@syntila/core").WorkflowSelection | undefined
   > = {
     ...resolveUserWorkflowConfiguration(definition, priorConfiguration).steps,
     defaults: priorConfiguration?.defaults,
@@ -307,7 +307,7 @@ export async function handleWorkflowConfigurations(
     : await loadUserWorkflowDefault(env, context.userId, userWorkspaceId);
   if (defaultWorkflowId === workflowId && !configuration.enabled) {
     if (spaceId) {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `INSERT INTO space_workflow_defaults(space_id,workflow_id,updated_at)
          VALUES(?1,'chat',?2)
          ON CONFLICT(space_id) DO UPDATE SET workflow_id='chat',updated_at=excluded.updated_at`,
@@ -315,7 +315,7 @@ export async function handleWorkflowConfigurations(
         .bind(spaceId, new Date().toISOString())
         .run();
     } else {
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `INSERT INTO user_workflow_defaults(user_id,workspace_id,workflow_id,updated_at)
          VALUES(?1,?3,'chat',?2)
          ON CONFLICT(user_id,workspace_id) DO UPDATE SET workflow_id='chat',updated_at=excluded.updated_at`,

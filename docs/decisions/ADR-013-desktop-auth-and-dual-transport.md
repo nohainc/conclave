@@ -1,6 +1,6 @@
 # ADR-013: Desktop Human Authentication and Dual Workspace Transport
 
-> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
+> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `syntila-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
 
 **Status:** Accepted; desktop lifecycle refined by [ADR-014](ADR-014-workspace-desktop-lifecycle.md)  
 **Date:** 2026-09-27  
@@ -367,8 +367,8 @@ The architecture is accepted when tests prove:
 ## Shared contract baseline
 
 Phase 0 freezes the Cloud/desktop payloads and validators in
-[`conclave.desktop-auth-transport` 1.0](../protocol/DESKTOP_AUTH_TRANSPORT_CONTRACTS.md),
-exported by `@conclave/workspace-runtime-protocol`. Desktop human sessions and
+[`syntila.desktop-auth-transport` 1.0](../protocol/DESKTOP_AUTH_TRANSPORT_CONTRACTS.md),
+exported by `@syntila/workspace-runtime-protocol`. Desktop human sessions and
 Workspace runtime credentials are separate types and security boundaries;
 provider CLI sign-in is outside the shared protocol. Cloud and desktop implementation
 phases must consume these contracts rather than defining parallel shapes.

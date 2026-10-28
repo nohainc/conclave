@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ThreadBindingId } from "@conclave/core";
+import type { ThreadBindingId } from "@syntila/core";
 
 export function workStepSessionKey(params: {
   readonly workBindingId?: ThreadBindingId;

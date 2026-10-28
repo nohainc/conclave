@@ -18,7 +18,7 @@ import {
 import {
   defaultSpaceMemberPermissions,
   authorizeSpaceMembership,
-} from "@conclave/security";
+} from "@syntila/security";
 import { requireWorkflowPermission } from "../src/routes/space-permissions.js";
 
 const all = defaultSpaceMemberPermissions("owner");
@@ -75,8 +75,8 @@ beforeEach(() => {
     "INSERT INTO threads(id,space_id,name,status,access_policy_json,lead_user_id,created_at,updated_at) VALUES('T','S','Member thread','active','{\"allowedUserIds\":[],\"allowedSpaceRoles\":[],\"allowedPermissions\":[\"view\",\"discuss\",\"execute\"]}','member','now','now')",
   );
   env = {
-    CONCLAVE_DB: store.db,
-    CONCLAVE_ENVIRONMENT: "development",
+    SYNTILA_DB: store.db,
+    SYNTILA_ENVIRONMENT: "development",
     TEST_AUTHENTICATION: async (request: Request) =>
       context(request.headers.get("test-user")!),
   } as unknown as SecurityEnv;

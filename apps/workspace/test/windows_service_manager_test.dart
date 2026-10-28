@@ -1,24 +1,24 @@
 import 'dart:io';
 import 'dart:convert';
-import 'package:conclave_workspace/windows_native.dart';
+import 'package:syntila_workspace/windows_native.dart';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/windows_service_manager.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/workspace_lifecycle.dart';
-import 'package:conclave_workspace/workspace_lifecycle_store.dart';
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/windows_service_manager.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/workspace_lifecycle.dart';
+import 'package:syntila_workspace/workspace_lifecycle_store.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
 
 void main() {
   test(
       'Windows logon task registration, stop and unregister retain installation',
       () async {
-    final path = Platform.environment['CONCLAVE_TEST_WINDOWS_SERVICE'];
+    final path = Platform.environment['SYNTILA_TEST_WINDOWS_SERVICE'];
     if (path == null) {
-      markTestSkipped('Set CONCLAVE_TEST_WINDOWS_SERVICE');
+      markTestSkipped('Set SYNTILA_TEST_WINDOWS_SERVICE');
       return;
     }
-    final root = await Directory.systemTemp.createTemp('conclave-task-');
+    final root = await Directory.systemTemp.createTemp('syntila-task-');
     final data = Directory('${root.path}/state');
     await WorkspaceLifecyclePreferencesStore(data)
         .write(WorkspaceLifecyclePreferences(
@@ -40,7 +40,7 @@ void main() {
         '-Command',
         r'''
 $ErrorActionPreference = 'Stop'
-$x = [xml](Export-ScheduledTask -TaskName ('Workspace ' + $env:CONCLAVE_TEST_INSTALLATION))
+$x = [xml](Export-ScheduledTask -TaskName ('Workspace ' + $env:SYNTILA_TEST_INSTALLATION))
 $id = [string]$x.Task.Principals.Principal.UserId
 if (-not $id.StartsWith('S-')) { $id = ([System.Security.Principal.NTAccount]::new($id)).Translate([System.Security.Principal.SecurityIdentifier]).Value }
 # Task Scheduler may omit the schema-default LeastPrivilege value.
@@ -49,7 +49,7 @@ if (-not $level) { $level = 'LeastPrivilege' }
 @{ sid = $id; logonType = [string]$x.Task.Principals.Principal.LogonType; runLevel = $level } | ConvertTo-Json -Compress
 '''
       ], environment: {
-        'CONCLAVE_TEST_INSTALLATION': identity!
+        'SYNTILA_TEST_INSTALLATION': identity!
       });
       expect(definition.exitCode, 0, reason: definition.stderr.toString());
       expect(jsonDecode(definition.stdout.toString()), {

@@ -2,7 +2,7 @@
 
 Syntila Profile Lab is an internal macOS desktop application for creating and maintaining Logical Workers and their Tool Profiles. Operators open a Worker, edit one local JSON candidate, run the generic CLI Worker Engine against locally installed provider CLIs, validate the exact candidate with Cloud, and publish it as the Worker’s next current Profile revision.
 
-This README is for developers and authorized operators. The normative product and API contracts are in the [Worker Profile V9 specification](../../docs/specifications/WORKER_PROFILE_V9.md), [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md), [Tool Profile v1 contract](../../docs/specifications/TOOL_PROFILE_V1.md), and [ADR-019](../../docs/decisions/ADR-019-conclave-profile-lab.md). The V8 lifecycle documents remain historical and are superseded by V9.
+This README is for developers and authorized operators. The normative product and API contracts are in the [Worker Profile V9 specification](../../docs/specifications/WORKER_PROFILE_V9.md), [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md), [Tool Profile v1 contract](../../docs/specifications/TOOL_PROFILE_V1.md), and [ADR-019](../../docs/decisions/ADR-019-syntila-profile-lab.md). The V8 lifecycle documents remain historical and are superseded by V9.
 
 ## Product boundaries
 
@@ -33,14 +33,14 @@ For local Cloud development, start the repository's local Cloud environment (the
 
 ```sh
 cd apps/profile_lab
-flutter run -d macos --dart-define=CONCLAVE_CLOUD_URL=http://localhost:8787
+flutter run -d macos --dart-define=SYNTILA_CLOUD_URL=http://localhost:8787
 ```
 
 You can also change the origin in **Cloud connection** settings while the app is running. The setting is a Cloud origin only: credentials, URL paths, query strings, and fragments are rejected. HTTP is permitted only for loopback in development builds. Release builds require HTTPS.
 
 ## Cloud configuration and authentication
 
-The build default is `https://app.conclaveax.com`. For a development build, set `CONCLAVE_CLOUD_URL` with a Dart define; operators can save a local origin override or reset it to the build default in Cloud connection settings. The override is non-secret app configuration. Changing the Cloud origin clears the current sign-in because sessions are bound to their origin.
+The build default is `https://app.conclaveax.com`. For a development build, set `SYNTILA_CLOUD_URL` with a Dart define; operators can save a local origin override or reset it to the build default in Cloud connection settings. The override is non-secret app configuration. Changing the Cloud origin clears the current sign-in because sessions are bound to their origin.
 
 Sign-in opens a browser approval flow for **Syntila Profile Lab**, using the dedicated `conclave.profile-lab.management` audience. It is separate from Syntila Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: Worker/Profile administration uses `profiles:admin`; publication requires `profiles:release:manage`. Cloud is the authorization and publication authority; Profile Lab never holds provider credentials.
 
@@ -73,7 +73,7 @@ bash scripts/build-profile-lab-macos.sh --debug
 bash scripts/build-profile-lab-macos.sh --version 1.2.3
 ```
 
-The app archive is written under `dist/conclave-profile-lab/macos/`. An unsigned build is a development artifact. Set `CONCLAVE_MACOS_SIGN_IDENTITY` (or pass `--sign`) for Apple Developer ID signing; set `CONCLAVE_MACOS_NOTARY_PROFILE` to notarize a signed archive. Apple app signing protects the desktop artifact and is separate from Profile publication.
+The app archive is written under `dist/syntila-profile-lab/macos/`. An unsigned build is a development artifact. Set `SYNTILA_MACOS_SIGN_IDENTITY` (or pass `--sign`) for Apple Developer ID signing; set `SYNTILA_MACOS_NOTARY_PROFILE` to notarize a signed archive. Apple app signing protects the desktop artifact and is separate from Profile publication.
 
 ## Candidate authoring, testing, and publication
 
@@ -109,7 +109,7 @@ Workspace application-release signing remain separate security mechanisms.
 - [Tool Profile evidence contract](../../docs/specifications/TOOL_PROFILE_EVIDENCE_CONTRACT.md)
 - [Tool Profile v1](../../docs/specifications/TOOL_PROFILE_V1.md)
 - [Worker Profile V9](../../docs/specifications/WORKER_PROFILE_V9.md)
-- [ADR-019: Syntila Profile Lab](../../docs/decisions/ADR-019-conclave-profile-lab.md)
+- [ADR-019: Syntila Profile Lab](../../docs/decisions/ADR-019-syntila-profile-lab.md)
 
 ## Unsigned development
 
@@ -122,8 +122,8 @@ Candidate → Test → Validate → Publish lifecycle. Start
 a separate non-release Workspace.
 
 For the currently provisioned hosted development environment, set
-`CONCLAVE_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` on both launchers.
-Explicit `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`
+`SYNTILA_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` on both launchers.
+Explicit `SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY`
 still enables unsigned local candidate execution only against loopback Cloud.
 
 The macOS build script defaults to skipping Developer ID signing and notarization;
@@ -149,7 +149,7 @@ A Profile Lab build targets exactly one Cloud; rebuild to switch.
 | `pnpm profile-lab:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave/Profile Lab` |
 | `pnpm profile-lab:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local/Profile Lab` |
 
-Local builds use `--dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT=local`, show an
+Local builds use `--dart-define=SYNTILA_PROFILE_LAB_ENVIRONMENT=local`, show an
 orange "LOCAL DEVELOPMENT BUILD" banner, ignore saved Cloud overrides, and make
 the Cloud connection dialog read-only. `pnpm profile-lab:run:local` runs the
 same local configuration from source. Start the local stack with

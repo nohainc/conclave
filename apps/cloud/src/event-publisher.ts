@@ -5,11 +5,11 @@ import {
   type RealtimeStream,
   type RealtimeEventEnvelope,
   type RealtimeEventPayload,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 
 export interface EventPublisherEnv {
-  readonly CONCLAVE_DB: D1Database;
-  readonly CONCLAVE_REALTIME_GATEWAY?: DurableObjectNamespace;
+  readonly SYNTILA_DB: D1Database;
+  readonly SYNTILA_REALTIME_GATEWAY?: DurableObjectNamespace;
 }
 
 export interface DomainEventInput {
@@ -165,7 +165,7 @@ export class CloudEventPublisher implements EventPublisher {
     const validated = parseRealtimeEvent({ ...eventBase, sequence: 0 });
     const stream = realtimeEventStream(validated);
 
-    const db = this.env.CONCLAVE_DB;
+    const db = this.env.SYNTILA_DB;
     const results = await db.batch([
       ...(input.mutations ?? []),
       db
@@ -251,7 +251,7 @@ export class CloudEventPublisher implements EventPublisher {
     recipientUserIds?: readonly string[],
     additionalRecipientUserIds: readonly string[] = [],
   ): Promise<number> {
-    const gateway = this.env.CONCLAVE_REALTIME_GATEWAY;
+    const gateway = this.env.SYNTILA_REALTIME_GATEWAY;
     if (!gateway) return 0;
     const stream = realtimeEventStream(event);
     const members = recipientUserIds
@@ -259,13 +259,13 @@ export class CloudEventPublisher implements EventPublisher {
       : stream.kind === "user"
         ? { results: [{ user_id: stream.id }] }
         : event.spaceId
-          ? await this.env.CONCLAVE_DB.prepare(
+          ? await this.env.SYNTILA_DB.prepare(
               `SELECT user_id FROM space_memberships
            WHERE space_id = ?1`,
             )
               .bind(event.spaceId)
               .all<{ user_id: string }>()
-          : await this.env.CONCLAVE_DB.prepare(
+          : await this.env.SYNTILA_DB.prepare(
               `SELECT owner_user_id AS user_id FROM execution_workspaces
            WHERE id = ?1 AND status <> 'revoked'`,
             )

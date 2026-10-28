@@ -130,7 +130,7 @@ class WorkspaceCli {
   static String usageText({required bool configExists, bool all = false}) {
     final showAll = all || configExists;
     final buffer = StringBuffer(
-      'Usage: conclave-workspace [--data-dir DIR] [--json] <command>\n\n',
+      'Usage: syntila-workspace [--data-dir DIR] [--json] <command>\n\n',
     );
     for (final entry in _helpEntries) {
       if (!showAll && !entry.always) continue;
@@ -147,7 +147,7 @@ class WorkspaceCli {
       buffer
         ..writeln()
         ..writeln('More commands are available once workspace.nano exists '
-            '(run: conclave-workspace config init).')
+            '(run: syntila-workspace config init).')
         ..writeln('Use --help --all to list every command.');
     }
     return buffer.toString();
@@ -239,7 +239,7 @@ class WorkspaceCli {
         final workerId = await _workerIdForType(dataDir, rest[2]);
         if (workerId == null) {
           err.writeln('No configured Worker of type "${rest[2]}". '
-              'See: conclave-workspace workers');
+              'See: syntila-workspace workers');
           return 66;
         }
         call = (call.$1, {...call.$2, 'workerId': workerId});
@@ -303,10 +303,10 @@ class WorkspaceCli {
       _print(result, json);
       return 0;
     } on WorkspaceManagerProtocolException catch (error) {
-      err.writeln('conclave-workspace: ${error.message} (${error.code})');
+      err.writeln('syntila-workspace: ${error.message} (${error.code})');
       return 1;
     } on TimeoutException {
-      err.writeln('conclave-workspace: service request timed out.');
+      err.writeln('syntila-workspace: service request timed out.');
       return 69;
     } on SocketException {
       return await _withoutService(dataDir, call.$1, json) ??
@@ -330,14 +330,14 @@ class WorkspaceCli {
 
   int _serviceUnreachable(String? dataDir) {
     err.writeln(
-      'conclave-workspace: the Workspace service is not running '
+      'syntila-workspace: the Workspace service is not running '
       'or its socket is unreachable.',
     );
     err.writeln(
       _configExists(dataDir)
-          ? 'Start it with: conclave-workspace service start'
+          ? 'Start it with: syntila-workspace service start'
           : 'There is no workspace.nano yet. '
-              'Run: conclave-workspace setup',
+              'Run: syntila-workspace setup',
     );
     return 69;
   }
@@ -362,9 +362,9 @@ class WorkspaceCli {
     switch (command) {
       case 'service.getVersion':
         if (json) {
-          _print({'version': conclaveWorkspaceAppVersion}, true);
+          _print({'version': syntilaWorkspaceAppVersion}, true);
         } else {
-          out.writeln(conclaveWorkspaceAppVersion);
+          out.writeln(syntilaWorkspaceAppVersion);
         }
         return 0;
       case 'service.getStatus':
@@ -452,9 +452,9 @@ class WorkspaceCli {
         'Status:        ${running ? 'Running (pid: $pid)' : 'Stopped'}');
     if (!hint) return;
     if (!registered) {
-      out.writeln('Hint:          Run conclave-workspace service install');
+      out.writeln('Hint:          Run syntila-workspace service install');
     } else if (!running) {
-      out.writeln('Hint:          Run conclave-workspace service start');
+      out.writeln('Hint:          Run syntila-workspace service start');
     }
   }
 
@@ -559,7 +559,7 @@ class WorkspaceCli {
       );
       return 1;
     } on WorkspaceManagerProtocolException catch (error) {
-      err.writeln('conclave-workspace: ${error.message} (${error.code})');
+      err.writeln('syntila-workspace: ${error.message} (${error.code})');
       return 1;
     } on Object catch (error) {
       // Never render the exception text: it may contain the login payload.
@@ -606,7 +606,7 @@ class WorkspaceCli {
             await _send(dataDir, 'connection.connect', {});
           } on Object {
             err.writeln('Registered, but could not connect yet. '
-                'Run: conclave-workspace connect');
+                'Run: syntila-workspace connect');
           }
         }
         if (json) {
@@ -622,10 +622,10 @@ class WorkspaceCli {
       );
       return 1;
     } on WorkspaceManagerProtocolException catch (error) {
-      err.writeln('conclave-workspace: ${error.message} (${error.code})');
+      err.writeln('syntila-workspace: ${error.message} (${error.code})');
       return 1;
     } on TimeoutException {
-      err.writeln('conclave-workspace: service request timed out.');
+      err.writeln('syntila-workspace: service request timed out.');
       return 69;
     } on Object catch (error) {
       err.writeln('Registration failed (${error.runtimeType}).');
@@ -645,7 +645,7 @@ class WorkspaceCli {
         (await _localServiceInfo(dataDir)).running) {
       err.writeln(
         'The Workspace service is already running, so setup was not started. '
-        'Check it with: conclave-workspace status',
+        'Check it with: syntila-workspace status',
       );
       return 1;
     }
@@ -659,7 +659,7 @@ class WorkspaceCli {
     try {
       settings = store.readSync()!;
     } on Object catch (error) {
-      err.writeln('conclave-workspace: invalid workspace.nano: $error');
+      err.writeln('syntila-workspace: invalid workspace.nano: $error');
       return 65;
     }
     // 3. Workspace name (an already registered Workspace keeps its name).
@@ -697,8 +697,8 @@ class WorkspaceCli {
     if (reply != null && reply.isNotEmpty && reply != 'y' && reply != 'yes') {
       out.writeln(
         'Setup complete. Start the service when you are ready: '
-        'conclave-workspace service install && '
-        'conclave-workspace service start',
+        'syntila-workspace service install && '
+        'syntila-workspace service start',
       );
       return 0;
     }
@@ -721,7 +721,7 @@ class WorkspaceCli {
     }
     if (!ready) {
       err.writeln(
-        'Service did not become healthy. Run conclave-workspace status.',
+        'Service did not become healthy. Run syntila-workspace status.',
       );
       return 69;
     }
@@ -745,8 +745,8 @@ class WorkspaceCli {
           out.writeln('Workspace is online.');
           out.writeln(
             'Next: add a Worker to start using it. '
-            'See what is available with: conclave-workspace workers catalog, '
-            'then run: conclave-workspace workers add <type>',
+            'See what is available with: syntila-workspace workers catalog, '
+            'then run: syntila-workspace workers add <type>',
           );
         }
         err.writeln(
@@ -757,7 +757,7 @@ class WorkspaceCli {
       await Future<void>.delayed(const Duration(seconds: 1));
     }
     err.writeln(
-      'Registered, but Cloud is not ready. Run conclave-workspace status.',
+      'Registered, but Cloud is not ready. Run syntila-workspace status.',
     );
     return 69;
   }
@@ -904,8 +904,8 @@ class WorkspaceCli {
       };
       if (action == 'stop' && info.process == ServiceRuntimeState.running) {
         err.writeln(
-          'conclave-workspace: the service did not stop in time. '
-          'Check again with: conclave-workspace service status',
+          'syntila-workspace: the service did not stop in time. '
+          'Check again with: syntila-workspace service status',
         );
         return 1;
       }
@@ -928,15 +928,15 @@ class WorkspaceCli {
         if (action != 'status') {
           if (!registered) {
             out.writeln(
-                'Hint:          Run conclave-workspace service install');
+                'Hint:          Run syntila-workspace service install');
           } else if (!running) {
-            out.writeln('Hint:          Run conclave-workspace service start');
+            out.writeln('Hint:          Run syntila-workspace service start');
           }
         }
       }
       return 0;
     } on Object catch (error) {
-      err.writeln('conclave-workspace: $error');
+      err.writeln('syntila-workspace: $error');
       return 1;
     }
   }
@@ -970,7 +970,7 @@ class WorkspaceCli {
       final settings = store.readSync();
       if (settings == null) {
         err.writeln(
-          'workspace.nano does not exist. Run conclave-workspace config init.',
+          'workspace.nano does not exist. Run syntila-workspace config init.',
         );
         return 66;
       }
@@ -990,7 +990,7 @@ class WorkspaceCli {
       }
       return 0;
     } on Object catch (error) {
-      err.writeln('conclave-workspace: invalid workspace.nano: $error');
+      err.writeln('syntila-workspace: invalid workspace.nano: $error');
       return 65;
     }
   }
@@ -1035,7 +1035,7 @@ class WorkspaceCli {
         _print(result, json);
         return 0;
       } on WorkspaceManagerProtocolException catch (error) {
-        err.writeln('conclave-workspace: ${error.message} (${error.code})');
+        err.writeln('syntila-workspace: ${error.message} (${error.code})');
         return 1;
       }
     }
@@ -1055,7 +1055,7 @@ class WorkspaceCli {
         _print(result, json);
         return 0;
       } on WorkspaceManagerProtocolException catch (error) {
-        err.writeln('conclave-workspace: ${error.message} (${error.code})');
+        err.writeln('syntila-workspace: ${error.message} (${error.code})');
         return 1;
       }
     }
@@ -1106,7 +1106,7 @@ class WorkspaceCli {
       } else {
         out.writeln('Work Root updated to: ${resolvedDir.path}');
         out.writeln(
-            'Note: Restart service to apply changes (conclave-workspace service restart).');
+            'Note: Restart service to apply changes (syntila-workspace service restart).');
       }
       return 0;
     }
@@ -1133,7 +1133,7 @@ class WorkspaceCli {
       }
       return 0;
     } on Object {
-      err.writeln('conclave-workspace: could not remove the stored session.');
+      err.writeln('syntila-workspace: could not remove the stored session.');
       return 1;
     }
   }
@@ -1225,7 +1225,7 @@ class WorkspaceCli {
         await _send(dataDir, 'connection.disconnect', {});
       } on WorkspaceManagerProtocolException catch (error) {
         if (!quiet) {
-          err.writeln('conclave-workspace: ${error.message} (${error.code})');
+          err.writeln('syntila-workspace: ${error.message} (${error.code})');
           return 1;
         }
       } on Object {
@@ -1267,7 +1267,7 @@ class WorkspaceCli {
     if (failure != null && !quiet) {
       err.writeln('Cloud did not release this Workspace: $failure');
       err.writeln('Nothing was changed on this computer. '
-          'Fix the problem and run: conclave-workspace unregister');
+          'Fix the problem and run: syntila-workspace unregister');
       return 1;
     }
 
@@ -1287,7 +1287,7 @@ class WorkspaceCli {
       }, true);
     } else {
       out.writeln('Workspace ${registration.name} unregistered.');
-      out.writeln('Hint: Run conclave-workspace register to register again.');
+      out.writeln('Hint: Run syntila-workspace register to register again.');
     }
     return 0;
   }

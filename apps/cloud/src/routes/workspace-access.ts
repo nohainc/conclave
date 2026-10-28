@@ -2,14 +2,14 @@ import { publishCollaborationEvent } from "../collaboration-events.js";
 import {
   authorizeWorkspaceOwner,
   type SecurityContext,
-} from "@conclave/security";
+} from "@syntila/security";
 import {
   DEFAULT_SPACE_MAX_CONCURRENT_ASSIGNMENTS,
   validateWorkspaceConcurrencyPolicy,
   validateWorkspaceGrantPermissions,
   validateWorkspaceGrantWorkerIds,
   validateWorkspaceNetworkPolicy,
-} from "@conclave/core";
+} from "@syntila/core";
 
 import type { SecurityEnv } from "./http-security.js";
 import { parseJson, recordAudit } from "./http-security.js";
@@ -21,7 +21,7 @@ export async function disconnectWorkspaceRuntime(
   workspaceId: string,
   runtimeId: string,
 ): Promise<boolean> {
-  const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
+  const gateway = env.SYNTILA_WORKSPACE_GATEWAY;
   if (!gateway) return false;
   try {
     const response = await gateway
@@ -42,7 +42,7 @@ export async function getWorkspaceGatewayStatus(
   env: SecurityEnv,
   workspaceId: string,
 ): Promise<{ online: boolean } | null> {
-  const gateway = env.CONCLAVE_WORKSPACE_GATEWAY;
+  const gateway = env.SYNTILA_WORKSPACE_GATEWAY;
   if (!gateway) return null;
   try {
     const response = await gateway
@@ -84,7 +84,7 @@ export async function loadWorkspaceSpaceGrant(
   env: SecurityEnv,
   grantId: string,
 ): Promise<Record<string, unknown> | null> {
-  return env.CONCLAVE_DB.prepare(
+  return env.SYNTILA_DB.prepare(
     `SELECT g.*, ew.name AS workspace_name, ew.owner_user_id
      FROM workspace_space_grants g
      JOIN execution_workspaces ew ON ew.id = g.workspace_id
@@ -176,13 +176,13 @@ export async function createWorkspaceSpaceGrant(
   if (body.workspaceId !== undefined && body.workspaceId !== workspaceId) {
     throw new HttpError(400, "workspaceId does not match the grant target");
   }
-  const space = await env.CONCLAVE_DB.prepare(
+  const space = await env.SYNTILA_DB.prepare(
     "SELECT id FROM spaces WHERE id = ?1",
   )
     .bind(spaceId)
     .first<{ id: string }>();
   if (!space) throw new HttpError(404, "Space not found");
-  const workspace = await env.CONCLAVE_DB.prepare(
+  const workspace = await env.SYNTILA_DB.prepare(
     "SELECT id, owner_user_id, status FROM execution_workspaces WHERE id = ?1",
   )
     .bind(workspaceId)
@@ -197,7 +197,7 @@ export async function createWorkspaceSpaceGrant(
       "Only the Workspace owner can grant this Workspace",
     );
   }
-  const rawMembership = await env.CONCLAVE_DB.prepare(
+  const rawMembership = await env.SYNTILA_DB.prepare(
     "SELECT role FROM space_memberships WHERE space_id = ?1 AND user_id = ?2",
   )
     .bind(spaceId, context.userId)
@@ -210,12 +210,12 @@ export async function createWorkspaceSpaceGrant(
     );
   }
   await authorizeWorkspaceOwner(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context,
     workspaceId,
     "workspace:manage",
   );
-  const existingGrant = await env.CONCLAVE_DB.prepare(
+  const existingGrant = await env.SYNTILA_DB.prepare(
     `SELECT id FROM workspace_space_grants
      WHERE space_id = ?1 AND workspace_id = ?2
        AND status IN ('active', 'suspended')
@@ -246,7 +246,7 @@ export async function createWorkspaceSpaceGrant(
   const allowedWorkerIds = JSON.stringify(workerIdsValue);
   if (workerIdsValue.length > 0) {
     const placeholders = workerIdsValue.map((_, index) => `?${index + 2}`);
-    const rows = await env.CONCLAVE_DB.prepare(
+    const rows = await env.SYNTILA_DB.prepare(
       `SELECT worker_id FROM workspace_worker_inventory
        WHERE workspace_id = ?1 AND worker_id IN (${placeholders.join(", ")})`,
     )
@@ -280,7 +280,7 @@ export async function createWorkspaceSpaceGrant(
   const concurrency = JSON.stringify(concurrencyValue);
   const expiresAt = grantExpiry(body.expiresAt, new Date(now));
   const id = `workspace-space-grant-${crypto.randomUUID().slice(0, 16)}`;
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_space_grants
        (id, space_id, workspace_id, granted_by_user_id, status,
         allowed_worker_ids_json, allowed_permissions_json,

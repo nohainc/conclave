@@ -94,7 +94,7 @@ export function recordAuthMetric(
   reason?: unknown,
 ): void {
   const payload = {
-    metric: "conclave.auth.sign_in",
+    metric: "syntila.auth.sign_in",
     provider: safeAuthProvider(provider) ?? "unknown",
     outcome,
     ...(outcome === "failure" ? { reason: safeAuthReason(reason) } : {}),

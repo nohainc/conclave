@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import {
   type AssignmentResultPayload,
   type AssignmentFailurePayload,
-} from "@conclave/workspace-runtime-protocol";
+} from "@syntila/workspace-runtime-protocol";
 import {
   ASSIGNMENT_LIFECYCLE_STATUSES,
   ContextLimitError,
@@ -12,11 +12,11 @@ import {
   isTerminalAssignmentStatus,
   type AssignmentLifecycleStatus,
   type ThreadBindingId,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   canonicalExecutionErrorCode,
   executionErrorMessage,
-} from "@conclave/protocol";
+} from "@syntila/protocol";
 import {
   selectSpaceExecutionTarget,
   type ExecutionTarget,
@@ -195,8 +195,8 @@ export interface DispatchAssignmentResult {
 }
 
 export interface AssignmentDispatcherEnv {
-  readonly CONCLAVE_DB: D1Database;
-  readonly CONCLAVE_WORKSPACE_GATEWAY?: DurableObjectNamespace;
+  readonly SYNTILA_DB: D1Database;
+  readonly SYNTILA_WORKSPACE_GATEWAY?: DurableObjectNamespace;
 }
 
 /**
@@ -210,7 +210,7 @@ async function dispatchWorkspaceWorkerAssignment(
 ): Promise<DispatchAssignmentResult> {
   const { runId, taskId, task } = params;
   const target = await selectSpaceExecutionTarget(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     {
       spaceId: task.spaceId!,
       requesterUserId: task.requestedByUserId!,
@@ -230,7 +230,7 @@ async function dispatchWorkspaceWorkerAssignment(
     },
     new Date(),
     async (workspaceId, runtimeIdentityId) => {
-      const gatewayNamespace = env.CONCLAVE_WORKSPACE_GATEWAY;
+      const gatewayNamespace = env.SYNTILA_WORKSPACE_GATEWAY;
       if (!gatewayNamespace) return false;
       const gateway = gatewayNamespace.get(
         gatewayNamespace.idFromName(workspaceId),
@@ -333,7 +333,7 @@ async function dispatchWorkspaceWorkerAssignment(
   delete assignmentInput.sessionKey;
   delete assignmentInput.additionalFolderIds;
   const additionalFolderIds = await loadAssignmentAdditionalFolderIds(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     target.spaceId,
     target.workspaceId,
   );
@@ -346,7 +346,7 @@ async function dispatchWorkspaceWorkerAssignment(
       throw new Error("Conversation bootstrap requires a Work request");
     try {
       bootstrap = await loadConversationBootstrap(
-        env.CONCLAVE_DB,
+        env.SYNTILA_DB,
         target.conversationId,
         requestId,
         target.baseContextRevision ?? 0,
@@ -388,7 +388,7 @@ async function dispatchWorkspaceWorkerAssignment(
       sessionKey,
     ),
   };
-  const insertion = await env.CONCLAVE_DB.prepare(
+  const insertion = await env.SYNTILA_DB.prepare(
     `INSERT INTO worker_assignments
        (id, space_id, execution_workspace_id, workspace_space_grant_id,
         run_id, task_id, attempt_id, requested_by_user_id, runtime_identity_id,
@@ -460,13 +460,13 @@ async function dispatchWorkspaceWorkerAssignment(
   }
   const workRequestId = target.workRequestId ?? task.workRequestId;
   if (workRequestId) {
-    const cancellation = await env.CONCLAVE_DB.prepare(
+    const cancellation = await env.SYNTILA_DB.prepare(
       "SELECT cancel_requested_at FROM work_requests WHERE id = ?1 AND status IN ('running', 'cancelled')",
     )
       .bind(workRequestId)
       .first<{ cancel_requested_at: string | null }>();
     if (cancellation?.cancel_requested_at) {
-      await recordAssignmentCancelled(env.CONCLAVE_DB, assignmentId, {
+      await recordAssignmentCancelled(env.SYNTILA_DB, assignmentId, {
         status: "cancelled",
         reason: "Work Request cancellation was requested before dispatch",
       });
@@ -482,13 +482,13 @@ async function dispatchWorkspaceWorkerAssignment(
       };
     }
   }
-  const workspaceOwner = await env.CONCLAVE_DB.prepare(
+  const workspaceOwner = await env.SYNTILA_DB.prepare(
     "SELECT owner_user_id FROM execution_workspaces WHERE id = ?1",
   )
     .bind(target.workspaceId)
     .first<{ owner_user_id: string }>();
   if (workspaceOwner) {
-    await recordExecutionWorkspaceAudit(env.CONCLAVE_DB, {
+    await recordExecutionWorkspaceAudit(env.SYNTILA_DB, {
       workspaceId: target.workspaceId,
       ownerUserId: workspaceOwner.owner_user_id,
       actorType: "user",
@@ -576,16 +576,16 @@ async function dispatchWorkspaceWorkerAssignment(
   // Persist the complete command before any delivery attempt. Work for a
   // Service that is not ready yet then waits in this durable queue and is
   // flushed, unchanged, when the Service reports ready.
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE worker_assignments SET command_payload_json = ?1
       WHERE id = ?2 AND status = 'created' AND command_payload_json IS NULL`,
   )
     .bind(JSON.stringify(payload), assignmentId)
     .run();
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
+  if (!env.SYNTILA_WORKSPACE_GATEWAY) {
     const code = "provider_unavailable";
     const error = executionErrorMessage(code);
-    await recordAssignmentError(env.CONCLAVE_DB, assignmentId, {
+    await recordAssignmentError(env.SYNTILA_DB, assignmentId, {
       error: {
         code,
         message: error,
@@ -628,8 +628,8 @@ async function dispatchWorkspaceWorkerAssignment(
     };
   }
   try {
-    const stub = env.CONCLAVE_WORKSPACE_GATEWAY.get(
-      env.CONCLAVE_WORKSPACE_GATEWAY.idFromName(target.workspaceId),
+    const stub = env.SYNTILA_WORKSPACE_GATEWAY.get(
+      env.SYNTILA_WORKSPACE_GATEWAY.idFromName(target.workspaceId),
     );
     // Dispatch through the Workspace Gateway's logical outbound path. The
     // Gateway writes to its active WebSocket or long-poll event queue.
@@ -686,7 +686,7 @@ async function dispatchWorkspaceWorkerAssignment(
         accepted: true,
       };
     }
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `UPDATE worker_assignments SET status = 'dispatched', updated_at = ?1,
               dispatched_at = COALESCE(dispatched_at, ?1)
         WHERE id = ?2 AND status IN (${assignmentSourceStatusList("dispatched")})`,
@@ -779,7 +779,7 @@ export async function nudgeQueuedAssignments(
   env: AssignmentDispatcherEnv,
   workspaceId: string,
 ): Promise<void> {
-  const namespace = env.CONCLAVE_WORKSPACE_GATEWAY;
+  const namespace = env.SYNTILA_WORKSPACE_GATEWAY;
   if (!namespace) return;
   try {
     await namespace
@@ -803,14 +803,14 @@ export async function failOrRevokeDispatch(
   attemptId: string,
   failure: AssignmentFailurePayload,
 ): Promise<void> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     "SELECT status FROM worker_assignments WHERE id = ?1",
   )
     .bind(assignmentId)
     .first<{ status: string }>();
   if (!row || row.status === "created") {
     await recordAssignmentError(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
       assignmentId,
       failure,
       attemptId,
@@ -1336,7 +1336,7 @@ export async function cancelTaskAssignment(
   assignmentId: string,
   reason: string,
 ): Promise<{ cancelled: boolean }> {
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT status, attempt_id
        FROM worker_assignments
       WHERE id = ?1 AND execution_workspace_id = ?2`,

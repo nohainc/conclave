@@ -52,7 +52,7 @@ it("shares owner defaults across members, isolates Spaces, restricts writes, and
       )
       .run(JSON.stringify(config(true)));
     const env = {
-      CONCLAVE_DB: db,
+      SYNTILA_DB: db,
       BETTER_AUTH_SECRET: "test-secret",
     } as SecurityEnv;
     const request = (method: string, user?: string, body?: unknown) =>

@@ -1,2 +1,2 @@
-export 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+export 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show WorkerTrustPolicy, canonicalJson;

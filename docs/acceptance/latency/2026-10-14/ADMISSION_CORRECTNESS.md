@@ -40,7 +40,7 @@ these tables validate identity and lifecycle; they do not reserve capacity.
 
 ## Real D1 insert evidence
 
-A temporary remote D1 database `conclave-admission-probe-20261014` used only
+A temporary remote D1 database `syntila-admission-probe-20261014` used only
 synthetic rows and reproduced the two-write trigger chain. The application
 continued using production D1; no production user records or schema were
 modified by this probe.

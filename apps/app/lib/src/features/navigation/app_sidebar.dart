@@ -98,7 +98,7 @@ class AppSidebar extends StatelessWidget {
         final sidePadding = narrow ? 6.0 : 10.0;
         return Container(
           width: width,
-          color: ConclaveColors.navigationBackground(isDark),
+          color: SyntilaColors.navigationBackground(isDark),
           padding: EdgeInsets.fromLTRB(sidePadding, 16, sidePadding, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -129,17 +129,17 @@ class AppSidebar extends StatelessWidget {
                             }
                           },
                           borderRadius:
-                              BorderRadius.circular(ConclaveRadius.sm),
+                              BorderRadius.circular(SyntilaRadius.sm),
                           child: Padding(
                             padding: const EdgeInsets.all(4),
-                            child: ConclaveBrand.logoMark(size: 28),
+                            child: SyntilaBrand.logoMark(size: 28),
                           ),
                         ),
                       ),
                     ),
                     if (!compact)
                       _RailSearchMenuAnchor(
-                        menuStyle: ConclaveMenuStyle.surface(isDark),
+                        menuStyle: SyntilaMenuStyle.surface(isDark),
                         searchController: searchController,
                         searchFocusNode: searchFocusNode,
                         onSearchChanged: onSearchChanged,
@@ -157,7 +157,7 @@ class AppSidebar extends StatelessWidget {
                             icon: Icon(
                               Icons.add_rounded,
                               size: 18,
-                              color: ConclaveColors.navigationTextMuted(isDark),
+                              color: SyntilaColors.navigationTextMuted(isDark),
                             ),
                             splashRadius: 14,
                             padding: EdgeInsets.zero,
@@ -165,10 +165,10 @@ class AppSidebar extends StatelessWidget {
                                 minWidth: 32, minHeight: 32),
                             style: IconButton.styleFrom(
                               hoverColor:
-                                  ConclaveColors.navigationHover(isDark),
+                                  SyntilaColors.navigationHover(isDark),
                               shape: RoundedRectangleBorder(
                                 borderRadius:
-                                    BorderRadius.circular(ConclaveRadius.sm),
+                                    BorderRadius.circular(SyntilaRadius.sm),
                               ),
                             ),
                           ),
@@ -188,20 +188,20 @@ class AppSidebar extends StatelessWidget {
                               icon: count > 0
                                   ? Badge.count(
                                       count: count,
-                                      backgroundColor: ConclaveColors.primary,
+                                      backgroundColor: SyntilaColors.primary,
                                       textColor: Colors.white,
                                       child: Icon(
                                         Icons.notifications_none_rounded,
                                         size: 18,
                                         color:
-                                            ConclaveColors.navigationTextMuted(
+                                            SyntilaColors.navigationTextMuted(
                                                 isDark),
                                       ),
                                     )
                                   : Icon(
                                       Icons.notifications_none_rounded,
                                       size: 18,
-                                      color: ConclaveColors.navigationTextMuted(
+                                      color: SyntilaColors.navigationTextMuted(
                                           isDark),
                                     ),
                               splashRadius: 14,
@@ -210,10 +210,10 @@ class AppSidebar extends StatelessWidget {
                                   minWidth: 32, minHeight: 32),
                               style: IconButton.styleFrom(
                                 hoverColor:
-                                    ConclaveColors.navigationHover(isDark),
+                                    SyntilaColors.navigationHover(isDark),
                                 shape: RoundedRectangleBorder(
                                   borderRadius:
-                                      BorderRadius.circular(ConclaveRadius.sm),
+                                      BorderRadius.circular(SyntilaRadius.sm),
                                 ),
                               ),
                             ),
@@ -233,15 +233,15 @@ class AppSidebar extends StatelessWidget {
                           icon: Icon(Icons.menu_open_rounded,
                               size: 20,
                               color:
-                                  ConclaveColors.navigationTextMuted(isDark)),
+                                  SyntilaColors.navigationTextMuted(isDark)),
                           padding: EdgeInsets.zero,
                           constraints:
                               const BoxConstraints(minWidth: 32, minHeight: 32),
                           style: IconButton.styleFrom(
-                            hoverColor: ConclaveColors.navigationHover(isDark),
+                            hoverColor: SyntilaColors.navigationHover(isDark),
                             shape: RoundedRectangleBorder(
                                 borderRadius:
-                                    BorderRadius.circular(ConclaveRadius.sm)),
+                                    BorderRadius.circular(SyntilaRadius.sm)),
                           ),
                         ),
                       ),
@@ -298,11 +298,11 @@ class AppSidebar extends StatelessWidget {
                               }
                             },
                             borderRadius:
-                                BorderRadius.circular(ConclaveRadius.sm),
-                            hoverColor: ConclaveColors.navigationHover(isDark),
+                                BorderRadius.circular(SyntilaRadius.sm),
+                            hoverColor: SyntilaColors.navigationHover(isDark),
                             focusColor: (isDark
-                                ? ConclaveColors.navigationSelectedColor(isDark)
-                                : ConclaveColors.primarySoft),
+                                ? SyntilaColors.navigationSelectedColor(isDark)
+                                : SyntilaColors.primarySoft),
                             child: Container(
                               padding: EdgeInsets.symmetric(
                                   horizontal: narrow ? 2 : 6, vertical: 6),
@@ -310,18 +310,18 @@ class AppSidebar extends StatelessWidget {
                                 color: shellContext.isNavActive(
                                         const AxNavigation.profileSecurity())
                                     ? (isDark
-                                        ? ConclaveColors
+                                        ? SyntilaColors
                                             .navigationSelectedColor(isDark)
-                                        : ConclaveColors.primarySoft)
+                                        : SyntilaColors.primarySoft)
                                     : Colors.transparent,
                                 borderRadius:
-                                    BorderRadius.circular(ConclaveRadius.sm),
+                                    BorderRadius.circular(SyntilaRadius.sm),
                               ),
                               child: Row(
                                 children: [
                                   CircleAvatar(
                                     radius: 13,
-                                    backgroundColor: ConclaveColors.primarySoft,
+                                    backgroundColor: SyntilaColors.primarySoft,
                                     backgroundImage:
                                         shellContext.viewerAvatarImage,
                                     child: shellContext.viewerAvatarImage ==
@@ -331,7 +331,7 @@ class AppSidebar extends StatelessWidget {
                                             style: const TextStyle(
                                               fontSize: 11,
                                               color:
-                                                  ConclaveColors.primaryPressed,
+                                                  SyntilaColors.primaryPressed,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           )
@@ -349,9 +349,9 @@ class AppSidebar extends StatelessWidget {
                                           color: shellContext.isNavActive(
                                                   const AxNavigation
                                                       .profileSecurity())
-                                              ? ConclaveColors.navigationText(
+                                              ? SyntilaColors.navigationText(
                                                   isDark)
-                                              : ConclaveColors
+                                              : SyntilaColors
                                                   .navigationTextMuted(isDark),
                                           fontSize: 11.5,
                                           fontWeight: shellContext.isNavActive(
@@ -454,14 +454,14 @@ class AppIconRail extends StatelessWidget {
             icon: iconWidget ??
                 Icon(icon,
                     size: 20,
-                    color: ConclaveColors.navigationTextMuted(isDark)),
+                    color: SyntilaColors.navigationTextMuted(isDark)),
             splashRadius: 16,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             style: IconButton.styleFrom(
-              hoverColor: ConclaveColors.navigationHover(isDark),
+              hoverColor: SyntilaColors.navigationHover(isDark),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                borderRadius: BorderRadius.circular(SyntilaRadius.sm),
               ),
             ),
           ),
@@ -490,17 +490,17 @@ class AppIconRail extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // The collapsed rail shares the sidebar's fixed dark navigation surface.
-    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    final menuStyle = SyntilaMenuStyle.surface(isDark);
 
-    ButtonStyle itemStyle() => ConclaveMenuStyle.item(isDark).copyWith(
+    ButtonStyle itemStyle() => SyntilaMenuStyle.item(isDark).copyWith(
           foregroundColor:
-              WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
+              WidgetStatePropertyAll(SyntilaColors.navigationText(isDark)),
           minimumSize: const WidgetStatePropertyAll(Size(200, 36)),
         );
 
     return Container(
       width: 50,
-      color: ConclaveColors.navigationBackground(isDark),
+      color: SyntilaColors.navigationBackground(isDark),
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
       child: Column(
         children: [
@@ -512,11 +512,11 @@ class AppIconRail extends StatelessWidget {
                 message: 'Syntila — Home',
                 child: InkWell(
                   onTap: () => onNavigateTo(const AxNavigation.home()),
-                  borderRadius: BorderRadius.circular(ConclaveRadius.sm),
-                  hoverColor: ConclaveColors.navigationHover(isDark),
+                  borderRadius: BorderRadius.circular(SyntilaRadius.sm),
+                  hoverColor: SyntilaColors.navigationHover(isDark),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: ConclaveBrand.logoMark(size: 28),
+                    child: SyntilaBrand.logoMark(size: 28),
                   ),
                 ),
               )),
@@ -530,7 +530,7 @@ class AppIconRail extends StatelessWidget {
                 child: Icon(
                   Icons.menu_open_rounded,
                   size: 20,
-                  color: ConclaveColors.navigationTextMuted(isDark),
+                  color: SyntilaColors.navigationTextMuted(isDark),
                 ),
               ),
               tooltip: 'Expand sidebar',
@@ -573,18 +573,18 @@ class AppIconRail extends StatelessWidget {
               iconWidget: count > 0
                   ? Badge.count(
                       count: count,
-                      backgroundColor: ConclaveColors.primary,
+                      backgroundColor: SyntilaColors.primary,
                       textColor: Colors.white,
                       child: Icon(
                         Icons.notifications_outlined,
                         size: 20,
-                        color: ConclaveColors.navigationTextMuted(isDark),
+                        color: SyntilaColors.navigationTextMuted(isDark),
                       ),
                     )
                   : Icon(
                       Icons.notifications_outlined,
                       size: 20,
-                      color: ConclaveColors.navigationTextMuted(isDark),
+                      color: SyntilaColors.navigationTextMuted(isDark),
                     ),
             );
           }),
@@ -613,7 +613,7 @@ class AppIconRail extends StatelessWidget {
                     children: [
                       Icon(Icons.folder_outlined,
                           size: 20,
-                          color: ConclaveColors.navigationTextMuted(isDark)),
+                          color: SyntilaColors.navigationTextMuted(isDark)),
                       Positioned(
                         right: -5,
                         top: -5,
@@ -645,10 +645,10 @@ class AppIconRail extends StatelessWidget {
                       running: _running(space),
                       unread: _unread(space),
                     ),
-                    leadingIcon: ConclaveFolderIcon(
+                    leadingIcon: SyntilaFolderIcon(
                       isExpanded: true,
                       size: 16,
-                      color: ConclaveColors.navigationTextMuted(isDark),
+                      color: SyntilaColors.navigationTextMuted(isDark),
                     ),
                     onPressed: () => onNavigateTo(AxNavigation.space(space.id)),
                     child: Text(
@@ -659,7 +659,7 @@ class AppIconRail extends StatelessWidget {
                                 .isNavActive(AxNavigation.space(space.id))
                             ? FontWeight.bold
                             : FontWeight.w600,
-                        color: ConclaveColors.navigationTextMuted(isDark),
+                        color: SyntilaColors.navigationTextMuted(isDark),
                       ),
                     ),
                   ),
@@ -687,7 +687,7 @@ class AppIconRail extends StatelessWidget {
                                     AxNavigation.thread(space.id, thread.id))
                                 ? FontWeight.bold
                                 : FontWeight.normal,
-                            color: ConclaveColors.navigationTextMuted(isDark),
+                            color: SyntilaColors.navigationTextMuted(isDark),
                           ),
                         ),
                       ),
@@ -726,20 +726,20 @@ class AppIconRail extends StatelessWidget {
                   border: shellContext
                           .isNavActive(const AxNavigation.profileSecurity())
                       ? Border.all(
-                          color: ConclaveColors.primaryForeground(isDark),
+                          color: SyntilaColors.primaryForeground(isDark),
                           width: 2)
                       : null,
                 ),
                 child: CircleAvatar(
                   radius: 13,
-                  backgroundColor: ConclaveColors.primarySoft,
+                  backgroundColor: SyntilaColors.primarySoft,
                   backgroundImage: shellContext.viewerAvatarImage,
                   child: shellContext.viewerAvatarImage == null
                       ? Text(
                           shellContext.viewerInitials,
                           style: const TextStyle(
                             fontSize: 11,
-                            color: ConclaveColors.primaryPressed,
+                            color: SyntilaColors.primaryPressed,
                             fontWeight: FontWeight.bold,
                           ),
                         )
@@ -845,15 +845,15 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                 icon: Icon(
                   Icons.search_rounded,
                   size: 20,
-                  color: ConclaveColors.navigationTextMuted(widget.isDark),
+                  color: SyntilaColors.navigationTextMuted(widget.isDark),
                 ),
                 splashRadius: 16,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 style: IconButton.styleFrom(
-                  hoverColor: ConclaveColors.navigationHover(widget.isDark),
+                  hoverColor: SyntilaColors.navigationHover(widget.isDark),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                    borderRadius: BorderRadius.circular(SyntilaRadius.sm),
                   ),
                 ),
               ),
@@ -869,10 +869,10 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
               Container(
                 height: 36,
                 decoration: BoxDecoration(
-                  color: ConclaveColors.canvas(widget.isDark),
-                  borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                  color: SyntilaColors.canvas(widget.isDark),
+                  borderRadius: BorderRadius.circular(SyntilaRadius.sm),
                   border: Border.all(
-                    color: ConclaveColors.border(widget.isDark),
+                    color: SyntilaColors.border(widget.isDark),
                   ),
                 ),
                 child: ListenableBuilder(
@@ -887,7 +887,7 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                           child: Icon(
                             Icons.search_rounded,
                             size: 16,
-                            color: ConclaveColors.textSecondary(widget.isDark),
+                            color: SyntilaColors.textSecondary(widget.isDark),
                           ),
                         ),
                         Expanded(
@@ -908,9 +908,9 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color:
-                                    ConclaveColors.textPrimary(widget.isDark),
+                                    SyntilaColors.textPrimary(widget.isDark),
                               ),
-                              cursorColor: ConclaveBrand.accent,
+                              cursorColor: SyntilaBrand.accent,
                               cursorHeight: 14,
                               decoration: InputDecoration(
                                 filled: true,
@@ -920,7 +920,7 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                                 hintText: 'Search or jump to...',
                                 hintStyle: TextStyle(
                                   fontSize: 12,
-                                  color: ConclaveColors.textSecondary(
+                                  color: SyntilaColors.textSecondary(
                                       widget.isDark),
                                 ),
                                 isDense: true,
@@ -946,7 +946,7 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                                     icon: Icon(
                                       Icons.close_rounded,
                                       size: 14,
-                                      color: ConclaveColors.textSecondary(
+                                      color: SyntilaColors.textSecondary(
                                           widget.isDark),
                                     ),
                                     splashRadius: 14,

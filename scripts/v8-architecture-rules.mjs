@@ -1,7 +1,7 @@
 export const forbiddenArchitecture = [
   [
     "retired Host product naming",
-    /\b(?:HostConfig|HostRegistration|HostCloudConnection|HostLifecycleController|HostLogger|HostUi(?:Mode|Snapshot)|HostCloudSocket|ExecutionHost|HostRegistry|HostService)\b|\bhostId\b|\bhost_id\b|CONCLAVE_HOST_|\/api\/hosts(?:\/|\b)/,
+    /\b(?:HostConfig|HostRegistration|HostCloudConnection|HostLifecycleController|HostLogger|HostUi(?:Mode|Snapshot)|HostCloudSocket|ExecutionHost|HostRegistry|HostService)\b|\bhostId\b|\bhost_id\b|SYNTILA_HOST_|\/api\/hosts(?:\/|\b)/,
   ],
   ["Studio AX naming", /\bStudio\w*\b|\/studio\//i],
   ["Studio snapshot API", /\/api\/studio\/snapshot/i],
@@ -10,7 +10,7 @@ export const forbiddenArchitecture = [
   ["V7Adapter", /V7Adapter/],
   [
     "retired Project/Workstream product identifiers",
-    /\b(?:AxProject\w*|ProjectRole|ProjectMembership|ProjectInvitation|WorkspaceProjectGrant|Workstream\w*|projectId|project_id|workstreamId|workstream_id|CONCLAVE_WORKSTREAM_COORDINATOR)\b|\/api\/(?:projects|workstreams)(?:\/|\b)/,
+    /\b(?:AxProject\w*|ProjectRole|ProjectMembership|ProjectInvitation|WorkspaceProjectGrant|Workstream\w*|projectId|project_id|workstreamId|workstream_id|SYNTILA_WORKSTREAM_COORDINATOR)\b|\/api\/(?:projects|workstreams)(?:\/|\b)/,
   ],
   ["FirstPartyWorkerPackage", /FirstPartyWorkerPackage/],
   ["ConfiguredWorker identifier", /\bConfiguredWorker\b|\bconfiguredWorker\w*/],
@@ -35,12 +35,12 @@ export const forbiddenArchitecture = [
   ],
   [
     "repository registration architecture",
-    /LocalRepositoryRegistry|repositoriesFile|CONCLAVE_WORKSPACE_REPOSITORIES|--repositories|repository_mappings_json|path_mappings_json|repositoryMappings|pathMappings|space_repository|selected_paths|full_workspace/i,
+    /LocalRepositoryRegistry|repositoriesFile|SYNTILA_WORKSPACE_REPOSITORIES|--repositories|repository_mappings_json|path_mappings_json|repositoryMappings|pathMappings|space_repository|selected_paths|full_workspace/i,
   ],
   ["write-only Thread memberships", /thread_memberships/i],
   [
     "retired Workspace token pairing flow",
-    /workspace_pairing_intents|workspace-pairing-intents|workspace_enrollments|workspace-runtime\/enroll|\/enrollments|CONCLAVE_ENROLLMENT_TOKEN|WorkspacePairingIntent|handle\w*WorkspacePairingIntent|handle\w*WorkspaceEnrollment|conclave_pair_|conclave_enroll_|WorkspacePairing(?:Service|ErrorKind|Exception)|AxWorkspaceEnrollment|createWorkspaceEnrollment/i,
+    /workspace_pairing_intents|workspace-pairing-intents|workspace_enrollments|workspace-runtime\/enroll|\/enrollments|SYNTILA_ENROLLMENT_TOKEN|WorkspacePairingIntent|handle\w*WorkspacePairingIntent|handle\w*WorkspaceEnrollment|syntila_pair_|syntila_enroll_|WorkspacePairing(?:Service|ErrorKind|Exception)|AxWorkspaceEnrollment|createWorkspaceEnrollment/i,
   ],
   ["legacy runtime credential key reference", /credential_key_ref/i],
   ["retired checkout policy field", /require_checkout/i],
@@ -54,7 +54,7 @@ export const forbiddenArchitecture = [
   ],
   [
     "Profile Lab import in Workspace or AX",
-    /package:conclave_profile_lab|import\s+['"][^'"]*profile_lab|\/api\/admin\/workers\//i,
+    /package:syntila_profile_lab|import\s+['"][^'"]*profile_lab|\/api\/admin\/workers\//i,
   ],
   [
     "Profile Lab draft class under Workspace",
@@ -62,6 +62,6 @@ export const forbiddenArchitecture = [
   ],
   [
     "desktop application private key signing material",
-    /CONCLAVE_WORKSPACE_ED25519_SEED|Ed25519PrivateKey/,
+    /SYNTILA_WORKSPACE_ED25519_SEED|Ed25519PrivateKey/,
   ],
 ];

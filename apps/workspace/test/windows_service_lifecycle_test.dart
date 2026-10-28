@@ -3,19 +3,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/workspace_manager_ipc.dart';
+import 'package:syntila_workspace/workspace_manager_ipc.dart';
 
 void main() {
   test(
       'Windows compiled service IPC, duplicate lock, disconnect and restart preserve identity',
       () async {
-    final executable = Platform.environment['CONCLAVE_TEST_WINDOWS_SERVICE'];
+    final executable = Platform.environment['SYNTILA_TEST_WINDOWS_SERVICE'];
     if (executable == null) {
       markTestSkipped(
-          'Set CONCLAVE_TEST_WINDOWS_SERVICE to the compiled Windows service');
+          'Set SYNTILA_TEST_WINDOWS_SERVICE to the compiled Windows service');
       return;
     }
-    final root = await Directory.systemTemp.createTemp('conclave-lifecycle-');
+    final root = await Directory.systemTemp.createTemp('syntila-lifecycle-');
     final data = Directory('${root.path}/state');
     Process? service;
     WorkspaceManagerIpcClient? client;

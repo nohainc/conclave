@@ -132,8 +132,8 @@ function createHarness(options: { duplicate?: boolean } = {}) {
   } as unknown as DurableObjectNamespace;
   return {
     env: {
-      CONCLAVE_DB: db,
-      CONCLAVE_REALTIME_GATEWAY: gateway,
+      SYNTILA_DB: db,
+      SYNTILA_REALTIME_GATEWAY: gateway,
     } satisfies EventPublisherEnv,
     get insertCount() {
       return insertCount;
@@ -302,7 +302,7 @@ describe("Cloud event publisher", () => {
 
   it("returns safely when a subscriber is disconnected", async () => {
     const harness = createHarness();
-    const namespace = harness.env.CONCLAVE_REALTIME_GATEWAY as unknown as {
+    const namespace = harness.env.SYNTILA_REALTIME_GATEWAY as unknown as {
       getByName: () => { fetch: () => Promise<Response> };
     };
     let calls = 0;
@@ -362,7 +362,7 @@ describe("Cloud event publisher", () => {
     );
     const db = new SqliteD1(database);
     const publisher = new CloudEventPublisher({
-      CONCLAVE_DB: db as unknown as D1Database,
+      SYNTILA_DB: db as unknown as D1Database,
     });
     const input = {
       ...baseEvent,

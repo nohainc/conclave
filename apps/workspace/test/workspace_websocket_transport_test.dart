@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:conclave_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
 import 'package:test/test.dart';
 
 void main() {

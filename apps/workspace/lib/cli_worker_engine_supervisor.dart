@@ -1,4 +1,4 @@
-export 'package:conclave_cli_worker_runtime/conclave_cli_worker_runtime.dart'
+export 'package:syntila_cli_worker_runtime/syntila_cli_worker_runtime.dart'
     show
         CliWorkerEngineSupervisor,
         CliWorkerEngineProbeException,

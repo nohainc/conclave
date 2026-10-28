@@ -36,8 +36,8 @@ function fixture() {
     .run(created, created);
   const envFor = (userId: string) =>
     ({
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: db,
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: db,
       TEST_AUTHENTICATION: async () => ({
         userId,
         user: {

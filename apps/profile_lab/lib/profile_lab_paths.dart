@@ -19,7 +19,7 @@ class ProfileLabPaths {
   /// Application-managed Profile Lab data:
   /// `~/Library/Application Support/Conclave/Profile Lab/`
   ///
-  /// Local development builds use `Conclave Local` instead of `Conclave` so
+  /// Local development builds use `Syntila Local` instead of `Syntila` so
   /// drafts and settings never mix with the production app.
   Directory get applicationSupportDirectory => Directory(
         '$_home/Library/Application Support/'
@@ -34,7 +34,7 @@ class ProfileLabPaths {
 
   /// Repository that holds the Profile files. Profile Lab is an internal tool
   /// that reads Profile files from a checkout. Candidates, in order: the
-  /// `CONCLAVE_REPOSITORY` environment variable, the nearest ancestor of the
+  /// `SYNTILA_REPOSITORY` environment variable, the nearest ancestor of the
   /// current directory or of the running executable, and the checkout
   /// remembered from an earlier run (a release app started from Finder or
   /// `/Applications` has neither). A candidate counts only if it really holds
@@ -63,7 +63,7 @@ class ProfileLabPaths {
       FileSystemEntityType.directory;
 
   Directory? _findRepository(File remembered) {
-    final fromEnvironment = Platform.environment['CONCLAVE_REPOSITORY'];
+    final fromEnvironment = Platform.environment['SYNTILA_REPOSITORY'];
     if (fromEnvironment != null && fromEnvironment.isNotEmpty) {
       final dir = Directory(fromEnvironment);
       if (_holdsProfiles(dir)) return dir;
@@ -133,8 +133,8 @@ class ProfileLabPaths {
       );
 
   /// Bundle identifier and secure Keychain service namespace.
-  static const String bundleIdentifier = 'com.conclaveax.profile-lab';
-  static const String keychainService = 'com.conclaveax.profile-lab';
+  static const String bundleIdentifier = 'com.syntila.profile-lab';
+  static const String keychainService = 'com.syntila.profile-lab';
 
   /// Ensures all required application support directories exist with restrictive
   /// POSIX permissions (0700).

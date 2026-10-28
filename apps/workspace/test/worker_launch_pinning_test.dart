@@ -1,12 +1,12 @@
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart'
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart'
     show WorkerProfileSnapshotAdmission;
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/tool_profile_resolver.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/worker_launch_plan.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/tool_profile_resolver.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/worker_launch_plan.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
 import 'package:test/test.dart';
 
 import 'support/assignment_worker_fixture.dart';

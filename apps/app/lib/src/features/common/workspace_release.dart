@@ -1,9 +1,9 @@
 /// Latest static Workspace release until release metadata is served by Cloud.
-const conclaveWorkspaceLatestVersion = '1.0.3';
+const syntilaWorkspaceLatestVersion = '1.0.3';
 
 bool workspaceUpdateAvailable(String installedVersion) {
   final installed = _versionParts(installedVersion);
-  final latest = _versionParts(conclaveWorkspaceLatestVersion);
+  final latest = _versionParts(syntilaWorkspaceLatestVersion);
   if (installed == null || latest == null) return false;
   for (var index = 0; index < latest.length; index++) {
     final installedPart = index < installed.length ? installed[index] : 0;

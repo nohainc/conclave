@@ -1,6 +1,6 @@
 # ADR-011: ID-Based Thread Working Directories
 
-> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
+> **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `syntila-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
 
 **Status:** Accepted
 
@@ -212,7 +212,7 @@ Example:
   <space-id>/
     <thread-id>/
       .conclave-thread.json
-      conclave/
+      syntila/
       backend/
       notes/
 ~~~
@@ -228,9 +228,9 @@ Example:
 ~~~text
 <space-id>/
   <thread-a>/
-    conclave/
+    syntila/
   <thread-b>/
-    conclave/
+    syntila/
 ~~~
 
 They do not share mutable filesystem state.

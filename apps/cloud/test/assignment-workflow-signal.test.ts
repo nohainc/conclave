@@ -32,7 +32,7 @@ function workflowDouble(options: { failFirst?: number } = {}) {
 async function fixture(status: string, options: { failFirst?: number } = {}) {
   const double = workflowDouble(options);
   const f = await gatewayFixture(status, {
-    env: { CONCLAVE_RUN_WORKFLOW: double.binding },
+    env: { SYNTILA_RUN_WORKFLOW: double.binding },
   });
   f.sqlite
     .prepare("UPDATE runs SET workflow_instance_id = 'wf-1' WHERE id = 'RUN'")
@@ -48,8 +48,8 @@ async function fixture(status: string, options: { failFirst?: number } = {}) {
     .prepare("UPDATE worker_assignments SET updated_at = ? WHERE id = 'A1'")
     .run(sweepNow.toISOString());
   const env = {
-    CONCLAVE_DB: f.db as never,
-    CONCLAVE_RUN_WORKFLOW: double.binding,
+    SYNTILA_DB: f.db as never,
+    SYNTILA_RUN_WORKFLOW: double.binding,
   };
   const row = () =>
     f.sqlite
@@ -64,7 +64,7 @@ describe("assignment terminal workflow signal", () => {
   it("retains the durable outbox when the Workflow binding is temporarily absent", async () => {
     const { env, row, sent } = await fixture("completed");
     expect(
-      await signalAssignmentTerminal({ CONCLAVE_DB: env.CONCLAVE_DB }, "A1"),
+      await signalAssignmentTerminal({ SYNTILA_DB: env.SYNTILA_DB }, "A1"),
     ).toBe("failed");
     expect(row().at).toBeNull();
     expect(await sweepUnsignaledTerminals(env, { now: sweepNow })).toEqual({
@@ -79,7 +79,7 @@ describe("assignment terminal workflow signal", () => {
     const prepare = f.db.prepare.bind(f.db);
     const interrupted = {
       ...env,
-      CONCLAVE_DB: {
+      SYNTILA_DB: {
         prepare(sql: string) {
           if (sql.includes("SET workflow_signaled_at"))
             throw new Error("simulated restart before receipt");

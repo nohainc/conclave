@@ -1,6 +1,6 @@
 # Linux Workspace APT releases
 
-The headless install unit contains `workspace`, `conclave-workspace`, and
+The headless install unit contains `workspace`, `syntila-workspace`, and
 one canonical generic CLI Worker Engine. Provider CLIs are installed separately.
 There is no Flutter desktop bundle; the headless install unit is the only Linux artifact.
 
@@ -9,7 +9,7 @@ There is no Flutter desktop bundle; the headless install unit is the only Linux 
 The APT site is served by GitHub Pages at:
 
 ```text
-https://nohainc.github.io/conclave/
+https://nohainc.github.io/syntila/
 ```
 
 The signing-key fingerprint is:
@@ -20,7 +20,7 @@ The signing-key fingerprint is:
 
 This dedicated OpenPGP key was created on 2026-10-26 and expires on 2028-10-25.
 Its private backup and revocation certificate are outside the source checkout,
-under `~/.config/conclave/release-keys` on the provisioning Mac (directory 0700,
+under `~/.config/syntila/release-keys` on the provisioning Mac (directory 0700,
 private exports 0600). Keep an additional secured offline backup. Never commit
 these files or upload private material as a build artifact.
 
@@ -40,22 +40,22 @@ Node.js, Python 3 and dpkg (`brew install dpkg` on macOS). Supply the production
 public application-release trust roots, then:
 
 ```bash
-export CONCLAVE_RELEASE_TRUST_KEYS_JSON="$(gh variable get CONCLAVE_RELEASE_TRUST_KEYS_JSON --repo nohainc/conclave)"
+export SYNTILA_RELEASE_TRUST_KEYS_JSON="$(gh variable get SYNTILA_RELEASE_TRUST_KEYS_JSON --repo nohainc/syntila)"
 bash scripts/build-workspace-linux-headless.sh x64
 bash scripts/package-workspace-linux.sh x64
 bash scripts/build-workspace-linux-headless.sh arm64
 bash scripts/package-workspace-linux.sh arm64
 ```
 
-Outputs are under `dist/conclave-workspace`: `linux-<arch>`, headless
-`.tar.gz` bundles, and `deb/conclave-workspace_<version>_<amd64|arm64>.deb`.
-`CONCLAVE_WORKSPACE_VERSION` overrides the pubspec version at compile/package
+Outputs are under `dist/syntila-workspace`: `linux-<arch>`, headless
+`.tar.gz` bundles, and `deb/syntila-workspace_<version>_<amd64|arm64>.deb`.
+`SYNTILA_WORKSPACE_VERSION` overrides the pubspec version at compile/package
 time; use a new version for every release. Build-only target inputs are
-`CONCLAVE_BUILD_TARGET_OS=linux` and `CONCLAVE_BUILD_TARGET_ARCH=x64|arm64`.
+`SYNTILA_BUILD_TARGET_OS=linux` and `SYNTILA_BUILD_TARGET_ARCH=x64|arm64`.
 Target Engine artifacts live under `dist/cli-worker-engine` and do not replace
 native Workspace or Profile Lab assets. The canonical Engine script remains
 the sole source of Engine builds. Packages set the build-time
-`CONCLAVE_WORKSPACE_PACKAGE_MANAGER=apt` so the application updater cannot compete
+`SYNTILA_WORKSPACE_PACKAGE_MANAGER=apt` so the application updater cannot compete
 with APT. Never promote candidates containing CI fixture trust anchors.
 
 Linux builds write a versioned build manifest with hashes of all three
@@ -74,7 +74,7 @@ valid. No database migration is needed for this setup route.
 
 Production builds require the genuine Workspace application-release public
 roots even though APT manages this installation. The initial application key
-`conclave/workspace-2026-10` was provisioned independently of the APT signing key;
+`syntila/workspace-2026-10` was provisioned independently of the APT signing key;
 no fixture key is trusted by production packages. Existing configured application
 roots must be retained during later rotations, following the
 [release trust contract](../security/RELEASE_TRUST_AND_ROTATION.md).
@@ -112,11 +112,11 @@ Earlier local qualification is retained in
 
 | Scope | Name | Value |
 | --- | --- | --- |
-| Repository variable | `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | Production application-release public roots |
-| `workspace-linux-release` environment variable | `CONCLAVE_APT_SIGNING_FINGERPRINT` | Full OpenPGP signing fingerprint above |
-| `workspace-linux-release` environment secret | `CONCLAVE_APT_PRIVATE_KEY` | Armored signing private key for noninteractive GPG signing |
-| `workspace-linux-release` environment variable | `CONCLAVE_WORKSPACE_SIGNING_KEY_ID` | Initial independent application key ID: `workspace-2026-10` |
-| `workspace-linux-release` environment secret | `CONCLAVE_WORKSPACE_ED25519_SEED` | Application metadata key backup, separate from the APT key |
+| Repository variable | `SYNTILA_RELEASE_TRUST_KEYS_JSON` | Production application-release public roots |
+| `workspace-linux-release` environment variable | `SYNTILA_APT_SIGNING_FINGERPRINT` | Full OpenPGP signing fingerprint above |
+| `workspace-linux-release` environment secret | `SYNTILA_APT_PRIVATE_KEY` | Armored signing private key for noninteractive GPG signing |
+| `workspace-linux-release` environment variable | `SYNTILA_WORKSPACE_SIGNING_KEY_ID` | Initial independent application key ID: `workspace-2026-10` |
+| `workspace-linux-release` environment secret | `SYNTILA_WORKSPACE_ED25519_SEED` | Application metadata key backup, separate from the APT key |
 
 APT publishing uses only the OpenPGP secret. The application public root is a
 compile-time input; its private seed is not used to sign APT metadata. Private
@@ -139,7 +139,7 @@ Concurrent releases are serialized. Missing keys or roots fail closed.
 For example:
 
 ```bash
-gh workflow run release-linux.yml --repo nohainc/conclave --ref main -f version=1.0.4 -f publish=true
+gh workflow run release-linux.yml --repo nohainc/syntila --ref main -f version=1.0.4 -f publish=true
 ```
 
 A non-publish run retains candidates as workflow artifacts. It uses configured

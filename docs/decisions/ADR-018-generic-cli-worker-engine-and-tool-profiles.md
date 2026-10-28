@@ -104,7 +104,7 @@ workerTypeId = chatgpt
 The implementation is resolved separately:
 
 ~~~text
-engine = conclave-cli-worker
+engine = syntila-cli-worker
 profileDefinition = chatgpt-codex
 profileRelease = 9
 providerTool = codex
@@ -591,7 +591,7 @@ evidence are tracked in the [v8 implementation plan](../roadmaps/ARCHITECTURE_V8
 
 Production Workspaces continue to admit only signed Profiles. At the operator's
 explicit request, a non-release Workspace can opt into unsigned local drafts
-with `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`, provided its Cloud origin is
+with `SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY`, provided its Cloud origin is
 loopback. This bounded exception uses the same generic CLI Worker Engine,
 validates schema/catalog identity and compatibility, and pins each selected
 payload by digest in separate development storage. It does not manufacture

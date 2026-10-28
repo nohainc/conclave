@@ -63,7 +63,7 @@ const architectureProhibitions = [
   ["Interactive Connector", "interactive_connector: true"],
   [
     "Syntila-managed provider credentials",
-    "conclave_managed_provider_credentials: true",
+    "syntila_managed_provider_credentials: true",
   ],
   ["agent-managed runtime", "agent_runtime: true"],
   ["ConfiguredWorker product entity", "configured_worker_product_entity: true"],
@@ -127,15 +127,15 @@ if (existsSync("apps/host") || existsSync("packages/host-protocol")) {
   );
 }
 if (
-  !workspacePubspec.includes("name: conclave_workspace") ||
-  workspaceRuntimePackage.name !== "@conclave/workspace-runtime-protocol"
+  !workspacePubspec.includes("name: syntila_workspace") ||
+  workspaceRuntimePackage.name !== "@syntila/workspace-runtime-protocol"
 ) {
   failures.push(
     "Workspace application and runtime protocol packages must use Workspace names.",
   );
 }
 if (
-  !workspaceRegistration.includes("CONCLAVE_WORKSPACE_RUNTIME_ID") ||
+  !workspaceRegistration.includes("SYNTILA_WORKSPACE_RUNTIME_ID") ||
   !workspaceRegistration.includes("workspace-registration.json")
 ) {
   failures.push(
@@ -362,7 +362,7 @@ if (
   !deployCloud.includes("needs: require-ci") ||
   !deployCloud.includes("run: bash scripts/ci/require-ci-success.sh") ||
   !deployCloud.includes(
-    "run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api",
+    "run: flutter build web --release --dart-define=SYNTILA_API_URL=/api",
   ) ||
   !deployCloud.includes(
     "run: node scripts/production-workspace-gateway-smoke.mjs --schema-only",
@@ -420,7 +420,7 @@ if (
     "Cloud must verify generated Wrangler types without rewriting them.",
   );
 }
-if (!infraWrangler.includes('"name": "CONCLAVE_THREAD_COORDINATOR"')) {
+if (!infraWrangler.includes('"name": "SYNTILA_THREAD_COORDINATOR"')) {
   failures.push(
     "Production Wrangler configuration is missing the Thread coordinator binding.",
   );
@@ -439,17 +439,17 @@ if (
   );
 }
 for (const binding of [
-  "CONCLAVE_WORKSPACE_GATEWAY",
-  "CONCLAVE_REALTIME_GATEWAY",
-  "CONCLAVE_THREAD_COORDINATOR",
-  "CONCLAVE_RUN_WORKFLOW",
+  "SYNTILA_WORKSPACE_GATEWAY",
+  "SYNTILA_REALTIME_GATEWAY",
+  "SYNTILA_THREAD_COORDINATOR",
+  "SYNTILA_RUN_WORKFLOW",
 ]) {
   if (!wranglerTypes.includes(binding)) {
     failures.push(`Generated Wrangler types are missing ${binding}.`);
   }
 }
 if (
-  /CONCLAVE_PLUGIN_PUBLISHER_EMAIL|CONCLAVE_FORGE_EXECUTION|CONCLAVE_FORGE_CALLBACK_TOKEN/.test(
+  /SYNTILA_PLUGIN_PUBLISHER_EMAIL|SYNTILA_FORGE_EXECUTION|SYNTILA_FORGE_CALLBACK_TOKEN/.test(
     `${infraWrangler}\n${cloudWrangler}`,
   )
 ) {
@@ -458,7 +458,7 @@ if (
   );
 }
 if (
-  /forge-execution\.wrangler\.jsonc|forge-execution|CONCLAVE_FORGE_/.test(
+  /forge-execution\.wrangler\.jsonc|forge-execution|SYNTILA_FORGE_/.test(
     deployCloud,
   )
 ) {
@@ -477,7 +477,7 @@ if (
 }
 if (
   /packages\/(?:orchestration|persistence|worker-manifest)\//.test(lockfile) ||
-  /@conclave\/(?:orchestration|persistence|worker-manifest)/.test(
+  /@syntila\/(?:orchestration|persistence|worker-manifest)/.test(
     `${JSON.stringify(packageJson)}\n${JSON.stringify(cloudPackage)}\n${lockfile}`,
   )
 ) {
@@ -502,7 +502,7 @@ const desktopAppLibRoots = ["apps/workspace/lib", "apps/app/lib"].filter(
   existsSync,
 );
 const profileLabOrDraftPattern =
-  /conclave_profile_lab|profile_lab|DraftProfileStore|LocalDraftProfileCandidate|DraftToolProfile|updateDraftToolProfilePayload|publishDraftToolProfileRelease|\/api\/admin\/workers\//;
+  /syntila_profile_lab|profile_lab|DraftProfileStore|LocalDraftProfileCandidate|DraftToolProfile|updateDraftToolProfilePayload|publishDraftToolProfileRelease|\/api\/admin\/workers\//;
 
 for (const root of desktopAppLibRoots) {
   for (const path of sourceFiles(root)) {
@@ -532,7 +532,7 @@ for (const [name, pubspec] of [
   ["AX App", appPubspecRaw],
 ]) {
   const dependenciesSection = pubspec.split("dev_dependencies:")[0] ?? "";
-  if (dependenciesSection.includes("conclave_profile_lab")) {
+  if (dependenciesSection.includes("syntila_profile_lab")) {
     failures.push(
       `${name} pubspec.yaml includes Profile Lab as a direct runtime dependency.`,
     );
@@ -561,7 +561,7 @@ const allDesktopLibRoots = [
   "apps/profile_lab/lib",
 ].filter(existsSync);
 const privateKeySigningPattern =
-  /CONCLAVE_WORKSPACE_ED25519_SEED|Ed25519PrivateKey|createPrivateKey\s*\(/;
+  /SYNTILA_WORKSPACE_ED25519_SEED|Ed25519PrivateKey|createPrivateKey\s*\(/;
 
 for (const root of allDesktopLibRoots) {
   for (const path of sourceFiles(root)) {
@@ -582,7 +582,7 @@ for (const root of allDesktopLibRoots) {
 // 4. Prevent direct D1 access from Profile Lab
 const profileLabLibFiles = Array.from(sourceFiles("apps/profile_lab/lib"));
 const directD1Pattern =
-  /\bD1Database\b|\bCONCLAVE_DB\b|\bSELECT\s+[a-zA-Z0-9_*\s,.()`"]+\s+FROM\s+[a-zA-Z0-9_`"]+|\bINSERT\s+INTO\s+[a-zA-Z0-9_`"]+|\bUPDATE\s+[a-zA-Z0-9_`"]+\s+SET\b|\bDELETE\s+FROM\s+[a-zA-Z0-9_`"]+/;
+  /\bD1Database\b|\bSYNTILA_DB\b|\bSELECT\s+[a-zA-Z0-9_*\s,.()`"]+\s+FROM\s+[a-zA-Z0-9_`"]+|\bINSERT\s+INTO\s+[a-zA-Z0-9_`"]+|\bUPDATE\s+[a-zA-Z0-9_`"]+\s+SET\b|\bDELETE\s+FROM\s+[a-zA-Z0-9_`"]+/;
 
 for (const path of profileLabLibFiles) {
   const source = readFileSync(path, "utf8");
@@ -675,7 +675,7 @@ for (const file of [
 ]) {
   const source = readRequired(file);
   if (
-    /\[['"](?:worker_id|reasoning_effort)['"]\]|EngineSessionStore|nativeSessionId|Process\.start|conclave_cli_worker/.test(
+    /\[['"](?:worker_id|reasoning_effort)['"]\]|EngineSessionStore|nativeSessionId|Process\.start|syntila_cli_worker/.test(
       source,
     )
   ) {

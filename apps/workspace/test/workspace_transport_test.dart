@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace_transport.dart';
+import 'package:syntila_workspace/workspace_transport.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -43,7 +43,7 @@ void main() {
                   ? const []
                   : [
                       {
-                        'contract': 'conclave.desktop-auth-transport',
+                        'contract': 'syntila.desktop-auth-transport',
                         'version': '1.0',
                         'eventId': 'downstream-1',
                         'occurredAt': DateTime.now().toUtc().toIso8601String(),
@@ -73,7 +73,7 @@ void main() {
     final inbound =
         transport.messages.first.timeout(const Duration(seconds: 2));
     transport.send(jsonEncode({
-      'protocol': 'conclave.workspace-runtime',
+      'protocol': 'syntila.workspace-runtime',
       'protocolVersion': '5.0',
       'messageId': 'hello-1',
       'type': 'workspace.hello',

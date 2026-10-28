@@ -1,5 +1,5 @@
-import type { SecurityContext } from "@conclave/security";
-import { extractBearerToken } from "@conclave/security";
+import type { SecurityContext } from "@syntila/security";
+import { extractBearerToken } from "@syntila/security";
 import { hasProfileLabPermission } from "./profile-lab-policy.js";
 import {
   getCurrentWorkerProfile,
@@ -111,7 +111,7 @@ export async function handleListV9WorkerProfiles(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   await authorizeToolProfileAdmin(request, env, ctx);
-  return json(await listWorkerProfiles(env.CONCLAVE_DB));
+  return json(await listWorkerProfiles(env.SYNTILA_DB));
 }
 
 export async function handleGetV9WorkerProfile(
@@ -227,7 +227,7 @@ async function requireAuthorizedWorkspaceRuntime(
     throw new HttpError(401, "Workspace runtime credentials are required");
   }
   const runtime = await new WorkspaceRuntimeAuthenticator(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
   ).authenticateRuntime(runtimeId, credential);
   if (!runtime) {
     throw new HttpError(401, "Workspace runtime credential is invalid");
@@ -255,7 +255,7 @@ export async function handleProfileLabAccess(
 ): Promise<Response> {
   const actor = await securityContext(request, env, ctx);
   const profilesAdmin = await hasProfileLabPermission(env, actor);
-  const issueSupport = (env.CONCLAVE_ISSUE_SUPPORT_USER_IDS ?? "")
+  const issueSupport = (env.SYNTILA_ISSUE_SUPPORT_USER_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean)

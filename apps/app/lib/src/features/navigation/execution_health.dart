@@ -24,11 +24,11 @@ class ExecutionStatusPopover extends StatelessWidget {
   Widget _body(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final borderColor =
-        isDark ? ConclaveBrand.darkLine : ConclaveBrand.lightLine;
-    final cardBg = isDark ? ConclaveBrand.darkPaper : ConclaveBrand.lightPaper;
-    final inkColor = isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk;
+        isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
+    final cardBg = isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper;
+    final inkColor = isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk;
     final mutedInk =
-        isDark ? ConclaveBrand.darkInkMuted : ConclaveBrand.lightInkMuted;
+        isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
 
     final workspaces = shellContext.workspaces;
     final onlineCount = shellContext.onlineWorkspaceCount;
@@ -47,12 +47,12 @@ class ExecutionStatusPopover extends StatelessWidget {
           width: 380,
           margin: const EdgeInsets.only(top: 52, right: 12),
           decoration: BoxDecoration(
-            color: ConclaveMenuStyle.background(isDark),
+            color: SyntilaMenuStyle.background(isDark),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: ConclaveColors.navigationBorder(isDark)),
+            border: Border.all(color: SyntilaColors.navigationBorder(isDark)),
             boxShadow: [
               BoxShadow(
-                color: ConclaveMenuStyle.shadow(isDark),
+                color: SyntilaMenuStyle.shadow(isDark),
                 blurRadius: 16,
                 offset: const Offset(0, 8),
               ),
@@ -70,7 +70,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                     const Icon(
                       Icons.bolt_rounded,
                       size: 18,
-                      color: ConclaveBrand.accent,
+                      color: SyntilaBrand.accent,
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -144,11 +144,11 @@ class ExecutionStatusPopover extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? ConclaveBrand.warningWashDark
-                        : ConclaveBrand.warningWash,
+                        ? SyntilaBrand.warningWashDark
+                        : SyntilaBrand.warningWash,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: ConclaveBrand.warning.withValues(alpha: 0.4),
+                      color: SyntilaBrand.warning.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Row(
@@ -156,7 +156,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                       const Icon(
                         Icons.sync_problem_rounded,
                         size: 15,
-                        color: ConclaveBrand.warning,
+                        color: SyntilaBrand.warning,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -165,7 +165,7 @@ class ExecutionStatusPopover extends StatelessWidget {
                               'Live connection degraded. Reconnecting...',
                           style: const TextStyle(
                             fontSize: 12,
-                            color: ConclaveBrand.warning,
+                            color: SyntilaBrand.warning,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -246,13 +246,13 @@ class ExecutionStatusPopover extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w600,
-                          color: ConclaveBrand.accent,
+                          color: SyntilaBrand.accent,
                         ),
                       ),
                       Icon(
                         Icons.arrow_forward_rounded,
                         size: 15,
-                        color: ConclaveBrand.accent,
+                        color: SyntilaBrand.accent,
                       ),
                     ],
                   ),
@@ -278,12 +278,12 @@ class ExecutionStatusPopover extends StatelessWidget {
     final isDegraded =
         statusLower == 'degraded' || statusLower == 'reconnecting';
     final dotColor = isOnline
-        ? ConclaveBrand.success
+        ? SyntilaBrand.success
         : isDegraded
-            ? ConclaveBrand.warning
+            ? SyntilaBrand.warning
             : isDark
                 ? Colors.white38
-                : ConclaveBrand.lightInkMuted;
+                : SyntilaBrand.lightInkMuted;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -324,9 +324,9 @@ class ExecutionStatusPopover extends StatelessWidget {
                     fontSize: 11.5,
                     fontWeight: FontWeight.w500,
                     color: isOnline
-                        ? ConclaveBrand.success
+                        ? SyntilaBrand.success
                         : isDegraded
-                            ? ConclaveBrand.warning
+                            ? SyntilaBrand.warning
                             : mutedInk,
                   ),
                 ),

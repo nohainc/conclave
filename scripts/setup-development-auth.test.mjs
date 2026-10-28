@@ -14,7 +14,7 @@ import { setupDevelopmentAuth } from "./setup-development-auth.mjs";
 
 const roots = [];
 function temporaryRoot() {
-  const root = mkdtempSync(join(tmpdir(), "conclave-local-auth-"));
+  const root = mkdtempSync(join(tmpdir(), "syntila-local-auth-"));
   roots.push(root);
   mkdirSync(join(root, "apps/cloud"), { recursive: true });
   return root;

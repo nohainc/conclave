@@ -7,24 +7,24 @@ import { handleCreateSpaceInvitation } from "../src/routes/spaces.js";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 
 describe("Invitation Email Delivery", () => {
-  it("resolves app URL from CONCLAVE_APP_URL, BETTER_AUTH_URL, or request URL", () => {
+  it("resolves app URL from SYNTILA_APP_URL, BETTER_AUTH_URL, or request URL", () => {
     const req = new Request(
-      "https://conclave.internal/api/spaces/proj-1/invitations",
+      "https://syntila.internal/api/spaces/proj-1/invitations",
     );
     expect(
       resolveAppUrl(req, {
-        CONCLAVE_APP_URL: "https://app.conclave.dev/",
+        SYNTILA_APP_URL: "https://app.syntila.dev/",
       } as never),
-    ).toBe("https://app.conclave.dev");
+    ).toBe("https://app.syntila.dev");
     expect(
       resolveAppUrl(req, {
-        BETTER_AUTH_URL: "https://auth.conclave.dev/",
+        BETTER_AUTH_URL: "https://auth.syntila.dev/",
       } as never),
-    ).toBe("https://auth.conclave.dev");
-    expect(resolveAppUrl(req, {} as never)).toBe("https://conclave.internal");
+    ).toBe("https://auth.syntila.dev");
+    expect(resolveAppUrl(req, {} as never)).toBe("https://syntila.internal");
   });
 
-  it("sends formatted email via CONCLAVE_EMAIL binding", async () => {
+  it("sends formatted email via SYNTILA_EMAIL binding", async () => {
     const sentEmails: Array<{
       to: string;
       from: { email: string; name: string };
@@ -40,8 +40,8 @@ describe("Invitation Email Delivery", () => {
     };
 
     const env = {
-      CONCLAVE_EMAIL: mockEmail,
-      CONCLAVE_EMAIL_FROM: "invitations@conclaveax.com",
+      SYNTILA_EMAIL: mockEmail,
+      SYNTILA_EMAIL_FROM: "invitations@conclaveax.com",
     };
 
     const ok = await sendSpaceInvitationEmail(env as never, {
@@ -49,7 +49,7 @@ describe("Invitation Email Delivery", () => {
       inviterName: "Vitalii Noha",
       spaceName: "Syntila Development",
       role: "collaborator",
-      appUrl: "https://app.conclave.dev/?invitation=pinv-123",
+      appUrl: "https://app.syntila.dev/?invitation=pinv-123",
     });
 
     expect(ok).toBe(true);
@@ -67,7 +67,7 @@ describe("Invitation Email Delivery", () => {
       'Vitalii Noha invited you to join "Syntila Development" as a collaborator on Syntila.',
     );
     expect(sent.text).toContain(
-      "https://app.conclave.dev/?invitation=pinv-123",
+      "https://app.syntila.dev/?invitation=pinv-123",
     );
     expect(sent.text).toContain(
       "Sign in with ulikossnokia@gmail.com to accept.",
@@ -75,7 +75,7 @@ describe("Invitation Email Delivery", () => {
     expect(sent.html).toContain("<strong>Vitalii Noha</strong>");
     expect(sent.html).toContain("<strong>Syntila Development</strong>");
     expect(sent.html).toContain(
-      'href="https://app.conclave.dev/?invitation=pinv-123"',
+      'href="https://app.syntila.dev/?invitation=pinv-123"',
     );
   });
 
@@ -85,7 +85,7 @@ describe("Invitation Email Delivery", () => {
     };
 
     const env = {
-      CONCLAVE_EMAIL: mockEmail,
+      SYNTILA_EMAIL: mockEmail,
     };
 
     await sendSpaceInvitationEmail(env as never, {
@@ -93,7 +93,7 @@ describe("Invitation Email Delivery", () => {
       inviterName: "<script>alert('xss')</script>",
       spaceName: "Space <img src=x onerror=alert(1)>",
       role: "viewer",
-      appUrl: "https://app.conclave.dev/?invitation=pinv-xss",
+      appUrl: "https://app.syntila.dev/?invitation=pinv-xss",
     });
 
     expect(mockEmail.send).not.toHaveBeenCalled();
@@ -102,13 +102,13 @@ describe("Invitation Email Delivery", () => {
   it("returns false when production delivery is unavailable", async () => {
     await expect(
       sendSpaceInvitationEmail(
-        { CONCLAVE_ENVIRONMENT: "production" } as never,
+        { SYNTILA_ENVIRONMENT: "production" } as never,
         {
           recipientEmail: "person@example.com",
           inviterName: "Vitalii Noha",
           spaceName: "Syntila",
           role: "collaborator",
-          appUrl: "https://app.conclave.dev",
+          appUrl: "https://app.syntila.dev",
         },
       ),
     ).resolves.toBe(false);
@@ -120,13 +120,13 @@ describe("Invitation Email Delivery", () => {
       .mockRejectedValueOnce({ code: "E_SENDER_NOT_VERIFIED" })
       .mockResolvedValueOnce({ messageId: "message-2" });
     const ok = await sendSpaceInvitationEmail(
-      { CONCLAVE_EMAIL: { send } } as never,
+      { SYNTILA_EMAIL: { send } } as never,
       {
         recipientEmail: "person@example.com",
         inviterName: "Vitalii Noha",
         spaceName: "Syntila",
         role: "collaborator",
-        appUrl: "https://app.conclave.dev",
+        appUrl: "https://app.syntila.dev",
       },
     );
 
@@ -139,14 +139,14 @@ describe("Invitation Email Delivery", () => {
 
   it("does not expose raw provider details in delivery logs", async () => {
     const error = new Error(
-      "token=reset-secret https://app.conclave.test/reset?token=secret body=private message",
+      "token=reset-secret https://app.syntila.test/reset?token=secret body=private message",
     );
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       await expect(
         sendSpaceInvitationEmail(
           {
-            CONCLAVE_EMAIL: {
+            SYNTILA_EMAIL: {
               send: vi.fn().mockRejectedValue(error),
             },
           } as never,
@@ -155,13 +155,13 @@ describe("Invitation Email Delivery", () => {
             inviterName: "Vitalii Noha",
             spaceName: "Syntila",
             role: "collaborator",
-            appUrl: "https://app.conclave.dev",
+            appUrl: "https://app.syntila.dev",
           },
         ),
       ).resolves.toBe(false);
       const output = log.mock.calls.flat().map(String).join(" ");
       expect(output).not.toContain("reset-secret");
-      expect(output).not.toContain("https://app.conclave.test/reset");
+      expect(output).not.toContain("https://app.syntila.test/reset");
       expect(output).not.toContain("private message");
     } finally {
       log.mockRestore();
@@ -183,10 +183,10 @@ describe("Invitation Email Delivery", () => {
 
     const sentEmails: unknown[] = [];
     const env = {
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: db,
-      CONCLAVE_APP_URL: "https://app.conclave.dev",
-      CONCLAVE_EMAIL: {
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: db,
+      SYNTILA_APP_URL: "https://app.syntila.dev",
+      SYNTILA_EMAIL: {
         send: vi.fn(async (msg: unknown) => {
           sentEmails.push(msg);
         }),
@@ -207,7 +207,7 @@ describe("Invitation Email Delivery", () => {
     };
 
     const req = new Request(
-      "https://conclave.internal/api/spaces/proj-1/invitations",
+      "https://syntila.internal/api/spaces/proj-1/invitations",
       {
         method: "POST",
         headers: {
@@ -228,7 +228,7 @@ describe("Invitation Email Delivery", () => {
       to: "ulikossnokia@gmail.com",
       subject: "Vitalii Noha invited you to Syntila Development",
       from: {
-        email: "conclave@conclaveax.com",
+        email: "syntila@conclaveax.com",
         name: "Syntila",
       },
     });
@@ -248,10 +248,10 @@ describe("Invitation Email Delivery", () => {
     `);
 
     const env = {
-      CONCLAVE_ENVIRONMENT: "development",
-      CONCLAVE_DB: db,
-      CONCLAVE_APP_URL: "https://app.conclave.dev",
-      CONCLAVE_EMAIL: {
+      SYNTILA_ENVIRONMENT: "development",
+      SYNTILA_DB: db,
+      SYNTILA_APP_URL: "https://app.syntila.dev",
+      SYNTILA_EMAIL: {
         send: vi.fn().mockRejectedValue({ code: "E_RECIPIENT_NOT_ALLOWED" }),
       },
       TEST_AUTHENTICATION: async () => ({
@@ -270,7 +270,7 @@ describe("Invitation Email Delivery", () => {
     };
 
     const req = new Request(
-      "https://conclave.internal/api/spaces/proj-1/invitations",
+      "https://syntila.internal/api/spaces/proj-1/invitations",
       {
         method: "POST",
         headers: {

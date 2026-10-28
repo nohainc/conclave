@@ -49,7 +49,7 @@ runtime.
 
 Profile avatars are user-owned profile data. AX uploads the selected image to
 the authenticated Cloud profile endpoint; Cloud stores the private object in
-the existing `CONCLAVE_ARTIFACTS` R2 bucket and keeps only an `r2://` reference
+the existing `SYNTILA_ARTIFACTS` R2 bucket and keeps only an `r2://` reference
 in `users.avatar_url`. Avatar reads are authenticated and limited to the owner
 and established People relationships, so the R2 object is never exposed as a
 public bucket URL. Profile names use the authenticated Better Auth
@@ -115,7 +115,7 @@ latter speaks only the Workspace Runtime Protocol with Syntila Workspace.
 
 **Technology**
 - Dart (no Flutter);
-- headless background service and management CLI (`conclave-workspace`);
+- headless background service and management CLI (`syntila-workspace`);
 - macOS, Linux and Windows.
 
 **Targets**
@@ -148,7 +148,7 @@ Thread policy determines how that capacity is used.
 
 Syntila Workspace is background-first. Human CLI authentication is
 distinct from Workspace runtime participation and from Worker/provider
-credentials. Signing in (`conclave-workspace login`) establishes management identity; an explicit **Connect
+credentials. Signing in (`syntila-workspace login`) establishes management identity; an explicit **Connect
 Workspace** action (`connect`) registers/recovers runtime participation. A connected
 Workspace may auto-start/reconnect in the background after OS login using its
 runtime credential even when the human management session later requires
@@ -282,4 +282,4 @@ express them.
 - publish the next current Profile revision through Cloud;
 - manage release lifecycle promotion (`Testing` → `Beta` → `Stable`), rollback, and revocation.
 
-Syntila Profile Lab is strictly separated from Syntila Workspace and Syntila. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Space Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).
+Syntila Profile Lab is strictly separated from Syntila Workspace and Syntila. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Space Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-syntila-profile-lab.md).

@@ -3,7 +3,7 @@ import {
   type EventPublisherEnv,
 } from "./event-publisher.js";
 
-import { COLLABORATION_REALTIME_EVENT_TYPES } from "@conclave/protocol";
+import { COLLABORATION_REALTIME_EVENT_TYPES } from "@syntila/protocol";
 export type CollaborationEventType =
   (typeof COLLABORATION_REALTIME_EVENT_TYPES)[number];
 

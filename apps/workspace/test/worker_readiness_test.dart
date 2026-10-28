@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:test/test.dart';
-import 'package:conclave_workspace/local_worker_registry.dart';
-import 'package:conclave_workspace/platform_runtime.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
-import 'package:conclave_workspace/worker_check_progress.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart'
+import 'package:syntila_workspace/local_worker_registry.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/worker_check_progress.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart'
     show ProbeCheck, ProbeCheckStatus;
 
 import 'support/logical_worker_catalog_fixture.dart';

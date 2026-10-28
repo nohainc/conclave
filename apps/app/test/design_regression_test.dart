@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/brand.dart';
-import 'package:conclave_app/src/navigation/ax_navigation.dart';
-import 'package:conclave_app/src/ax/ax_models.dart';
-import 'package:conclave_app/src/features/navigation/app_sidebar.dart';
-import 'package:conclave_app/src/features/navigation/ax_shell_context.dart';
-import 'package:conclave_app/src/features/common/conclave_code_block.dart';
-import 'package:conclave_app/src/features/common/conclave_markdown_body.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
-import 'package:conclave_app/src/features/workspace/workspaces_page.dart';
+import 'package:syntila_app/src/brand.dart';
+import 'package:syntila_app/src/navigation/ax_navigation.dart';
+import 'package:syntila_app/src/ax/ax_models.dart';
+import 'package:syntila_app/src/features/navigation/app_sidebar.dart';
+import 'package:syntila_app/src/features/navigation/ax_shell_context.dart';
+import 'package:syntila_app/src/features/common/syntila_code_block.dart';
+import 'package:syntila_app/src/features/common/syntila_markdown_body.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/features/workspace/workspaces_page.dart';
 
 import 'ax_fixture_data.dart';
 
@@ -22,14 +22,14 @@ void main() {
         (WidgetTester tester) async {
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             appBar: AppBar(
               title: Row(
                 children: [
-                  ConclaveBrand.logoMark(size: 28),
+                  SyntilaBrand.logoMark(size: 28),
                   const SizedBox(width: 10),
-                  const Text('Syntila', style: ConclaveTypography.wordmark),
+                  const Text('Syntila', style: SyntilaTypography.wordmark),
                 ],
               ),
             ),
@@ -40,7 +40,7 @@ void main() {
 
       expect(find.text('Syntila'), findsOneWidget);
       final textWidget = tester.widget<Text>(find.text('Syntila'));
-      expect(textWidget.style?.fontSize, ConclaveTypography.wordmark.fontSize);
+      expect(textWidget.style?.fontSize, SyntilaTypography.wordmark.fontSize);
       expect(textWidget.style?.fontWeight, FontWeight.w700);
       expect(textWidget.style?.letterSpacing, -0.32);
 
@@ -78,7 +78,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AppSidebar(
               shellContext: shellContext,
@@ -133,7 +133,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: AppSidebar(
               shellContext: shellContext,
@@ -158,13 +158,13 @@ void main() {
             .first,
       );
       final profileDecoration = profileContainer.decoration as BoxDecoration?;
-      expect(profileDecoration?.color, ConclaveColors.navigationSelected,
+      expect(profileDecoration?.color, SyntilaColors.navigationSelected,
           reason:
-              'Selected navigation item must highlight with ConclaveColors.navigationSelected');
+              'Selected navigation item must highlight with SyntilaColors.navigationSelected');
 
       final profileText = tester.widget<Text>(find.text('Vitalii Noha'));
       expect(profileText.style?.fontWeight, FontWeight.w600);
-      expect(profileText.style?.color, ConclaveColors.navigationTextDark);
+      expect(profileText.style?.color, SyntilaColors.navigationTextDark);
     });
 
     // 3. Status Badges & Semantic Tokens
@@ -172,37 +172,37 @@ void main() {
         'status badges use semantic tokens rather than hardcoded ad-hoc hex values',
         (WidgetTester tester) async {
       // Test semantic status colors defined in design tokens
-      expect(ConclaveBrand.success, ConclaveColors.success);
-      expect(ConclaveBrand.warning, ConclaveColors.warning);
-      expect(ConclaveBrand.error, ConclaveColors.error);
-      expect(ConclaveBrand.info, ConclaveColors.info);
-      expect(ConclaveBrand.neutral, ConclaveColors.neutral);
+      expect(SyntilaBrand.success, SyntilaColors.success);
+      expect(SyntilaBrand.warning, SyntilaColors.warning);
+      expect(SyntilaBrand.error, SyntilaColors.error);
+      expect(SyntilaBrand.info, SyntilaColors.info);
+      expect(SyntilaBrand.neutral, SyntilaColors.neutral);
 
       // Verify tone helper mapping
-      expect(ExecutionStatusTone.usable.color(true), ConclaveBrand.success);
-      expect(ExecutionStatusTone.degraded.color(true), ConclaveBrand.warning);
-      expect(ExecutionStatusTone.failed.color(true), ConclaveBrand.error);
+      expect(ExecutionStatusTone.usable.color(true), SyntilaBrand.success);
+      expect(ExecutionStatusTone.degraded.color(true), SyntilaBrand.warning);
+      expect(ExecutionStatusTone.failed.color(true), SyntilaBrand.error);
 
       // Test rendering a status badge widget
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: ConclaveBrand.success.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(ConclaveRadius.sm),
+                  color: SyntilaBrand.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(SyntilaRadius.sm),
                   border: Border.all(
-                      color: ConclaveBrand.success.withValues(alpha: 0.3)),
+                      color: SyntilaBrand.success.withValues(alpha: 0.3)),
                 ),
                 child: const Text(
                   'Ready',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: ConclaveBrand.success,
+                    color: SyntilaBrand.success,
                   ),
                 ),
               ),
@@ -214,7 +214,7 @@ void main() {
 
       expect(find.text('Ready'), findsOneWidget);
       final textWidget = tester.widget<Text>(find.text('Ready'));
-      expect(textWidget.style?.color, ConclaveBrand.success);
+      expect(textWidget.style?.color, SyntilaBrand.success);
       expect(textWidget.style?.fontWeight, FontWeight.w600);
     });
 
@@ -227,7 +227,7 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: Column(
               children: [
@@ -241,7 +241,7 @@ void main() {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: ConclaveBrand.error,
+                    backgroundColor: SyntilaBrand.error,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: () => dangerClicked = true,
@@ -278,7 +278,7 @@ void main() {
 
     // 5. Markdown Rendering
     testWidgets(
-        'ConclaveMarkdownBody renders headings, body, and inline code with theme tokens',
+        'SyntilaMarkdownBody renders headings, body, and inline code with theme tokens',
         (WidgetTester tester) async {
       const markdownContent = '''
 # Heading 1
@@ -295,10 +295,10 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: const Scaffold(
             body: SingleChildScrollView(
-              child: ConclaveMarkdownBody(data: markdownContent),
+              child: SyntilaMarkdownBody(data: markdownContent),
             ),
           ),
         ),
@@ -317,7 +317,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
     // 6. Code Block
     testWidgets(
-        'ConclaveCodeBlock renders syntax container, monospace font, and copy button',
+        'SyntilaCodeBlock renders syntax container, monospace font, and copy button',
         (WidgetTester tester) async {
       String? copiedText;
       tester.binding.defaultBinaryMessenger
@@ -330,13 +330,13 @@ This is standard body paragraph text with **bold** and `inline_code`.
       addTearDown(() => tester.binding.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, null));
 
-      const snippet = 'const apiKey = "conclave-v8";\nconsole.log(apiKey);';
+      const snippet = 'const apiKey = "syntila-v8";\nconsole.log(apiKey);';
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: const Scaffold(
-            body: ConclaveCodeBlock(
+            body: SyntilaCodeBlock(
               code: snippet,
               language: 'javascript',
             ),
@@ -347,7 +347,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
       expect(find.text('javascript'), findsOneWidget);
       expect(
-          find.textContaining('const apiKey = "conclave-v8";'), findsOneWidget);
+          find.textContaining('const apiKey = "syntila-v8";'), findsOneWidget);
       expect(find.byTooltip('Copy code'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Copy code'));
@@ -366,7 +366,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: Scaffold(
             body: ThreadPage(
               space: const AxSpace(
@@ -408,7 +408,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
 
       await tester.pumpWidget(
         MaterialApp(
-          theme: ConclaveBrand.darkTheme(),
+          theme: SyntilaBrand.darkTheme(),
           home: const Scaffold(
             body: WorkspacesPage(
               workspaces: [
@@ -456,14 +456,14 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpWidget(
         StatefulBuilder(
           builder: (context, setState) => MaterialApp(
-            theme: ConclaveBrand.lightTheme(),
-            darkTheme: ConclaveBrand.darkTheme(),
+            theme: SyntilaBrand.lightTheme(),
+            darkTheme: SyntilaBrand.darkTheme(),
             themeMode: currentMode,
             home: Scaffold(
               body: Column(
                 children: [
-                  ConclaveBrand.logoMark(size: 32),
-                  const Text('Syntila', style: ConclaveTypography.wordmark),
+                  SyntilaBrand.logoMark(size: 32),
+                  const Text('Syntila', style: SyntilaTypography.wordmark),
                   ElevatedButton(
                     onPressed: () {
                       setState(() {

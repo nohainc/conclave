@@ -1,16 +1,16 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 import 'support/assignment_worker_fixture.dart';
 
 void main() {
   test('parallel same-repository Threads remain isolated', () async {
-    final root = await Directory.systemTemp.createTemp('conclave-parallel-');
+    final root = await Directory.systemTemp.createTemp('syntila-parallel-');
     addTearDown(() => root.delete(recursive: true));
     final lifecycle = ThreadDirectoryLifecycle(
       pathResolver: ThreadPathResolver(root),
@@ -57,9 +57,9 @@ void main() {
     expect(scopeB.workingDirectory.path, endsWith('thread-b'));
 
     final repoA = Directory(
-        '${scopeA.workingDirectory.path}${Platform.pathSeparator}conclave');
+        '${scopeA.workingDirectory.path}${Platform.pathSeparator}syntila');
     final repoB = Directory(
-        '${scopeB.workingDirectory.path}${Platform.pathSeparator}conclave');
+        '${scopeB.workingDirectory.path}${Platform.pathSeparator}syntila');
     await repoA.create(recursive: true);
     await repoB.create(recursive: true);
     await _initializeRepository(repoA, 'feature-a');
@@ -76,9 +76,9 @@ void main() {
 import 'dart:io';
 Future<void> main(List<String> args) async {
   final identity = args.single;
-  File('conclave/worker.txt').writeAsStringSync(identity);
+  File('syntila/worker.txt').writeAsStringSync(identity);
   await Future<void>.delayed(const Duration(milliseconds: 250));
-  File('conclave/finished.txt').writeAsStringSync(identity);
+  File('syntila/finished.txt').writeAsStringSync(identity);
 }
 ''');
 

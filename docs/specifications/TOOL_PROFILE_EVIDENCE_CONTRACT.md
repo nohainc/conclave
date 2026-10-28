@@ -1,7 +1,7 @@
 # Tool Profile Evidence-Bound Promotion Contract
 
 **Status:** Canonical Architecture v8 Promotion & Evidence Specification  
-**Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-conclave-profile-lab.md)  
+**Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-syntila-profile-lab.md)  
 **Lifecycle Contract:** [Tool Profile Lifecycle](TOOL_PROFILE_LIFECYCLE.md)  
 **Authority:** Cloud Evidence Validator (`apps/cloud/src/tool-profile-validation.ts`) & D1 qualification/acceptance evidence stores
 

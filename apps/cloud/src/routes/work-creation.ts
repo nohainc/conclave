@@ -20,7 +20,7 @@ import {
   type ThreadExecutionPolicy,
   type BuiltinWorkflowDefinition,
   type WorkflowId,
-} from "@conclave/core";
+} from "@syntila/core";
 
 import {
   MAX_WORK_REQUEST_FILES,
@@ -46,11 +46,11 @@ import {
   validateWorkflowWorkerEligibility,
 } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
-import type { ConclaveWorkflowParams } from "../workflow.js";
+import type { SyntilaWorkflowParams } from "../workflow.js";
 
 export async function createOrGetRun(
   env: Env,
-  params: ConclaveWorkflowParams,
+  params: SyntilaWorkflowParams,
 ): Promise<{ id: string; status: unknown }> {
   const id = await resolveWorkflowInstanceId(
     env,
@@ -58,11 +58,11 @@ export async function createOrGetRun(
     params.idempotencyKey,
   );
   try {
-    const instance = await env.CONCLAVE_RUN_WORKFLOW.create({ id, params });
+    const instance = await env.SYNTILA_RUN_WORKFLOW.create({ id, params });
     return { id: params.runId, status: (await instance.status()).status };
   } catch (error) {
     if (!errorMessage(error).toLowerCase().includes("exist")) throw error;
-    const instance = await env.CONCLAVE_RUN_WORKFLOW.get(id);
+    const instance = await env.SYNTILA_RUN_WORKFLOW.get(id);
     return { id: params.runId, status: (await instance.status()).status };
   }
 }
@@ -80,7 +80,7 @@ export async function handleValidateWorkRequest(
     "execute",
     accessContext,
   );
-  const row = await env.CONCLAVE_DB.prepare(
+  const row = await env.SYNTILA_DB.prepare(
     `SELECT wc.config_json AS configJson FROM threads ws
        LEFT JOIN thread_work_configs wc ON wc.thread_id = ws.id WHERE ws.id = ?1`,
   )
@@ -124,7 +124,7 @@ export async function handleValidateWorkRequest(
     ),
   );
   if (
-    !env.CONCLAVE_THREAD_COORDINATOR &&
+    !env.SYNTILA_THREAD_COORDINATOR &&
     workflow.steps.some((step) => step.executionMode === "stateful_thread")
   ) {
     issues.push({
@@ -171,7 +171,7 @@ export async function handleCreateWorkRequest(
   );
   const receipt = await MutationIdempotency.from(
     request,
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     context.userId,
     `thread:${threadId}:create-work-request`,
     body,
@@ -183,7 +183,7 @@ export async function handleCreateWorkRequest(
       : body.mode === "stateless"
         ? "stateless"
         : null;
-  const workConfigRow = await env.CONCLAVE_DB.prepare(
+  const workConfigRow = await env.SYNTILA_DB.prepare(
     `SELECT wc.config_json AS configJson, p.settings_json AS settingsJson
      FROM threads ws
      JOIN spaces p ON p.id = ws.space_id
@@ -368,7 +368,7 @@ export async function handleCreateWorkRequest(
   requestInput.attachments = normalizedAttachments;
   // Reply v1: only a server-built snapshot of a target in this Thread.
   const replyTo = await resolveReplyReference(
-    env.CONCLAVE_DB,
+    env.SYNTILA_DB,
     threadId,
     submittedInput.replyTo ?? body.replyTo,
   );
@@ -441,7 +441,7 @@ export async function handleCreateWorkRequest(
       { status: 422 },
     );
   }
-  if (!env.CONCLAVE_THREAD_COORDINATOR && mode === "stateful") {
+  if (!env.SYNTILA_THREAD_COORDINATOR && mode === "stateful") {
     throw new HttpError(503, "Thread runtime coordination is unavailable");
   }
   if (eligibility.primaryWorkspaceId) {
@@ -486,7 +486,7 @@ export async function handleCreateWorkRequest(
     : undefined;
   const stepExecutionConfigs: Record<
     string,
-    import("@conclave/core").TurnExecutionConfig
+    import("@syntila/core").TurnExecutionConfig
   > = {};
   for (const step of workflowSnapshot.steps) {
     const bindingId = workflowId === "direct" ? "direct" : step.kind;
@@ -514,7 +514,7 @@ export async function handleCreateWorkRequest(
     stepAdditionalInstructions,
     promptProfileVersions,
   };
-  const policyRow = await env.CONCLAVE_DB.prepare(
+  const policyRow = await env.SYNTILA_DB.prepare(
     "SELECT mode, primary_workspace_id AS primaryWorkspaceId FROM thread_execution_policies WHERE thread_id = ?1",
   )
     .bind(threadId)
@@ -541,7 +541,7 @@ export async function handleCreateWorkRequest(
     workflowVersion,
   );
   const selectedConversationId = conversationWorkflow
-    ? await resolveThreadConversationId(env.CONCLAVE_DB, threadId)
+    ? await resolveThreadConversationId(env.SYNTILA_DB, threadId)
     : undefined;
   if (
     body.conversationId !== undefined &&
@@ -590,9 +590,9 @@ export async function handleCreateWorkRequest(
     run: { id: runId, spaceId, threadId, status: "created" },
   };
   const write = (receipts: D1PreparedStatement[]) =>
-    env.CONCLAVE_DB.batch([
+    env.SYNTILA_DB.batch([
       ...receipts,
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO work_requests
        (id, thread_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, input_json, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?11)`,
@@ -610,7 +610,7 @@ export async function handleCreateWorkRequest(
         now,
       ),
       ...(fileInputs
-        ? workRequestInputStatements(env.CONCLAVE_DB, {
+        ? workRequestInputStatements(env.SYNTILA_DB, {
             workRequestId: workRequest.id,
             threadId,
             workspaceId: workRequest.primaryWorkspaceId!,
@@ -621,15 +621,15 @@ export async function handleCreateWorkRequest(
         : []),
       // Sidebar ordering is based on these parent timestamps. A newly
       // accepted request is Thread activity even before a Worker responds.
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "UPDATE threads SET updated_at = ?1 WHERE id = ?2",
       ).bind(now, threadId),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "UPDATE spaces SET updated_at = ?1 WHERE id = ?2",
       ).bind(now, spaceId),
       ...(conversationWorkflow
         ? conversationSubmissionStatements(
-            env.CONCLAVE_DB,
+            env.SYNTILA_DB,
             selectedConversationId!,
             threadId,
             conversationWorkflow,
@@ -639,18 +639,18 @@ export async function handleCreateWorkRequest(
         : []),
       ...(conversationWorkflow
         ? initialConversationTaskStatements(
-            env.CONCLAVE_DB,
+            env.SYNTILA_DB,
             workflowSnapshot,
             workRequest.id,
             now,
           )
         : []),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO runs
        (id, space_id, thread_id, work_request_id, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, 'created', ?5, ?5)`,
       ).bind(runId, spaceId, threadId, workRequest.id, now),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO space_audit_log
        (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'thread.work_requested', 'work_request', ?4, ?5, ?6)`,
@@ -711,7 +711,7 @@ async function resumeSubmission(
     run: { id: string; spaceId: string; threadId: string };
   };
   if (replay) {
-    const row = await env.CONCLAVE_DB.prepare(
+    const row = await env.SYNTILA_DB.prepare(
       "SELECT status FROM work_requests WHERE id = ?1",
     )
       .bind(workRequest.id)
@@ -719,8 +719,8 @@ async function resumeSubmission(
     if (!row || ["completed", "failed", "cancelled"].includes(row.status))
       return response;
   }
-  if (workRequest.mode === "stateful" && env.CONCLAVE_THREAD_COORDINATOR) {
-    const coordinator = env.CONCLAVE_THREAD_COORDINATOR.getByName(
+  if (workRequest.mode === "stateful" && env.SYNTILA_THREAD_COORDINATOR) {
+    const coordinator = env.SYNTILA_THREAD_COORDINATOR.getByName(
       workRequest.threadId,
     );
     const result = await coordinator.fetch(

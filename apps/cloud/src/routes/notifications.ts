@@ -21,7 +21,7 @@ export async function handleListNotifications(
     undefined,
     accessContext,
   );
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT w.id, w.status, w.updated_at AS updatedAt, w.thread_id AS threadId,
             t.name AS threadName, t.space_id AS spaceId,
             w.requested_by_user_id AS requestedByUserId,
@@ -86,11 +86,11 @@ export async function handleMarkNotificationsRead(
       WHERE w.status IN ('completed', 'failed')`;
   const statement =
     ids === null
-      ? env.CONCLAVE_DB.prepare(
+      ? env.SYNTILA_DB.prepare(
           `INSERT OR IGNORE INTO user_notification_reads (user_id, work_request_id, read_at)
            SELECT ?1, w.id, ?2 ${scope}`,
         ).bind(context.userId, readAt)
-      : env.CONCLAVE_DB.prepare(
+      : env.SYNTILA_DB.prepare(
           `INSERT OR IGNORE INTO user_notification_reads (user_id, work_request_id, read_at)
            SELECT ?1, w.id, ?2 ${scope}
               AND w.id IN (SELECT value FROM json_each(?3))`,

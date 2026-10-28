@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 engine_packages=(
-  packages/conclave_worker_protocol
+  packages/syntila_worker_protocol
   packages/tool_profile_v1
-  packages/conclave_cli_worker_runtime
+  packages/syntila_cli_worker_runtime
   engines/cli_worker
 )
 

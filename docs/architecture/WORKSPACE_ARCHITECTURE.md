@@ -14,10 +14,10 @@ workspace (headless Dart service)
                  │ authenticated local IPC (status and operations)
                  │ workspace.nano (restart-applied desired configuration)
                  │
-conclave-workspace (management CLI)
+syntila-workspace (management CLI)
     account/setup flows, configuration editing, host service controls
 
-workspace → Worker subsystem → conclave-agent → provider CLI
+workspace → Worker subsystem → syntila-agent → provider CLI
 ```
 
 The CLI (and any future management client) must not create a Cloud connection,
@@ -27,9 +27,9 @@ it receives a profile, command, environment policy, working directory, input,
 execution options, and cancellation, and returns output. It has no Cloud,
 Space, Thread, Workflow, D1, or UI dependency.
 
-The service is the unified Dart executable `conclave-workspace` (run as
-`conclave-workspace run`, or invoked under its alias name `workspace`) and keeps the
-generic Engine as a separately supervised child (`conclave-agent`). The service
+The service is the unified Dart executable `syntila-workspace` (run as
+`syntila-workspace run`, or invoked under its alias name `workspace`) and keeps the
+generic Engine as a separately supervised child (`syntila-agent`). The service
 holds the per-installation lock, owns process cleanup, and is the only runtime
 owner. Closing a terminal or the CLI closes its IPC client and does not stop execution.
 At startup the compiled Dart processes set their macOS diagnostic names to
@@ -87,10 +87,10 @@ configured, the client reports that state instead of using a connection retry as
 a fallback.
 
 Human management authentication is a separate concern from runtime
-authentication. `conclave-workspace login` (Cloud email and password) stores a
-short-lived `DesktopHumanSession`; `conclave-workspace register` uses it for
+authentication. `syntila-workspace login` (Cloud email and password) stores a
+short-lived `DesktopHumanSession`; `syntila-workspace register` uses it for
 account ownership checks and registration (a Workspace that Cloud has released
-is claimed as a new one); `conclave-workspace logout` deletes the stored session
+is claimed as a new one); `syntila-workspace logout` deletes the stored session
 locally and leaves the registration and runtime credential in place. The Workspace Service uses the registered
 Workspace runtime identity and secure runtime credential for Cloud reconnect and
 execution. Losing or expiring the human session does not disconnect Cloud, stop
@@ -249,7 +249,7 @@ registry, credential, Work Root, Profile, Engine, or session identity changes.
 Browsers cannot browse or verify local folders, and whether a provider CLI can
 write to a path depends on the host account the service runs as. The
 Workspace owner therefore maintains an explicit Allowed Folders list with
-`conclave-workspace folders`; Spaces can only choose from that list.
+`syntila-workspace folders`; Spaces can only choose from that list.
 
 - The list is private service state at
   `<Application Support>/Registry/allowed-folders.json` (schema version 1).
@@ -271,7 +271,7 @@ Workspace owner therefore maintains an explicit Allowed Folders list with
   Workspace belongs to the requesting user, and switching a Space to another
   Workspace detaches its folders (files untouched).
 
-`conclave-workspace folders [list]`, `folders add PATH [--name NAME]` and
+`syntila-workspace folders [list]`, `folders add PATH [--name NAME]` and
 `folders remove ID` call the same IPC commands. Removing a folder never touches
 its files.
 
@@ -354,16 +354,16 @@ settings mutation or live reload command.
         parallel_slots 5
     folders..
         root /home/me
-        conclave /home/me/.local/share/conclave/workspace
+        syntila /home/me/.local/share/syntila/workspace
         state /home/me/.local/state/conclave/workspace
         work /home/me/Documents/Conclave
-        profiles /home/me/.local/share/conclave/workspace/Profiles
-        engines /home/me/.local/share/conclave/workspace/Engines
+        profiles /home/me/.local/share/syntila/workspace/Profiles
+        engines /home/me/.local/share/syntila/workspace/Engines
         logs /home/me/.local/state/conclave/workspace/logs
         cache /home/me/.local/state/conclave/workspace/cache
 ```
 
-`root`, `conclave`, `state`, and `work` are required. Extra aliases are allowed
+`root`, `syntila`, `state`, and `work` are required. Extra aliases are allowed
 for platform locations, but aliases do not grant Worker filesystem access.
 Allowed folders remain a separate security registry. The state directory is a
 bootstrap selected by the platform default or `--data-dir`; `folders.state`
@@ -377,20 +377,20 @@ fallback settings in packaged builds.
 
 | Variable | Classification | Purpose |
 | --- | --- | --- |
-| `CONCLAVE_WORKSPACE_VERSION` | build/release | service and CLI version |
-| `CONCLAVE_WORKSPACE_ENVIRONMENT` | build-time define | `local` or `production` target Cloud; selects the state directory and pins the Cloud URL for local builds |
-| `CONCLAVE_RELEASE_TRUST_KEYS_JSON` | build/release | public Workspace application-release trust roots |
-| `CONCLAVE_MACOS_SIGN_IDENTITY` | build/release | service and Engine signing |
-| `CONCLAVE_MACOS_NOTARY_PROFILE` | release-only | notarization keychain profile |
-| `CONCLAVE_DART_EXECUTABLE` | build/test-only | select a Dart SDK for Engine builds |
-| `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY` | development-only | unsigned local Profile drafts |
-| `CONCLAVE_WORKSPACE_DEVELOPMENT_DATA_DIR` | development-only | isolated dev state root |
-| `CONCLAVE_WORKSPACE_BUNDLE_DIR` | test/development-only | explicit bundled Engine location |
-| `CONCLAVE_WORKSPACE_DATA_DIR` | CLI/test override | explicit state directory; persisted state wins in packaged service |
-| `CONCLAVE_WORKSPACE_RUNTIME_ID`, `CONCLAVE_WORKSPACE_INSTALLATION_ID`, `CONCLAVE_WORKSPACE_ID` | CLI/test override | fixture identity values; never production secrets |
-| `CONCLAVE_WORKSPACE_TOKEN` | test-only | fixture credential; production uses secure storage |
+| `SYNTILA_WORKSPACE_VERSION` | build/release | service and CLI version |
+| `SYNTILA_WORKSPACE_ENVIRONMENT` | build-time define | `local` or `production` target Cloud; selects the state directory and pins the Cloud URL for local builds |
+| `SYNTILA_RELEASE_TRUST_KEYS_JSON` | build/release | public Workspace application-release trust roots |
+| `SYNTILA_MACOS_SIGN_IDENTITY` | build/release | service and Engine signing |
+| `SYNTILA_MACOS_NOTARY_PROFILE` | release-only | notarization keychain profile |
+| `SYNTILA_DART_EXECUTABLE` | build/test-only | select a Dart SDK for Engine builds |
+| `SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY` | development-only | unsigned local Profile drafts |
+| `SYNTILA_WORKSPACE_DEVELOPMENT_DATA_DIR` | development-only | isolated dev state root |
+| `SYNTILA_WORKSPACE_BUNDLE_DIR` | test/development-only | explicit bundled Engine location |
+| `SYNTILA_WORKSPACE_DATA_DIR` | CLI/test override | explicit state directory; persisted state wins in packaged service |
+| `SYNTILA_WORKSPACE_RUNTIME_ID`, `SYNTILA_WORKSPACE_INSTALLATION_ID`, `SYNTILA_WORKSPACE_ID` | CLI/test override | fixture identity values; never production secrets |
+| `SYNTILA_WORKSPACE_TOKEN` | test-only | fixture credential; production uses secure storage |
 
-`CONCLAVE_WORKSPACE_GATEWAY` is a Cloudflare binding name, not Workspace
+`SYNTILA_WORKSPACE_GATEWAY` is a Cloudflare binding name, not Workspace
 configuration. Provider, profile-admin, deployment, and database variables are
 owned by their respective Cloud/Profile Lab workflows and are outside this
 runtime contract.
@@ -402,32 +402,32 @@ There is one Worker Engine source and build:
 ```text
 engines/cli_worker
        ↓ scripts/build-cli-worker-engine.sh
-apps/workspace/assets/engines/conclave-agent
-apps/profile_lab/assets/engines/conclave-agent
+apps/workspace/assets/engines/syntila-agent
+apps/profile_lab/assets/engines/syntila-agent
 ```
 
 The two app paths are materialized copies for their bundles, not independent
-source artifacts. The script also writes the legacy `conclave_cli_worker_engine`
+source artifacts. The script also writes the legacy `syntila_cli_worker_engine`
 name for consumers that have not migrated (Profile Lab, Windows tooling and
-already published Linux packages); new code uses `conclave-agent`.
+already published Linux packages); new code uses `syntila-agent`.
 
-`scripts/build-workspace-service.sh` compiles the unified `conclave-workspace`
-binary (plus the `workspace` alias and the Engine) into `dist/conclave-workspace/`,
-or `dist/conclave-workspace/linux-<arch>/` when cross-compiling.
+`scripts/build-workspace-service.sh` compiles the unified `syntila-workspace`
+binary (plus the `workspace` alias and the Engine) into `dist/syntila-workspace/`,
+or `dist/syntila-workspace/linux-<arch>/` when cross-compiling.
 `scripts/run-workspace-service.sh` launches that compiled executable by default
 and reserves `--source` for Dart debugging; `scripts/check-workspace-service.sh`
 compiles the service and runs a one-shot lifecycle in temporary directories.
 `scripts/build-workspace-macos.sh` produces the signed macOS bundle directory
-(`conclave-workspace`, the `workspace` symlink, `assets/engines/conclave-agent`)
+(`syntila-workspace`, the `workspace` symlink, `assets/engines/syntila-agent`)
 and a zip; `scripts/verify-workspace-service-bundle.sh` validates it and
 `scripts/package-workspace-macos.sh` wraps it in a `.pkg`. There is no `.app` and
 no `SMAppService`: the installer does not register or start the service, and
-`conclave-workspace service install` writes the per-user LaunchAgent, so upgrades
+`syntila-workspace service install` writes the per-user LaunchAgent, so upgrades
 keep existing Application Support state. Linux uses
 `scripts/build-workspace-linux-headless.sh` and `scripts/package-workspace-linux.sh`
 (see [Linux releases](../deployment/WORKSPACE_LINUX_RELEASES.md)). Set
-`CONCLAVE_MACOS_INSTALLER_SIGN_IDENTITY` (Developer ID Installer) and
-`CONCLAVE_MACOS_NOTARY_PROFILE` for distributable macOS artifacts.
+`SYNTILA_MACOS_INSTALLER_SIGN_IDENTITY` (Developer ID Installer) and
+`SYNTILA_MACOS_NOTARY_PROFILE` for distributable macOS artifacts.
 Signing and launchd checks are release/device evidence and cannot be replaced
 by a successful Dart compile.
 
@@ -475,7 +475,7 @@ Service or `0600` file credential store; see the
 - On every platform the Service, Engine, and provider CLIs run as the same
   user that owns the CLI logins; Syntila never manages provider credentials.
 - Headless operation is primary. Hosts are configured through `workspace.nano`
-  and managed through the `conclave-workspace` client over authenticated local
+  and managed through the `syntila-workspace` client over authenticated local
   IPC. Existing Cloud email/password sign-in works in the terminal without a
   browser; browser approval remains an MFA fallback.
 
@@ -523,8 +523,8 @@ the authorized Service runs. Details are in the
 
 ### Shared capability presentation
 
-AX and Profile Lab use `conclave_design/ModelEffortSelector` with public
-capability projections from `conclave_protocol`; the Workspace CLI (`workers`)
+AX and Profile Lab use `syntila_design/ModelEffortSelector` with public
+capability projections from `syntila_protocol`; the Workspace CLI (`workers`)
 prints the Service-owned catalog. They display the actual per-model efforts,
 defaults and freshness without performing discovery or execution, and their host
 adapters supply authorized catalogs. See the shared presentation contract in

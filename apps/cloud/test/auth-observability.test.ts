@@ -52,7 +52,7 @@ describe("authentication observability", () => {
       string
     >;
     expect(payload).toEqual({
-      metric: "conclave.auth.sign_in",
+      metric: "syntila.auth.sign_in",
       provider: "google",
       outcome: "failure",
       reason: "csrf_rejected",

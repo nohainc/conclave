@@ -3,27 +3,27 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_protocol/conclave_protocol.dart';
-import 'package:conclave_worker_protocol/conclave_worker_protocol.dart';
-import 'package:conclave_workspace/workspace.dart';
-import 'package:conclave_workspace/workspace_configuration.dart';
-import 'package:conclave_workspace/assignment_journal.dart';
-import 'package:conclave_workspace/platform_runtime.dart';
-import 'package:conclave_workspace/allowed_folders.dart';
-import 'package:conclave_workspace/cloud_connection.dart';
-import 'package:conclave_workspace/assignment_startup.dart';
-import 'package:conclave_workspace/input_delivery.dart';
-import 'package:conclave_workspace/work_request_input_staging.dart';
-import 'package:conclave_workspace/worker_executor.dart';
-import 'package:conclave_workspace/worker_launch_plan.dart';
-import 'package:conclave_workspace/self_update.dart';
-import 'package:conclave_workspace/secure_credentials.dart';
-import 'package:conclave_workspace/workspace_registration.dart';
-import 'package:conclave_workspace/workspace_transport.dart';
-import 'package:conclave_workspace/worker_readiness.dart';
-import 'package:conclave_workspace/bundled_cli_worker_engine_loader.dart';
-import 'package:conclave_workspace/cli_worker_engine_supervisor.dart';
-import 'package:conclave_workspace/worker_diagnostic_store.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
+import 'package:syntila_worker_protocol/syntila_worker_protocol.dart';
+import 'package:syntila_workspace/workspace.dart';
+import 'package:syntila_workspace/workspace_configuration.dart';
+import 'package:syntila_workspace/assignment_journal.dart';
+import 'package:syntila_workspace/platform_runtime.dart';
+import 'package:syntila_workspace/allowed_folders.dart';
+import 'package:syntila_workspace/cloud_connection.dart';
+import 'package:syntila_workspace/assignment_startup.dart';
+import 'package:syntila_workspace/input_delivery.dart';
+import 'package:syntila_workspace/work_request_input_staging.dart';
+import 'package:syntila_workspace/worker_executor.dart';
+import 'package:syntila_workspace/worker_launch_plan.dart';
+import 'package:syntila_workspace/self_update.dart';
+import 'package:syntila_workspace/secure_credentials.dart';
+import 'package:syntila_workspace/workspace_registration.dart';
+import 'package:syntila_workspace/workspace_transport.dart';
+import 'package:syntila_workspace/worker_readiness.dart';
+import 'package:syntila_workspace/bundled_cli_worker_engine_loader.dart';
+import 'package:syntila_workspace/cli_worker_engine_supervisor.dart';
+import 'package:syntila_workspace/worker_diagnostic_store.dart';
 
 String _runtimeFailureDiagnostic(
   String stage,
@@ -102,7 +102,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   );
   await localWorkerRegistry.setParallelSlots(effectiveConfig.parallelSlots);
   const developmentDraftRoot = String.fromEnvironment(
-    'CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY',
+    'SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY',
   );
   DevelopmentToolProfiles? developmentProfiles;
   if (developmentDraftRoot.isNotEmpty) {
@@ -679,12 +679,12 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   String? updateAvailable;
   var lastUpdateCheck = DateTime.fromMillisecondsSinceEpoch(0);
   const packageManager = String.fromEnvironment(
-    'CONCLAVE_WORKSPACE_PACKAGE_MANAGER',
+    'SYNTILA_WORKSPACE_PACKAGE_MANAGER',
   );
   if (config.cloudUri != null && packageManager != 'apt') {
     updateController = WorkspaceUpdateController(
       cloudUri: config.cloudUri!,
-      currentVersion: conclaveWorkspaceAppVersion,
+      currentVersion: syntilaWorkspaceAppVersion,
       client: const WorkspaceReleaseClient(),
       updater: WorkspaceUpdater(
         WorkspacePaths(config.dataDirectory).updatesDirectory,
@@ -877,7 +877,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       await refreshUpdateAvailability();
       final workers = await localWorkerRegistry.list();
       return {
-        'appVersion': conclaveWorkspaceAppVersion,
+        'appVersion': syntilaWorkspaceAppVersion,
         'workers': workers.length,
         'workerIds': workers.map((worker) => worker.id).toList(),
         'activeTasks': connection?.activeAssignmentCount ?? 0,

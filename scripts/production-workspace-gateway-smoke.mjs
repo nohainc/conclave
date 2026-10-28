@@ -18,14 +18,14 @@ const config = join(repositoryRoot, "infra/cloudflare/app.wrangler.jsonc");
 const hostname = "app.conclaveax.com";
 const runId = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}`
-  : (process.env.CONCLAVE_SMOKE_RUN_ID ?? randomUUID());
+  : (process.env.SYNTILA_SMOKE_RUN_ID ?? randomUUID());
 const ownerId = `gateway-smoke-user-${runId}`;
 const authSessionId = `gateway-smoke-auth-session-${runId}`;
 const workspaceClientName = `Syntila Workspace Production Smoke ${runId}`;
 const profileLabClientName = `Syntila Profile Lab Production Smoke ${runId}`;
 const authSessionToken = randomBytes(32).toString("base64url");
 const installationUuid = createHash("sha256")
-  .update(`conclave-production-workspace-smoke:${runId}`)
+  .update(`syntila-production-workspace-smoke:${runId}`)
   .digest("hex")
   .slice(0, 32)
   .split("");
@@ -271,7 +271,7 @@ async function connectAndHello() {
     }
 
     const hello = {
-      protocol: "conclave.workspace-runtime-protocol",
+      protocol: "syntila.workspace-runtime-protocol",
       protocolVersion: "5.1",
       messageId: `gateway-smoke-hello-${runId}`,
       timestamp: new Date().toISOString(),
@@ -305,7 +305,7 @@ async function connectAndHello() {
     socket.write(
       maskedFrame(
         JSON.stringify({
-          protocol: "conclave.workspace-runtime-protocol",
+          protocol: "syntila.workspace-runtime-protocol",
           protocolVersion: "5.1",
           messageId: syncRequestId,
           timestamp: new Date().toISOString(),
@@ -600,7 +600,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
   );
   const approval = await approveResponse.json().catch(() => null);
   if (
-    /"CONCLAVE_PROFILE_LAB_OWNER_EMAIL"\s*:\s*"[^"\s]+"/.test(
+    /"SYNTILA_PROFILE_LAB_OWNER_EMAIL"\s*:\s*"[^"\s]+"/.test(
       readFileSync(config, "utf8"),
     )
   ) {
@@ -900,9 +900,9 @@ async function registerDisposableWorkspace() {
 
 async function main() {
   if (process.argv.includes("--cleanup-only")) {
-    if (!process.env.GITHUB_RUN_ID && !process.env.CONCLAVE_SMOKE_RUN_ID) {
+    if (!process.env.GITHUB_RUN_ID && !process.env.SYNTILA_SMOKE_RUN_ID) {
       throw new Error(
-        "Set CONCLAVE_SMOKE_RUN_ID to the original smoke run ID for cleanup-only mode",
+        "Set SYNTILA_SMOKE_RUN_ID to the original smoke run ID for cleanup-only mode",
       );
     }
     removeDisposableRuntime();

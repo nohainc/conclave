@@ -101,18 +101,18 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                     key: const ValueKey('space-workspace'),
                     enabled: !_busy,
                     tooltip: 'Choose Workspace',
-                    color: ConclaveColors.composerBackground(isDark),
+                    color: SyntilaColors.composerBackground(isDark),
                     surfaceTintColor: Colors.transparent,
                     elevation: 12,
-                    shadowColor: ConclaveMenuStyle.shadow(isDark),
-                    shape: ConclaveMenuStyle.shape(isDark),
-                    menuPadding: ConclaveMenuStyle.padding,
+                    shadowColor: SyntilaMenuStyle.shadow(isDark),
+                    shape: SyntilaMenuStyle.shape(isDark),
+                    menuPadding: SyntilaMenuStyle.padding,
                     itemBuilder: (menuContext) => [
                       for (final choice in choices.entries)
-                        ConclaveMenuEntry<String>(
+                        SyntilaMenuEntry<String>(
                           value: choice.key,
                           child: MenuItemButton(
-                            style: ConclaveMenuStyle.item(isDark),
+                            style: SyntilaMenuStyle.item(isDark),
                             leadingIcon: Icon(
                               choice.key == current
                                   ? Icons.check_circle_rounded
@@ -122,7 +122,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                             onPressed: () =>
                                 Navigator.pop(menuContext, choice.key),
                             child: Text(choice.value,
-                                style: ConclaveMenuStyle.textStyle),
+                                style: SyntilaMenuStyle.textStyle),
                           ),
                         ),
                     ],
@@ -183,7 +183,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
           (await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                          constraints: ConclaveDialogStyle.small,
+                          constraints: SyntilaDialogStyle.small,
                           title: const Text('Change Workspace?'),
                           content: Text((inherit
                                   ? 'This Space will follow your default Workspace. Its own workflow overrides are reset, and existing runs keep their recorded settings.'
@@ -261,7 +261,7 @@ class _SpaceAdditionalFoldersState extends State<_SpaceAdditionalFolders> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          constraints: ConclaveDialogStyle.small,
+          constraints: SyntilaDialogStyle.small,
           title: const Text('Additional folders'),
           content: SizedBox(
             width: 420,

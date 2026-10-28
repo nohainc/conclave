@@ -8,17 +8,17 @@ import {
 } from "./http-security.js";
 
 export async function loadWorkflowWorkspace(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   userId: string,
   spaceId?: string,
 ) {
-  const global = await env.CONCLAVE_DB.prepare(
+  const global = await env.SYNTILA_DB.prepare(
     "SELECT workspace_id AS workspaceId FROM user_workflow_settings WHERE user_id = ?1",
   )
     .bind(userId)
     .first<{ workspaceId: string | null }>();
   const space = spaceId
-    ? await env.CONCLAVE_DB.prepare(
+    ? await env.SYNTILA_DB.prepare(
         "SELECT workspace_id AS workspaceId FROM space_workflow_settings WHERE space_id = ?1",
       )
         .bind(spaceId)
@@ -35,12 +35,12 @@ export async function loadWorkflowWorkspace(
  * owned by the user or lent to them, and not revoked.
  */
 export async function resolveUserWorkflowWorkspace(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   userId: string,
   requested: string | null,
 ): Promise<string | null> {
   if (!requested) return (await loadWorkflowWorkspace(env, userId)).workspaceId;
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     "SELECT id FROM execution_workspaces WHERE id=?1 AND owner_user_id=?2 AND status != 'revoked'",
   )
     .bind(requested, userId)
@@ -57,10 +57,10 @@ export async function resolveUserWorkflowWorkspace(
 
 /** Workspaces lent to this person by an active Person Grant (ADR-020). */
 export async function loadBorrowedWorkspaces(
-  env: Pick<SecurityEnv, "CONCLAVE_DB">,
+  env: Pick<SecurityEnv, "SYNTILA_DB">,
   userId: string,
 ) {
-  const rows = await env.CONCLAVE_DB.prepare(
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT ew.id, ew.name, ew.owner_user_id AS ownerUserId
      FROM workspace_person_grants g
      JOIN execution_workspaces ew ON ew.id = g.workspace_id AND ew.status != 'revoked'
@@ -96,7 +96,7 @@ export async function prepareWorkflowWorkspaceGrant(
   workspaceId: string,
   now: string,
 ): Promise<D1PreparedStatement[]> {
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     "SELECT id FROM execution_workspaces WHERE id=?1 AND owner_user_id=?2 AND status != 'revoked'",
   )
     .bind(workspaceId, ownerUserId)
@@ -111,7 +111,7 @@ export async function prepareWorkflowWorkspaceGrant(
       403,
       "Workspace is unavailable or not owned by the settings owner",
     );
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     "SELECT id,status,expires_at FROM workspace_space_grants WHERE space_id=?1 AND workspace_id=?2 AND status IN ('active','suspended')",
   )
     .bind(spaceId, workspaceId)
@@ -127,7 +127,7 @@ export async function prepareWorkflowWorkspaceGrant(
   if (lent) {
     if (existing) return [];
     return [
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,allowed_permissions_json,concurrency_json,created_at,updated_at) VALUES(?1,?2,?3,?4,'active',?5,'{\"maxConcurrentAssignments\":1}',?6,?6)",
       ).bind(
         crypto.randomUUID(),
@@ -139,7 +139,7 @@ export async function prepareWorkflowWorkspaceGrant(
         ),
         now,
       ),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         "INSERT INTO space_audit_log(id,space_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at) VALUES(?1,?2,'user',?3,'workflow.workspace.authorized','execution_workspace',?4,?5,?6)",
       ).bind(
         crypto.randomUUID(),
@@ -155,7 +155,7 @@ export async function prepareWorkflowWorkspaceGrant(
     // Selecting a Workflow Workspace is the user-facing execution boundary.
     // Ready, locally enabled Workers there are available to Cloud scheduling;
     // no second hidden scheduling toggle is required for Workflows.
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE worker_scheduling
           SET state='enabled', updated_by_user_id=?2, updated_at=?3
         WHERE worker_id IN (
@@ -169,7 +169,7 @@ export async function prepareWorkflowWorkspaceGrant(
   ];
   if (existing) return statements;
   statements.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "INSERT INTO workspace_space_grants(id,space_id,workspace_id,granted_by_user_id,status,allowed_permissions_json,concurrency_json,created_at,updated_at) VALUES(?1,?2,?3,?4,'active',?5,'{\"maxConcurrentAssignments\":3}',?6,?6)",
     ).bind(
       crypto.randomUUID(),
@@ -179,7 +179,7 @@ export async function prepareWorkflowWorkspaceGrant(
       JSON.stringify(["repository:read", "repository:write", "shell:execute"]),
       now,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "INSERT INTO space_audit_log(id,space_id,actor_type,actor_id,action,target_type,target_id,details_json,created_at) VALUES(?1,?2,'user',?3,'workflow.workspace.authorized','execution_workspace',?4,?5,?6)",
     ).bind(
       crypto.randomUUID(),
@@ -202,7 +202,7 @@ export async function handleWorkflowWorkspace(
   const context = await securityContext(request, env, ctx);
   let ownerUserId = context.userId;
   if (spaceId) {
-    const space = await env.CONCLAVE_DB.prepare(
+    const space = await env.SYNTILA_DB.prepare(
       "SELECT s.owner_user_id AS ownerUserId FROM spaces s JOIN space_memberships m ON m.space_id = s.id WHERE s.id = ?1 AND m.user_id = ?2",
     )
       .bind(spaceId, context.userId)
@@ -216,7 +216,7 @@ export async function handleWorkflowWorkspace(
       );
   }
   const current = await loadWorkflowWorkspace(env, ownerUserId, spaceId);
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     "SELECT id, name FROM execution_workspaces WHERE owner_user_id = ?1 AND status != 'revoked' ORDER BY name, id",
   )
     .bind(ownerUserId)
@@ -234,7 +234,7 @@ export async function handleWorkflowWorkspace(
   if (request.method === "GET") {
     if (current.workspaceId && spaceId) {
       try {
-        await env.CONCLAVE_DB.batch(
+        await env.SYNTILA_DB.batch(
           await prepareWorkflowWorkspaceGrant(
             env,
             ownerUserId,
@@ -301,7 +301,7 @@ export async function handleWorkflowWorkspace(
   const inheritingOverrides = spaceId
     ? 0
     : ((
-        await env.CONCLAVE_DB.prepare(
+        await env.SYNTILA_DB.prepare(
           "SELECT COUNT(*) AS n FROM space_workflow_configurations WHERE space_id IN (SELECT s.id FROM spaces s WHERE s.owner_user_id=?1 AND NOT EXISTS (SELECT 1 FROM space_workflow_settings ws WHERE ws.space_id=s.id))",
         )
           .bind(ownerUserId)
@@ -312,7 +312,7 @@ export async function handleWorkflowWorkspace(
       409,
       "Changing Workspace resets Space workflow overrides; confirmReset is required",
     );
-  const db = env.CONCLAVE_DB;
+  const db = env.SYNTILA_DB;
   const now = new Date().toISOString();
   const statements: D1PreparedStatement[] = [];
   if (spaceId) {

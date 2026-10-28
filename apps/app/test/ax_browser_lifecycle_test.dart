@@ -4,7 +4,7 @@ library;
 // ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
 import 'dart:html' as html;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:conclave_app/src/navigation/ax_browser_navigation.dart';
+import 'package:syntila_app/src/navigation/ax_browser_navigation.dart';
 
 void main() {
   test('native browser connectivity emits offline/online and removes listeners',

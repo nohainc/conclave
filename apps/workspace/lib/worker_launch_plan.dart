@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_tool_profile_v1/tool_profile_v1.dart';
+import 'package:syntila_tool_profile_v1/tool_profile_v1.dart';
 
 import 'tool_profile_resolver.dart';
 import 'worker_profile_store.dart';

@@ -407,7 +407,7 @@ extension _AxAppViews on _AxAppStateMixin {
         width: size,
         height: size,
         color: provider == 'github'
-            ? ConclaveColors.textPrimary(
+            ? SyntilaColors.textPrimary(
                 Theme.of(context).brightness == Brightness.dark)
             : null,
         excludeFromSemantics: true);
@@ -421,8 +421,8 @@ extension _AxAppViews on _AxAppStateMixin {
       onPressed: onPressed,
       style: TextButton.styleFrom(
         visualDensity: VisualDensity.compact,
-        foregroundColor: ConclaveColors.textPrimary(isDark),
-        disabledForegroundColor: ConclaveColors.neutralText(isDark),
+        foregroundColor: SyntilaColors.textPrimary(isDark),
+        disabledForegroundColor: SyntilaColors.neutralText(isDark),
       ),
       child: Text(label),
     );
@@ -439,8 +439,8 @@ extension _AxAppViews on _AxAppStateMixin {
       iconSize: 20,
       constraints: const BoxConstraints.tightFor(width: 48, height: 48),
       alignment: Alignment.center,
-      color: ConclaveColors.textPrimary(isDark),
-      disabledColor: ConclaveColors.neutralText(isDark),
+      color: SyntilaColors.textPrimary(isDark),
+      disabledColor: SyntilaColors.neutralText(isDark),
       onPressed: onPressed,
       icon: busy
           ? Semantics(
@@ -449,7 +449,7 @@ extension _AxAppViews on _AxAppStateMixin {
                 dimension: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: ConclaveColors.neutralText(isDark),
+                  color: SyntilaColors.neutralText(isDark),
                 ),
               ),
             )
@@ -536,7 +536,7 @@ extension _AxAppViews on _AxAppStateMixin {
                             child: CircularProgressIndicator(strokeWidth: 2))
                         : CircleAvatar(
                             radius: 36,
-                            backgroundColor: ConclaveColors.primarySoftColor(
+                            backgroundColor: SyntilaColors.primarySoftColor(
                                 Theme.of(context).brightness ==
                                     Brightness.dark),
                             backgroundImage: _shellContext.viewerAvatarImage,
@@ -544,7 +544,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                 ? Text(
                                     _shellContext.viewerInitials,
                                     style: TextStyle(
-                                      color: ConclaveColors.primaryForeground(
+                                      color: SyntilaColors.primaryForeground(
                                           Theme.of(context).brightness ==
                                               Brightness.dark),
                                       fontSize: 24,
@@ -575,7 +575,7 @@ extension _AxAppViews on _AxAppStateMixin {
                         tooltip: 'Edit email',
                         onEdit: _editEmail,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: ConclaveColors.textSecondary(
+                            color: SyntilaColors.textSecondary(
                                 Theme.of(context).brightness ==
                                     Brightness.dark)),
                       ),
@@ -591,7 +591,7 @@ extension _AxAppViews on _AxAppStateMixin {
                   constraints:
                       const BoxConstraints.tightFor(width: 48, height: 48),
                   alignment: Alignment.center,
-                  color: ConclaveColors.errorText(
+                  color: SyntilaColors.errorText(
                       Theme.of(context).brightness == Brightness.dark),
                   icon: deletingAccount
                       ? const SizedBox(
@@ -661,7 +661,7 @@ extension _AxAppViews on _AxAppStateMixin {
                     title: Text(_providerLabel(account.providerId)),
                     trailing: Icon(
                       Icons.verified_outlined,
-                      color: ConclaveColors.primaryForeground(
+                      color: SyntilaColors.primaryForeground(
                           Theme.of(context).brightness == Brightness.dark),
                     ),
                   )),
@@ -717,7 +717,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.w500,
                                                 color:
-                                                    ConclaveColors.textPrimary(
+                                                    SyntilaColors.textPrimary(
                                                         Theme.of(context)
                                                                 .brightness ==
                                                             Brightness.dark)),
@@ -736,7 +736,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                             .textTheme
                                             .bodySmall
                                             ?.copyWith(
-                                                color: ConclaveColors
+                                                color: SyntilaColors
                                                     .textSecondary(
                                                         Theme.of(context)
                                                                 .brightness ==
@@ -758,7 +758,7 @@ extension _AxAppViews on _AxAppStateMixin {
                                                 .textTheme
                                                 .bodySmall
                                                 ?.copyWith(
-                                                    color: ConclaveColors
+                                                    color: SyntilaColors
                                                         .textPrimary(Theme.of(
                                                                     context)
                                                                 .brightness ==

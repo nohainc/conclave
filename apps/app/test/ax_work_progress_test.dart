@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_work_activity.dart';
-import 'package:conclave_app/src/ax/ax_work_progress.dart';
+import 'package:syntila_app/src/ax/ax_work_activity.dart';
+import 'package:syntila_app/src/ax/ax_work_progress.dart';
 
 final _base = DateTime.utc(2026, 10, 13, 12);
 

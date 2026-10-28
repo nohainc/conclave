@@ -26,7 +26,7 @@ function fixture(coordinatorAvailable = true) {
   const enqueue = vi.fn(async () => new Response("{}"));
   const create = vi.fn(async () => ({ status: async () => "queued" }));
   const env = {
-    CONCLAVE_DB: {
+    SYNTILA_DB: {
       prepare(sql: string) {
         const statement = {
           values: [] as unknown[],
@@ -95,10 +95,10 @@ function fixture(coordinatorAvailable = true) {
         return Promise.all(statements.map((s) => s.run()));
       },
     },
-    CONCLAVE_RUN_WORKFLOW: { create },
+    SYNTILA_RUN_WORKFLOW: { create },
     ...(coordinatorAvailable
       ? {
-          CONCLAVE_THREAD_COORDINATOR: {
+          SYNTILA_THREAD_COORDINATOR: {
             getByName: () => ({ fetch: enqueue }),
           },
         }
@@ -113,7 +113,7 @@ describe("Work Request mutation coordination", () => {
     async (available) => {
       const { env, enqueue, create, writes } = fixture(available);
       const response = await handleCreateWorkRequest(
-        new Request("https://conclave.test/work", {
+        new Request("https://syntila.test/work", {
           method: "POST",
           body: JSON.stringify({
             workflowId: "chat",
@@ -146,7 +146,7 @@ describe("Work Request mutation coordination", () => {
   it("keeps Work stateful and enqueues it for coordination", async () => {
     const { env, enqueue } = fixture();
     const response = await handleCreateWorkRequest(
-      new Request("https://conclave.test/work", {
+      new Request("https://syntila.test/work", {
         method: "POST",
         body: JSON.stringify({
           workflowId: "direct",
@@ -168,7 +168,7 @@ describe("Work Request mutation coordination", () => {
     const { env, enqueue, create } = fixture();
     await expect(
       handleCreateWorkRequest(
-        new Request("https://conclave.test/work", {
+        new Request("https://syntila.test/work", {
           method: "POST",
           body: JSON.stringify({ workflowId: "chat", mode: "stateful" }),
         }),

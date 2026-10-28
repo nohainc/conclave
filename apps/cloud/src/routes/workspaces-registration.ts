@@ -1,4 +1,4 @@
-import { DESKTOP_WORKSPACE_AUDIENCE, hashToken } from "@conclave/security";
+import { DESKTOP_WORKSPACE_AUDIENCE, hashToken } from "@syntila/security";
 
 import {
   disconnectWorkspaceRuntime,
@@ -52,7 +52,7 @@ async function workspaceInstallationBindingIssue(
   sessionUserId: string,
   installationId: string,
 ): Promise<Response | null> {
-  const installation = await env.CONCLAVE_DB.prepare(
+  const installation = await env.SYNTILA_DB.prepare(
     `SELECT wi.installation_id AS installationId,
             wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
             wi.status AS status, wi.released_at AS releasedAt,
@@ -74,7 +74,7 @@ async function workspaceInstallationBindingIssue(
       409,
     );
   }
-  const activeRuntime = await env.CONCLAVE_DB.prepare(
+  const activeRuntime = await env.SYNTILA_DB.prepare(
     `SELECT COUNT(*) AS count FROM workspace_runtime_identities
       WHERE workspace_id = ?1 AND revoked_at IS NULL`,
   )
@@ -105,7 +105,7 @@ async function workspaceIdentityFailure(
   );
   if (bindingIssue) return bindingIssue;
 
-  const runtime = await env.CONCLAVE_DB.prepare(
+  const runtime = await env.SYNTILA_DB.prepare(
     `SELECT i.workspace_id AS workspaceId, w.owner_user_id AS ownerUserId
        FROM workspace_runtime_identities i
        JOIN execution_workspaces w ON w.id = i.workspace_id
@@ -183,7 +183,7 @@ export async function handleCheckWorkspaceOwnership(
     );
   }
 
-  const installation = await env.CONCLAVE_DB.prepare(
+  const installation = await env.SYNTILA_DB.prepare(
     `SELECT wi.installation_id AS installationId,
             wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
             wi.status AS status, wi.released_at AS releasedAt,
@@ -197,7 +197,7 @@ export async function handleCheckWorkspaceOwnership(
 
   let localRow: WorkspaceOwnershipRow | null = null;
   if (workspaceId && runtimeId) {
-    localRow = await env.CONCLAVE_DB.prepare(
+    localRow = await env.SYNTILA_DB.prepare(
       `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
               i.installation_id AS installationId, w.owner_user_id AS ownerUserId,
               w.status AS workspaceStatus, i.revoked_at AS revokedAt
@@ -213,7 +213,7 @@ export async function handleCheckWorkspaceOwnership(
     if (installation.ownerUserId !== session.userId) {
       return json({ state: "owned_by_other_user" });
     }
-    const activeRuntimeCount = await env.CONCLAVE_DB.prepare(
+    const activeRuntimeCount = await env.SYNTILA_DB.prepare(
       `SELECT COUNT(*) AS count FROM workspace_runtime_identities
         WHERE workspace_id = ?1 AND revoked_at IS NULL`,
     )
@@ -222,7 +222,7 @@ export async function handleCheckWorkspaceOwnership(
     if ((activeRuntimeCount?.count ?? 0) > 1) {
       return json({ state: "corrupt_or_ambiguous" });
     }
-    const runtime = await env.CONCLAVE_DB.prepare(
+    const runtime = await env.SYNTILA_DB.prepare(
       `SELECT i.id AS runtimeId, w.status AS workspaceStatus
          FROM workspace_runtime_identities i
          JOIN execution_workspaces w ON w.id = i.workspace_id
@@ -262,7 +262,7 @@ export async function handleCheckWorkspaceOwnership(
     if (installation.ownerUserId !== session.userId) {
       return json({ state: "released" });
     }
-    const latestRuntime = await env.CONCLAVE_DB.prepare(
+    const latestRuntime = await env.SYNTILA_DB.prepare(
       `SELECT i.id AS runtimeId, w.status AS workspaceStatus
          FROM workspace_runtime_identities i
          JOIN execution_workspaces w ON w.id = i.workspace_id
@@ -276,7 +276,7 @@ export async function handleCheckWorkspaceOwnership(
   }
 
   if (localRow?.ownerUserId === session.userId) {
-    const localInstallation = await env.CONCLAVE_DB.prepare(
+    const localInstallation = await env.SYNTILA_DB.prepare(
       `SELECT wi.installation_id AS installationId,
               wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
               wi.status AS status, wi.released_at AS releasedAt,
@@ -304,7 +304,7 @@ export async function handleCheckWorkspaceOwnership(
   if (workspaceId || runtimeId) {
     return json({ state: "local_registration_stale" });
   }
-  const releaseHistory = await env.CONCLAVE_DB.prepare(
+  const releaseHistory = await env.SYNTILA_DB.prepare(
     `SELECT 1 AS released
        FROM workspace_audit_log
       WHERE action = 'workspace.ownership.released'
@@ -381,7 +381,7 @@ export async function handleReconcileWorkspaceOwnership(
     );
   }
 
-  const existing = await env.CONCLAVE_DB.prepare(
+  const existing = await env.SYNTILA_DB.prepare(
     `SELECT wi.installation_id AS installationId,
             wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
             wi.status AS status, wi.released_at AS releasedAt,
@@ -396,7 +396,7 @@ export async function handleReconcileWorkspaceOwnership(
     if (existing.ownerUserId !== session.userId) {
       return json({ state: "owned_by_other_user" });
     }
-    const runtime = await env.CONCLAVE_DB.prepare(
+    const runtime = await env.SYNTILA_DB.prepare(
       `SELECT i.id AS runtimeId, w.status AS workspaceStatus
          FROM workspace_runtime_identities i
          JOIN execution_workspaces w ON w.id = i.workspace_id
@@ -411,7 +411,7 @@ export async function handleReconcileWorkspaceOwnership(
   }
   if (existing?.status === "released") return json({ state: "released" });
 
-  const releaseHistory = await env.CONCLAVE_DB.prepare(
+  const releaseHistory = await env.SYNTILA_DB.prepare(
     `SELECT 1 AS released
        FROM workspace_audit_log
       WHERE action = 'workspace.ownership.released'
@@ -423,7 +423,7 @@ export async function handleReconcileWorkspaceOwnership(
     .first<{ released: number }>();
   if (releaseHistory) return json({ state: "released" });
 
-  const legacy = await env.CONCLAVE_DB.prepare(
+  const legacy = await env.SYNTILA_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
             i.installation_id AS installationId, w.owner_user_id AS ownerUserId,
             w.status AS workspaceStatus, i.revoked_at AS revokedAt,
@@ -464,7 +464,7 @@ export async function handleReconcileWorkspaceOwnership(
     return json({ state: "not_reconcilable" }, { status: 409 });
   }
 
-  const competing = await env.CONCLAVE_DB.prepare(
+  const competing = await env.SYNTILA_DB.prepare(
     `SELECT
        (SELECT COUNT(DISTINCT i.workspace_id)
           FROM workspace_runtime_identities i
@@ -498,13 +498,13 @@ export async function handleReconcileWorkspaceOwnership(
 
   const auditId = `audit-${crypto.randomUUID()}`;
   try {
-    await env.CONCLAVE_DB.batch([
-      env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.batch([
+      env.SYNTILA_DB.prepare(
         `INSERT INTO workspace_installations
           (installation_id, owner_user_id, workspace_id, status, created_at, updated_at, released_at)
          VALUES (?1, ?2, ?3, 'active', ?4, ?4, NULL)`,
       ).bind(installationId, session.userId, workspaceId, now),
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO workspace_audit_log
           (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
          VALUES (?1, ?2, 'user', ?3, 'workspace.ownership.reconciled', 'workspace_installation', ?4, ?5, ?6)`,
@@ -571,7 +571,7 @@ export async function handleDisconnectDesktopWorkspace(
     installationId,
   );
   if (bindingIssue) return bindingIssue;
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
             i.credential_token_hash AS credentialHash,
             i.revoked_at AS revokedAt, wi.owner_user_id AS ownerUserId,
@@ -603,7 +603,7 @@ export async function handleDisconnectDesktopWorkspace(
   if (owned.revokedAt !== null)
     return json({ disconnected: true, workspaceId, installationId });
 
-  const active = await env.CONCLAVE_DB.prepare(
+  const active = await env.SYNTILA_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
       WHERE execution_workspace_id = ?1 AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
   )
@@ -620,16 +620,16 @@ export async function handleDisconnectDesktopWorkspace(
   }
 
   const disconnectedAt = now;
-  const result = await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       `UPDATE workspace_runtime_identities SET revoked_at = ?1
         WHERE id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL`,
     ).bind(disconnectedAt, runtimeId, workspaceId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE execution_workspaces SET status = 'offline', updated_at = ?1
         WHERE id = ?2 AND owner_user_id = ?3 AND status <> 'revoked'`,
     ).bind(disconnectedAt, workspaceId, session.userId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'workspace.disconnected', 'workspace_runtime', ?4, ?5, ?6)`,
@@ -711,7 +711,7 @@ export async function handleReleaseDesktopWorkspace(
     installationId,
   );
   if (bindingIssue) return bindingIssue;
-  const owned = await env.CONCLAVE_DB.prepare(
+  const owned = await env.SYNTILA_DB.prepare(
     `SELECT i.id AS runtimeId, i.workspace_id AS workspaceId,
             wi.owner_user_id AS ownerUserId, w.status AS workspaceStatus
        FROM workspace_runtime_identities i
@@ -752,7 +752,7 @@ export async function handleReleaseDesktopWorkspace(
     );
   }
 
-  const active = await env.CONCLAVE_DB.prepare(
+  const active = await env.SYNTILA_DB.prepare(
     `SELECT COUNT(*) AS count FROM worker_assignments
       WHERE execution_workspace_id = ?1
         AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL})`,
@@ -769,7 +769,7 @@ export async function handleReleaseDesktopWorkspace(
     );
   }
 
-  const reserved = await env.CONCLAVE_DB.prepare(
+  const reserved = await env.SYNTILA_DB.prepare(
     `UPDATE execution_workspaces SET status = 'revoked', updated_at = ?1
       WHERE id = ?2 AND owner_user_id = ?3 AND status = ?4`,
   )
@@ -786,23 +786,23 @@ export async function handleReleaseDesktopWorkspace(
     );
   }
 
-  const released = await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  const released = await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       `UPDATE workspace_runtime_identities
           SET revoked_at = COALESCE(revoked_at, ?1), installation_id = NULL
         WHERE workspace_id = ?2`,
     ).bind(now, workspaceId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE workspace_installations
           SET status = 'released', released_at = ?1, updated_at = ?1
         WHERE installation_id = ?2 AND workspace_id = ?3
           AND owner_user_id = ?4 AND status = 'active'`,
     ).bind(now, installationId, workspaceId, session.userId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `UPDATE workspace_space_grants SET status = 'revoked', updated_at = ?1
         WHERE workspace_id = ?2 AND status IN ('active', 'suspended')`,
     ).bind(now, workspaceId),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_audit_log
         (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'workspace.ownership.released', 'workspace_runtime', ?4, ?5, ?6)`,
@@ -920,7 +920,7 @@ export async function handleRegisterWorkspaceFromDesktop(
   ) {
     return json({ error: "Runtime capabilities are invalid" }, { status: 400 });
   }
-  const installation = await env.CONCLAVE_DB.prepare(
+  const installation = await env.SYNTILA_DB.prepare(
     `SELECT wi.installation_id AS installationId,
             wi.owner_user_id AS ownerUserId, wi.workspace_id AS workspaceId,
             wi.status AS status, wi.released_at AS releasedAt,
@@ -950,7 +950,7 @@ export async function handleRegisterWorkspaceFromDesktop(
     );
   }
   if (existing) {
-    const activeRuntime = await env.CONCLAVE_DB.prepare(
+    const activeRuntime = await env.SYNTILA_DB.prepare(
       `SELECT COUNT(*) AS count FROM workspace_runtime_identities
         WHERE workspace_id = ?1 AND revoked_at IS NULL`,
     )
@@ -973,7 +973,7 @@ export async function handleRegisterWorkspaceFromDesktop(
       ? name.trim()
       : (existing?.workspaceName ?? name);
   const runtimeId = `runtime-${crypto.randomUUID()}`;
-  const credential = `conclave_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
+  const credential = `syntila_workspace_tok_${crypto.randomUUID().replace(/-/g, "")}`;
   const credentialHash = await hashToken(credential);
   const auditId = `audit-${crypto.randomUUID()}`;
   const statements = [];
@@ -984,19 +984,19 @@ export async function handleRegisterWorkspaceFromDesktop(
     name.trim() !== existing.workspaceName
   ) {
     statements.push(
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `UPDATE execution_workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3`,
       ).bind(workspaceName, now, workspaceId),
     );
   }
   if (!existing) {
     statements.push(
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO execution_workspaces (id, owner_user_id, name, status, created_at, updated_at) VALUES (?1, ?2, ?3, 'offline', ?4, ?4)`,
       ).bind(workspaceId, session.userId, workspaceName, now),
     );
     statements.push(
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `INSERT INTO workspace_installations
           (installation_id, owner_user_id, workspace_id, status, created_at, updated_at, released_at)
          VALUES (?1, ?2, ?3, 'active', ?4, ?4, NULL)
@@ -1012,19 +1012,19 @@ export async function handleRegisterWorkspaceFromDesktop(
   }
   if (existing) {
     statements.push(
-      env.CONCLAVE_DB.prepare(
+      env.SYNTILA_DB.prepare(
         `UPDATE workspace_runtime_identities SET revoked_at = ?1
           WHERE workspace_id = ?2 AND revoked_at IS NULL`,
       ).bind(now, workspaceId),
     );
   }
   statements.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_runtime_identities (id, workspace_id, credential_token_hash, installation_id, created_at, revoked_at) VALUES (?1, ?2, ?3, ?4, ?5, NULL)`,
     ).bind(runtimeId, workspaceId, credentialHash, installationId, now),
   );
   statements.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_runtime_facts (workspace_id, platform, architecture, hostname, app_version, runtime_capabilities_json, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(workspace_id) DO UPDATE SET platform=excluded.platform, architecture=excluded.architecture, hostname=excluded.hostname, app_version=excluded.app_version, runtime_capabilities_json=excluded.runtime_capabilities_json, updated_at=excluded.updated_at`,
     ).bind(
       workspaceId,
@@ -1037,7 +1037,7 @@ export async function handleRegisterWorkspaceFromDesktop(
     ),
   );
   statements.push(
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_audit_log (id, workspace_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at) VALUES (?1, ?2, 'user', ?3, ?4, 'workspace_runtime', ?5, ?6, ?7)`,
     ).bind(
       auditId,
@@ -1056,7 +1056,7 @@ export async function handleRegisterWorkspaceFromDesktop(
     ),
   );
   try {
-    await env.CONCLAVE_DB.batch(statements);
+    await env.SYNTILA_DB.batch(statements);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Workspace registration batch failed:", message);

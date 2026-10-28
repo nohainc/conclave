@@ -1,7 +1,7 @@
 import {
   validateToolProfileV1,
   type ToolProfileV1,
-} from "@conclave/tool-profile";
+} from "@syntila/tool-profile";
 import { canonicalJson } from "./canonical-json.js";
 
 export class ToolProfileRegistryError extends Error {
@@ -14,7 +14,7 @@ export class ToolProfileRegistryError extends Error {
   }
 }
 export interface ToolProfileRegistryEnvironment {
-  readonly CONCLAVE_DB: D1Database;
+  readonly SYNTILA_DB: D1Database;
 }
 
 export interface WorkerProfilePublicationEvidence {

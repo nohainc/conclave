@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:conclave_workspace/thread_directory.dart';
-import 'package:conclave_workspace/thread_path.dart';
+import 'package:syntila_workspace/thread_directory.dart';
+import 'package:syntila_workspace/thread_path.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -10,7 +10,7 @@ void main() {
   late ThreadMutationCoordinator coordinator;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('conclave-mutation-');
+    root = await Directory.systemTemp.createTemp('syntila-mutation-');
     coordinator = ThreadMutationCoordinator(
       ThreadDirectoryLifecycle(
         pathResolver: ThreadPathResolver(root),

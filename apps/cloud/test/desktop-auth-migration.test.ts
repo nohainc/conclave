@@ -249,10 +249,10 @@ describe("desktop auth multi-audience migration", () => {
     ).toThrow();
 
     const env = {
-      CONCLAVE_DB: new TestD1(database),
-      CONCLAVE_PROFILE_ADMIN_USER_IDS: "owner",
-      CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS: "owner",
-      CONCLAVE_WORKSPACE_GATEWAY: {
+      SYNTILA_DB: new TestD1(database),
+      SYNTILA_PROFILE_ADMIN_USER_IDS: "owner",
+      SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS: "owner",
+      SYNTILA_WORKSPACE_GATEWAY: {
         getByName: () => ({
           fetch: async () => Response.json({ online: false }),
         }),
@@ -270,7 +270,7 @@ describe("desktop auth multi-audience migration", () => {
       audience?: string;
     }) => {
       const created = await handleCreateDesktopAuthIntent(
-        new Request("https://app.conclave.test/api/desktop-auth/intents", {
+        new Request("https://app.syntila.test/api/desktop-auth/intents", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -288,7 +288,7 @@ describe("desktop auth multi-audience migration", () => {
       };
 
       const approved = await handleApproveDesktopAuthIntent(
-        new Request("https://app.conclave.test/api/desktop-auth/approve", {
+        new Request("https://app.syntila.test/api/desktop-auth/approve", {
           method: "POST",
           headers: { cookie: "better-auth-session=fixture" },
         }),
@@ -298,7 +298,7 @@ describe("desktop auth multi-audience migration", () => {
       expect(approved.status).toBe(200);
 
       const claimed = await handleClaimDesktopAuthIntent(
-        new Request("https://app.conclave.test/api/desktop-auth/claim", {
+        new Request("https://app.syntila.test/api/desktop-auth/claim", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ pollToken: intent.pollToken }),
@@ -316,7 +316,7 @@ describe("desktop auth multi-audience migration", () => {
       expect(session.user.userId).toBe("owner");
 
       const sessionResponse = await handleGetDesktopHumanSession(
-        new Request("https://app.conclave.test/api/desktop-auth/session", {
+        new Request("https://app.syntila.test/api/desktop-auth/session", {
           headers: { authorization: `Bearer ${session.credential}` },
         }),
         env,
@@ -354,7 +354,7 @@ describe("desktop auth multi-audience migration", () => {
       },
     };
     const workspaceRegistration = await handleRegisterWorkspaceFromDesktop(
-      new Request("https://app.conclave.test/api/workspace-runtime/register", {
+      new Request("https://app.syntila.test/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: `Bearer ${workspaceSession.credential}`,
@@ -368,7 +368,7 @@ describe("desktop auth multi-audience migration", () => {
 
     await expect(
       authorizeToolProfileAdmin(
-        new Request("https://app.conclave.test/api/profile-admin/profiles", {
+        new Request("https://app.syntila.test/api/profile-admin/profiles", {
           headers: {
             authorization: `Bearer ${profileLabSession.credential}`,
           },
@@ -382,7 +382,7 @@ describe("desktop auth multi-audience migration", () => {
 
     await expect(
       authorizeToolProfileAdmin(
-        new Request("https://app.conclave.test/api/profile-admin/profiles", {
+        new Request("https://app.syntila.test/api/profile-admin/profiles", {
           headers: { authorization: `Bearer ${workspaceSession.credential}` },
         }),
         env,
@@ -392,7 +392,7 @@ describe("desktop auth multi-audience migration", () => {
     await expect(
       handleRegisterWorkspaceFromDesktop(
         new Request(
-          "https://app.conclave.test/api/workspace-runtime/register",
+          "https://app.syntila.test/api/workspace-runtime/register",
           {
             method: "POST",
             headers: {

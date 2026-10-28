@@ -1,5 +1,5 @@
 import { canonicalJson } from "./canonical-json.js";
-import type { ToolProfileV1 } from "@conclave/tool-profile";
+import type { ToolProfileV1 } from "@syntila/tool-profile";
 import {
   ToolProfileRegistryError,
   parseProfile,
@@ -216,8 +216,8 @@ export async function getCurrentWorkerProfile(
   workerTypeId: string,
 ): Promise<WorkerProfileSnapshot> {
   validateId(workerTypeId, "workerTypeId");
-  await requireWorkerCatalogRow(env.CONCLAVE_DB, workerTypeId);
-  const row = await loadCurrentWorkerProfileRow(env.CONCLAVE_DB, workerTypeId);
+  await requireWorkerCatalogRow(env.SYNTILA_DB, workerTypeId);
+  const row = await loadCurrentWorkerProfileRow(env.SYNTILA_DB, workerTypeId);
   if (!row) {
     throw new ToolProfileRegistryError(
       404,
@@ -242,8 +242,8 @@ export async function listWorkerProfileHistory(
   workerTypeId: string,
 ): Promise<{ history: WorkerProfileHistorySnapshot[] }> {
   validateId(workerTypeId, "workerTypeId");
-  await requireWorkerCatalogRow(env.CONCLAVE_DB, workerTypeId);
-  const rows = await env.CONCLAVE_DB.prepare(
+  await requireWorkerCatalogRow(env.SYNTILA_DB, workerTypeId);
+  const rows = await env.SYNTILA_DB.prepare(
     `SELECT worker_type_id, schema_version, profile_json, revision,
               digest, actor_user_id,
               published_at, restoration_reason
@@ -368,7 +368,7 @@ async function persistWorkerProfileSnapshot(args: {
       "Worker Profile revision limit reached",
     );
   }
-  const db = args.env.CONCLAVE_DB;
+  const db = args.env.SYNTILA_DB;
   if (!args.current) {
     if (args.expectedRevision !== 0) {
       throw new ToolProfileRegistryError(
@@ -454,7 +454,7 @@ export async function publishWorkerProfile(args: {
   actorUserId: string;
 }): Promise<WorkerProfileSnapshot> {
   validateId(args.workerTypeId, "workerTypeId");
-  await requireWorkerCatalogRow(args.env.CONCLAVE_DB, args.workerTypeId);
+  await requireWorkerCatalogRow(args.env.SYNTILA_DB, args.workerTypeId);
   const candidateDigest = requireDigest(args.candidateDigest);
   const validated = await validateWorkerProfileCandidate(
     args.workerTypeId,
@@ -470,7 +470,7 @@ export async function publishWorkerProfile(args: {
   }
   requireRevision(args.expectedRevision, "expectedRevision");
   const current = await loadCurrentWorkerProfileRow(
-    args.env.CONCLAVE_DB,
+    args.env.SYNTILA_DB,
     args.workerTypeId,
   );
   if ((current?.revision ?? 0) !== args.expectedRevision) {
@@ -505,15 +505,15 @@ export async function restoreWorkerProfile(args: {
   if (!args.restorationReason.trim() || args.restorationReason.length > 512) {
     throw new ToolProfileRegistryError(400, "restorationReason is invalid");
   }
-  await requireWorkerCatalogRow(args.env.CONCLAVE_DB, args.workerTypeId);
+  await requireWorkerCatalogRow(args.env.SYNTILA_DB, args.workerTypeId);
   const current = await loadCurrentWorkerProfileRow(
-    args.env.CONCLAVE_DB,
+    args.env.SYNTILA_DB,
     args.workerTypeId,
   );
   if (!current || current.revision !== args.expectedRevision) {
     throw new ToolProfileRegistryError(409, "Worker Profile revision is stale");
   }
-  const history = await args.env.CONCLAVE_DB.prepare(
+  const history = await args.env.SYNTILA_DB.prepare(
     `SELECT worker_type_id, schema_version, profile_json, revision,
               digest, actor_user_id,
               published_at AS updated_at

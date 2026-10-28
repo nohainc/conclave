@@ -1,5 +1,5 @@
-import 'package:conclave_app/src/features/common/dictation/speech_dictation.dart';
-import 'package:conclave_app/src/features/common/markdown_composer.dart';
+import 'package:syntila_app/src/features/common/dictation/speech_dictation.dart';
+import 'package:syntila_app/src/features/common/markdown_composer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

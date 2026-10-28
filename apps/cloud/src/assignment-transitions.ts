@@ -4,12 +4,12 @@ import {
   assignmentSourceStatuses,
   isTerminalAssignmentStatus,
   type AssignmentLifecycleStatus,
-} from "@conclave/core";
+} from "@syntila/core";
 
 /**
  * Cloud's only writer of `worker_assignments.status` for message-driven
  * transitions. Every change is one conditional UPDATE whose WHERE clause
- * carries both the canonical source-status set (from `@conclave/core`) and the
+ * carries both the canonical source-status set (from `@syntila/core`) and the
  * identity fence, so concurrent handlers, replays and stale messages cannot
  * move a row backwards or out of its attempt. The database, not an earlier
  * SELECT, decides which handler wins.

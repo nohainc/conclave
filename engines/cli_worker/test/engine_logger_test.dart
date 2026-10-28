@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:conclave_cli_worker_engine/src/engine_logger.dart';
+import 'package:syntila_cli_worker_engine/src/engine_logger.dart';
 import 'package:test/test.dart';
 
 void main() {

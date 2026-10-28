@@ -1,4 +1,4 @@
-import 'package:conclave_app/src/ax/attachment_limits.dart';
+import 'package:syntila_app/src/ax/attachment_limits.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

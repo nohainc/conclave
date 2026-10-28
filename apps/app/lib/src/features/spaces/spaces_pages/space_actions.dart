@@ -210,15 +210,15 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
             ),
           ),
           backgroundColor: Theme.of(context).brightness == Brightness.dark
-              ? ConclaveColors.navigationBackgroundDark
-              : ConclaveColors.navigationBackgroundLight,
+              ? SyntilaColors.navigationBackgroundDark
+              : SyntilaColors.navigationBackgroundLight,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
           action: SnackBarAction(
             label: 'Copy',
-            textColor: ConclaveColors.primaryForeground(
+            textColor: SyntilaColors.primaryForeground(
                 Theme.of(context).brightness == Brightness.dark),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: message));
@@ -253,7 +253,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: Text('Remove "${member.displayName}"?'),
         content: const Text(
             'Are you sure you want to remove this member from the Space?'),
@@ -264,7 +264,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: ConclaveDialogStyle.destructiveButton(),
+            style: SyntilaDialogStyle.destructiveButton(),
             child: const Text('Remove'),
           ),
         ],
@@ -281,7 +281,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        constraints: ConclaveDialogStyle.small,
+        constraints: SyntilaDialogStyle.small,
         title: const Text('Revoke invitation?'),
         content: Text('Cancel pending invitation for ${invite.email}?'),
         actions: [
@@ -291,7 +291,7 @@ extension _SpaceWorkspaceActions on _SpaceWorkspaceState {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            style: ConclaveDialogStyle.destructiveButton(),
+            style: SyntilaDialogStyle.destructiveButton(),
             child: const Text('Revoke'),
           ),
         ],

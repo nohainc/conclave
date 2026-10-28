@@ -5,7 +5,7 @@ import 'dart:convert';
 import 'dart:html' as html;
 import 'dart:math' as math;
 
-import 'package:conclave_protocol/conclave_protocol.dart';
+import 'package:syntila_protocol/syntila_protocol.dart';
 
 import 'realtime_client_stub.dart';
 import 'realtime_health.dart';

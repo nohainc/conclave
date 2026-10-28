@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:conclave_app/src/ax/ax_data.dart';
-import 'package:conclave_app/src/features/spaces/spaces_pages.dart';
+import 'package:syntila_app/src/ax/ax_data.dart';
+import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter/material.dart';
-import 'package:conclave_design/conclave_design.dart';
+import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _claude = '''
@@ -335,8 +335,8 @@ void main() {
         .widgetList<LinearProgressIndicator>(
             find.byType(LinearProgressIndicator))
         .first;
-    expect(bar.color, ConclaveColors.primaryForeground(false));
-    expect(bar.backgroundColor, ConclaveColors.surfaceHoverLight);
+    expect(bar.color, SyntilaColors.primaryForeground(false));
+    expect(bar.backgroundColor, SyntilaColors.surfaceHoverLight);
     expect(find.textContaining('Resets in'), findsWidgets);
     await tester.pumpWidget(MaterialApp(
         theme: ThemeData.dark(),
@@ -348,8 +348,8 @@ void main() {
         .widgetList<LinearProgressIndicator>(
             find.byType(LinearProgressIndicator))
         .first;
-    expect(darkBar.color, ConclaveColors.primaryForeground(true));
-    expect(darkBar.backgroundColor, ConclaveColors.surfaceHoverDark);
+    expect(darkBar.color, SyntilaColors.primaryForeground(true));
+    expect(darkBar.backgroundColor, SyntilaColors.surfaceHoverDark);
 
     await tester
         .tap(find.byKey(const ValueKey('worker-usage-toggle-original')));

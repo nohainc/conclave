@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import 'conclave_protocol.dart';
+import 'syntila_protocol.dart';
 
-const workspaceRuntimeProtocolName = 'conclave.workspace-runtime-protocol';
+const workspaceRuntimeProtocolName = 'syntila.workspace-runtime-protocol';
 const workspaceRuntimeProtocolVersion = '5.1';
 const workspaceRuntimeProtocolMaxMessageSizeBytes = 4194304;
 

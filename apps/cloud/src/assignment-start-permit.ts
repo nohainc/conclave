@@ -2,7 +2,7 @@ import {
   isRevocationAssignmentStatus,
   isTerminalAssignmentStatus,
   type AssignmentLifecycleStatus,
-} from "@conclave/core";
+} from "@syntila/core";
 import {
   transitionAssignment,
   type AssignmentFence,

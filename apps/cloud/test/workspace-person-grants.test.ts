@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { BUILTIN_WORKFLOW_CATALOG } from "@conclave/core";
+import { BUILTIN_WORKFLOW_CATALOG } from "@syntila/core";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import type { SecurityEnv } from "../src/routes/http-security.js";
 vi.mock("../src/routes/http-security.js", async (original) => ({
@@ -57,7 +57,7 @@ function fixture() {
     INSERT INTO space_workflow_settings VALUES('G','lent','now');
     INSERT INTO space_workflow_configurations(space_id,workflow_id,schema_version,configuration_json,updated_at)
       VALUES('G','direct',1,'{"schemaVersion":1,"workflowId":"direct","enabled":true,"defaults":{"worker":"worker-a"},"stepOverrides":{}}','now');`);
-  const env = { CONCLAVE_DB: db } as SecurityEnv;
+  const env = { SYNTILA_DB: db } as SecurityEnv;
   const grantGuest = (
     policy = '{"schemaVersion":1,"mode":"work","workers":{"worker-a":{"models":null,"efforts":null}}}',
   ) =>

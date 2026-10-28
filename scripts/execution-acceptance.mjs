@@ -50,7 +50,7 @@ export const SUITES = {
   },
   engine: {
     cwd: fileURLToPath(
-      new URL("../packages/conclave_cli_worker_runtime/", import.meta.url),
+      new URL("../packages/syntila_cli_worker_runtime/", import.meta.url),
     ),
     command: "dart",
     args: ["test", "--concurrency=1"],

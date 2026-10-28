@@ -10,7 +10,7 @@ describe("email deployment configuration", () => {
   });
 
   it("rejects a retired sender and a missing binding", () => {
-    const root = mkdtempSync(join(tmpdir(), "conclave-email-config-"));
+    const root = mkdtempSync(join(tmpdir(), "syntila-email-config-"));
     try {
       mkdirSync(join(root, "infra/cloudflare"), { recursive: true });
       mkdirSync(join(root, "apps/cloud"), { recursive: true });
@@ -19,10 +19,10 @@ describe("email deployment configuration", () => {
         join(root, "infra/cloudflare/app.wrangler.jsonc"),
         JSON.stringify({
           vars: {
-            CONCLAVE_ENVIRONMENT: "production",
-            CONCLAVE_EMAIL_FROM: "auth@auth.earthuc.com",
-            CONCLAVE_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
-            CONCLAVE_EMAIL_FROM_NAME: "Syntila",
+            SYNTILA_ENVIRONMENT: "production",
+            SYNTILA_EMAIL_FROM: "auth@auth.earthuc.com",
+            SYNTILA_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
+            SYNTILA_EMAIL_FROM_NAME: "Syntila",
           },
           send_email: [],
         }),
@@ -30,8 +30,8 @@ describe("email deployment configuration", () => {
       writeFileSync(
         join(root, "apps/cloud/wrangler.jsonc"),
         JSON.stringify({
-          vars: { CONCLAVE_ENVIRONMENT: "development" },
-          send_email: [{ name: "CONCLAVE_EMAIL" }],
+          vars: { SYNTILA_ENVIRONMENT: "development" },
+          send_email: [{ name: "SYNTILA_EMAIL" }],
         }),
       );
       writeFileSync(
@@ -42,7 +42,7 @@ describe("email deployment configuration", () => {
       expect(validateEmailDeploymentConfig(root)).toEqual(
         expect.arrayContaining([
           "production: retired sender is configured",
-          "production: CONCLAVE_EMAIL send_email binding is missing",
+          "production: SYNTILA_EMAIL send_email binding is missing",
           "production: retired sender appears in Wrangler configuration",
           "apps/cloud/src/auth/better-auth.ts: retired sender appears in active email code",
         ]),

@@ -46,7 +46,7 @@ prohibitions:
   provider_specific_worker_executable: true
   browser_or_web_ai_worker: true
   interactive_connector: true
-  conclave_managed_provider_credentials: true
+  syntila_managed_provider_credentials: true
   agent_runtime: true
   configured_worker_product_entity: true
   pre_v8_goal_phase_task_orchestration: true
@@ -81,7 +81,7 @@ Use these terms for v8 architecture, implementation, tests, and operations:
 - **Provider CLI** — locally installed tool such as `codex` or `agy`;
 - **Local Worker Protocol 4.1** — Workspace-to-Engine contract.
 
-The `@conclave/core` package organizes current domain contracts by concept
+The `@syntila/core` package organizes current domain contracts by concept
 (`space`, `workspace-grants`, `thread`, `integration`, and
 `observability`). Current source uses domain names rather than architecture
 version labels.
@@ -131,15 +131,15 @@ Normal Workspace UI remains Worker-centric.
 ## 3. Product topology
 
 ~~~text
-                         CONCLAVE AX
+                         SYNTILA
                              |
                              v
-                       CONCLAVE CLOUD
+                       SYNTILA CLOUD
                              |
                    Workspace Runtime Protocol
                              |
                              v
-                    CONCLAVE WORKSPACE
+                    SYNTILA WORKSPACE
                              |
                    Local Worker Protocol 4.1
                              |
@@ -228,8 +228,8 @@ unique partial indexes enforce one ownership row per installation, one active
 installation per Workspace, and one unrevoked runtime identity per Workspace.
 
 Tool Profile administration and release operations use separate Cloud
-allowlists: `CONCLAVE_PROFILE_ADMIN_USER_IDS` grants catalog and draft
-administration, while `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` grants
+allowlists: `SYNTILA_PROFILE_ADMIN_USER_IDS` grants catalog and draft
+administration, while `SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS` grants
 publication and rollout management. Workspace ownership and Space roles do
 not grant either permission. Stable promotion and channel rollback require
 fresh session-bound passkey step-up authentication. Release revocation uses
@@ -422,7 +422,7 @@ There is one CLI Worker Engine release per supported platform/architecture.
 Example:
 
 ~~~text
-conclave-cli-worker 1.3.0
+syntila-cli-worker 1.3.0
 
 macos-arm64
 macos-x64
@@ -446,7 +446,7 @@ into the managed application-support directory:
   Engines/
     cli_worker/
       1.0.0-<sha256>/
-        conclave_cli_worker_engine[.exe]
+        syntila_cli_worker_engine[.exe]
 ~~~
 
 The version and digest make each materialized artifact immutable and
@@ -701,7 +701,7 @@ The user cannot add arbitrary catalog/profile entries in v8.
 
 ## 17. Workspace UI
 
-> **Note (2026-10):** the Flutter Workspace UI described in this section was removed. Workspace is a headless Dart service plus the `conclave-workspace` CLI; Worker-centric presentation now lives in AX and the CLI `workers` output. See [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+> **Note (2026-10):** the Flutter Workspace UI described in this section was removed. Workspace is a headless Dart service plus the `syntila-workspace` CLI; Worker-centric presentation now lives in AX and the CLI `workers` output. See [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
 
 Keep current UX.
 
@@ -1185,16 +1185,16 @@ All may still expose the same logical Worker/Work orchestration abstraction.
 ## 29. Final v8 topology
 
 ~~~text
-                         CONCLAVE AX
+                         SYNTILA
                              |
                        Work / Discuss
                              |
                              v
-                       CONCLAVE CLOUD
+                       SYNTILA CLOUD
                    scheduling + profiles
                              |
                              v
-                    CONCLAVE WORKSPACE
+                    SYNTILA WORKSPACE
                              |
                     logical Worker slot
                              |
@@ -1241,7 +1241,7 @@ rollback, and revocation remain separate human-controlled workflows.
 
 Production Workspaces continue to admit only signed Profiles. At the operator's
 explicit request, a non-release Workspace can opt into unsigned local drafts
-with `CONCLAVE_DEVELOPMENT_PROFILE_DIRECTORY`, provided its Cloud origin is
+with `SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY`, provided its Cloud origin is
 loopback. This bounded exception uses the same generic CLI Worker Engine,
 validates schema/catalog identity and compatibility, and pins each selected
 payload by digest in separate development storage. It does not manufacture

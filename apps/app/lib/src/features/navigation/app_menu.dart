@@ -40,11 +40,11 @@ class GlobalAppMenu extends StatelessWidget {
     final activeThemeMode = shellContext.themeMode;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final menuStyle = ConclaveMenuStyle.surface(isDark);
+    final menuStyle = SyntilaMenuStyle.surface(isDark);
     ButtonStyle itemStyle({bool isDestructive = false}) =>
-        ConclaveMenuStyle.item(isDark, isDestructive: isDestructive).copyWith(
+        SyntilaMenuStyle.item(isDark, isDestructive: isDestructive).copyWith(
           foregroundColor:
-              WidgetStatePropertyAll(ConclaveColors.navigationText(isDark)),
+              WidgetStatePropertyAll(SyntilaColors.navigationText(isDark)),
         );
 
     Widget divider() => Padding(
@@ -52,11 +52,11 @@ class GlobalAppMenu extends StatelessWidget {
           child: Divider(
             height: 1,
             thickness: 1,
-            color: ConclaveColors.navigationBorder(isDark),
+            color: SyntilaColors.navigationBorder(isDark),
           ),
         );
 
-    final menuIconColor = ConclaveColors.textPrimary(isDark);
+    final menuIconColor = SyntilaColors.textPrimary(isDark);
 
     return MenuAnchor(
       style: menuStyle,
@@ -69,7 +69,7 @@ class GlobalAppMenu extends StatelessWidget {
                 child: IconButton(
                   icon: Icon(
                     Icons.menu_rounded,
-                    color: ConclaveColors.navigationTextMuted(
+                    color: SyntilaColors.navigationTextMuted(
                         Theme.of(context).brightness == Brightness.dark),
                     size: iconSize,
                   ),
@@ -171,8 +171,8 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.system
-                    ? (ConclaveColors.textPrimary(isDark))
-                    : (ConclaveColors.neutral),
+                    ? (SyntilaColors.textPrimary(isDark))
+                    : (SyntilaColors.neutral),
               ),
               onPressed: () {
                 if (onSetThemeMode != null) {
@@ -194,8 +194,8 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.light
-                    ? (ConclaveColors.textPrimary(isDark))
-                    : (ConclaveColors.neutral),
+                    ? (SyntilaColors.textPrimary(isDark))
+                    : (SyntilaColors.neutral),
               ),
               onPressed: () {
                 if (onSetThemeMode != null) {
@@ -217,8 +217,8 @@ class GlobalAppMenu extends StatelessWidget {
                     : Icons.circle_outlined,
                 size: 15,
                 color: activeThemeMode == ThemeMode.dark
-                    ? (ConclaveColors.textPrimary(isDark))
-                    : (ConclaveColors.neutral),
+                    ? (SyntilaColors.textPrimary(isDark))
+                    : (SyntilaColors.neutral),
               ),
               onPressed: () {
                 if (onSetThemeMode != null) {
@@ -245,7 +245,7 @@ class GlobalAppMenu extends StatelessWidget {
             size: 16,
             color: menuIconColor,
           ),
-          onPressed: () => onOpenExternal(Uri.parse(conclaveDownloadsUrl)),
+          onPressed: () => onOpenExternal(Uri.parse(syntilaDownloadsUrl)),
           child: const Text(
             'Downloads',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
@@ -258,7 +258,7 @@ class GlobalAppMenu extends StatelessWidget {
             size: 16,
             color: menuIconColor,
           ),
-          onPressed: () => onOpenExternal(Uri.parse(conclaveDocumentationUrl)),
+          onPressed: () => onOpenExternal(Uri.parse(syntilaDocumentationUrl)),
           child: const Text(
             'Documentation',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
@@ -266,7 +266,7 @@ class GlobalAppMenu extends StatelessWidget {
         ),
         MenuItemButton(
           style: itemStyle(),
-          leadingIcon: ConclaveBrand.logoMark(size: 16),
+          leadingIcon: SyntilaBrand.logoMark(size: 16),
           onPressed: onOpenAbout,
           child: const Text(
             'About Syntila',
@@ -279,7 +279,7 @@ class GlobalAppMenu extends StatelessWidget {
           leadingIcon: Icon(
             Icons.logout_rounded,
             size: 16,
-            color: ConclaveColors.errorText(isDark),
+            color: SyntilaColors.errorText(isDark),
           ),
           onPressed: onLogout,
           child: Text(
@@ -287,7 +287,7 @@ class GlobalAppMenu extends StatelessWidget {
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w500,
-              color: ConclaveColors.errorText(isDark),
+              color: SyntilaColors.errorText(isDark),
             ),
           ),
         ),

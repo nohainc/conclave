@@ -1,7 +1,7 @@
 import {
   WorkspaceAllowedFolderSchema,
   WorkspaceWorkerInventoryEntrySchema,
-} from "@conclave/workspace-runtime-protocol";
+} from "@syntila/workspace-runtime-protocol";
 import type { WorkspaceGatewayEnv } from "./contracts.js";
 
 /** Persists the Workspace-owned logical Worker snapshot and prunes omissions. */
@@ -17,7 +17,7 @@ export async function recordWorkspaceWorkerInventory(
     item && typeof item === "object" ? item.workerId : undefined,
   );
   if (new Set(ids).size !== ids.length) return;
-  const owner = await env.CONCLAVE_DB.prepare(
+  const owner = await env.SYNTILA_DB.prepare(
     "SELECT owner_user_id FROM execution_workspaces WHERE id = ?1 AND status != 'revoked'",
   )
     .bind(workspaceId)
@@ -36,7 +36,7 @@ export async function recordWorkspaceWorkerInventory(
     parallelSlots >= 1 &&
     parallelSlots <= 1024
   ) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `UPDATE execution_workspaces SET parallel_slots = ?2, updated_at = ?3
         WHERE id = ?1 AND (parallel_slots IS NULL OR parallel_slots != ?2)`,
     )
@@ -77,7 +77,7 @@ export async function recordWorkspaceWorkerInventory(
     ) {
       continue;
     }
-    const previous = await env.CONCLAVE_DB.prepare(
+    const previous = await env.SYNTILA_DB.prepare(
       "SELECT workspace_id, revision, model_catalog_json FROM workspace_worker_inventory WHERE worker_id = ?1",
     )
       .bind(workerId)
@@ -97,7 +97,7 @@ export async function recordWorkspaceWorkerInventory(
     reportedWorkerIds.add(workerId);
     if (previous && Number(previous.revision) >= (revision as number)) {
       if (Number(previous.revision) === revision) {
-        await env.CONCLAVE_DB.prepare(
+        await env.SYNTILA_DB.prepare(
           `UPDATE workspace_worker_inventory SET last_seen_at = ?3
               WHERE worker_id = ?1 AND workspace_id = ?2 AND revision = ?4`,
         )
@@ -132,7 +132,7 @@ export async function recordWorkspaceWorkerInventory(
       ? validatedCatalog.data
       : null;
     if (acceptedCatalog) {
-      const profile = await env.CONCLAVE_DB.prepare(
+      const profile = await env.SYNTILA_DB.prepare(
         `SELECT digest FROM worker_profiles
           WHERE worker_type_id = ?1 AND revision = ?2
          UNION ALL
@@ -167,7 +167,7 @@ export async function recordWorkspaceWorkerInventory(
         }
       }
     }
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT INTO workspace_worker_inventory
           (worker_id, workspace_id, owner_user_id, worker_type_id,
            activation_state, readiness_state, readiness_issue_code,
@@ -231,7 +231,7 @@ export async function recordWorkspaceWorkerInventory(
         acceptedCatalog ? JSON.stringify(acceptedCatalog) : null,
       )
       .run();
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       `INSERT OR IGNORE INTO worker_scheduling (worker_id, state, updated_at)
          SELECT worker_id, 'disabled', ?2 FROM workspace_worker_inventory WHERE worker_id = ?1`,
     )
@@ -241,7 +241,7 @@ export async function recordWorkspaceWorkerInventory(
   // Full snapshots are authoritative. Removed local slots disappear from
   // inventory; scheduling and audit rows cascade with the inventory row.
   if (fullSnapshot) {
-    const existing = await env.CONCLAVE_DB.prepare(
+    const existing = await env.SYNTILA_DB.prepare(
       `SELECT worker_id FROM workspace_worker_inventory
           WHERE workspace_id = ?1`,
     )
@@ -249,7 +249,7 @@ export async function recordWorkspaceWorkerInventory(
       .all<{ worker_id: string }>();
     for (const row of existing.results ?? []) {
       if (reportedWorkerIds.has(row.worker_id)) continue;
-      await env.CONCLAVE_DB.prepare(
+      await env.SYNTILA_DB.prepare(
         `DELETE FROM workspace_worker_inventory
             WHERE worker_id = ?1 AND workspace_id = ?2`,
       )
@@ -260,7 +260,7 @@ export async function recordWorkspaceWorkerInventory(
   // Workspace selection authorizes scheduling for ready, locally enabled
   // Workers, including ones configured after the Workspace was selected.
   // Reconcile even unchanged reports so an existing disabled row can recover.
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `UPDATE worker_scheduling
         SET state = 'enabled', updated_at = ?2
       WHERE state = 'disabled'
@@ -301,7 +301,7 @@ export async function recordWorkspaceAllowedFolders(
   }
   if (new Set(folders.map((folder) => folder.id)).size !== folders.length)
     return;
-  const db = env.CONCLAVE_DB;
+  const db = env.SYNTILA_DB;
   const existing = await db
     .prepare(
       "SELECT folder_id FROM workspace_allowed_folders WHERE workspace_id = ?1",

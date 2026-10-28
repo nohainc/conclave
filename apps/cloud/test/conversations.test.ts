@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it, vi } from "vitest";
-import { CONVERSATION_WORKFLOWS } from "@conclave/core";
+import { CONVERSATION_WORKFLOWS } from "@syntila/core";
 import { sqliteD1 } from "./helpers/sqlite-d1.js";
 import type { SecurityEnv } from "../src/routes/handlers.js";
 const { authorize } = vi.hoisted(() => ({
@@ -76,7 +76,7 @@ it("shares one Thread Conversation across workflows, preserves context revision,
     await resolveThreadConversationId(db as unknown as D1Database, "W"),
   ).toBe(id);
   const request = new Request("https://cloud.test/api/threads/W/conversations");
-  const env = { CONCLAVE_DB: db } as unknown as SecurityEnv;
+  const env = { SYNTILA_DB: db } as unknown as SecurityEnv;
   const response = await handleListConversations(request, env, "W");
   expect(await response.json()).toEqual({
     conversations: [

@@ -1,6 +1,6 @@
 import { logStructured, requestIdFor } from "../observability.js";
 
-import { extractBearerToken } from "@conclave/security";
+import { extractBearerToken } from "@syntila/security";
 
 import { json } from "./handlers.js";
 import type { SecurityEnv } from "./handlers.js";
@@ -67,7 +67,7 @@ export async function handleWorkspaceGatewayConnect(
   let workspace: { executionWorkspaceId: string } | null;
   try {
     const identity = await new WorkspaceRuntimeAuthenticator(
-      env.CONCLAVE_DB,
+      env.SYNTILA_DB,
     ).authenticateRuntime(workspaceRuntimeId, authToken);
     workspace = identity
       ? { executionWorkspaceId: identity.executionWorkspaceId }
@@ -100,7 +100,7 @@ export async function handleWorkspaceGatewayConnect(
     workspaceId: workspace.executionWorkspaceId,
   });
 
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY) {
+  if (!env.SYNTILA_WORKSPACE_GATEWAY) {
     logStructured(
       "error",
       "GW-04 workspace_gateway_forward_rejected",
@@ -116,7 +116,7 @@ export async function handleWorkspaceGatewayConnect(
       { status: 503 },
     );
   }
-  const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(
+  const stub = env.SYNTILA_WORKSPACE_GATEWAY.getByName(
     workspace.executionWorkspaceId,
   );
   logStructured("info", "GW-04 forwarding_to_workspace_gateway_do", {
@@ -160,7 +160,7 @@ export async function handleWorkspaceRuntimeTransport(
   request: Request,
   env: SecurityEnv,
 ): Promise<Response> {
-  if (!env.CONCLAVE_WORKSPACE_GATEWAY)
+  if (!env.SYNTILA_WORKSPACE_GATEWAY)
     return json(
       { error: "Workspace Gateway is not configured" },
       { status: 503 },
@@ -178,7 +178,7 @@ export async function handleWorkspaceRuntimeTransport(
       { status: 401 },
     );
   let workspaceId: string | null = null;
-  const authenticator = new WorkspaceRuntimeAuthenticator(env.CONCLAVE_DB);
+  const authenticator = new WorkspaceRuntimeAuthenticator(env.SYNTILA_DB);
   if (url.pathname === "/api/workspace-runtime/sessions") {
     if (typeof body.workspaceRuntimeId !== "string")
       return json({ error: "workspaceRuntimeId is required" }, { status: 400 });
@@ -201,7 +201,7 @@ export async function handleWorkspaceRuntimeTransport(
       { error: "Runtime session not found or credential revoked" },
       { status: 401 },
     );
-  const stub = env.CONCLAVE_WORKSPACE_GATEWAY.getByName(workspaceId);
+  const stub = env.SYNTILA_WORKSPACE_GATEWAY.getByName(workspaceId);
   let internalPath = "/runtime/" + url.pathname.split("/").pop();
   if (url.pathname === "/api/workspace-runtime/sessions")
     internalPath = "/runtime/sessions";

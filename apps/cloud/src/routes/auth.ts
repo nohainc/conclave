@@ -2,7 +2,7 @@ import { isProfileLabOwner } from "./profile-lab-policy.js";
 import {
   handleBetterAuthRequest,
   identityService,
-  provisionConclaveUser,
+  provisionSyntilaUser,
   recordAuthAuditEvent,
 } from "../auth/index.js";
 import {
@@ -12,7 +12,7 @@ import {
   type DesktopAudience,
   extractBearerToken,
   hashToken,
-} from "@conclave/security";
+} from "@syntila/security";
 import { HttpError, json, recordAudit, securityContext } from "./handlers.js";
 import { avatarUrlFor } from "./profile.js";
 import type { SecurityEnv } from "./handlers.js";
@@ -66,7 +66,7 @@ async function completeStepUpForContext(
   context: Awaited<ReturnType<typeof securityContext>>,
   env: SecurityEnv,
 ): Promise<Response> {
-  const event = await env.CONCLAVE_DB.prepare(
+  const event = await env.SYNTILA_DB.prepare(
     `SELECT id, method, created_at FROM auth_step_up_events
      WHERE user_id = ?1 AND consumed_at IS NULL
      ORDER BY created_at DESC LIMIT 1`,
@@ -87,7 +87,7 @@ async function completeStepUpForContext(
     ceremonyAt > now.getTime() ||
     now.getTime() - ceremonyAt > 5 * 60 * 1000
   ) {
-    await env.CONCLAVE_DB.prepare(
+    await env.SYNTILA_DB.prepare(
       "UPDATE auth_step_up_events SET consumed_at = ?1 WHERE id = ?2 AND consumed_at IS NULL",
     )
       .bind(now.toISOString(), event.id)
@@ -99,8 +99,8 @@ async function completeStepUpForContext(
   }
   const authenticatedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
-  await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       `INSERT INTO auth_step_up_sessions
            (id, user_id, session_id, method, authenticated_at, expires_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -116,11 +116,11 @@ async function completeStepUpForContext(
       authenticatedAt,
       expiresAt,
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       "UPDATE auth_step_up_events SET consumed_at = ?1 WHERE id = ?2 AND consumed_at IS NULL",
     ).bind(authenticatedAt, event.id),
   ]);
-  await recordAuthAuditEvent(env.CONCLAVE_DB, {
+  await recordAuthAuditEvent(env.SYNTILA_DB, {
     action: "auth.step_up.completed",
     outcome: "success",
     userId: context.userId,
@@ -146,7 +146,7 @@ export async function handleSessionLogout(
     body: JSON.stringify({ disableRedirect: true }),
   });
   const response = await handleBetterAuthRequest(authRequest, env);
-  if (response.ok && env.CONCLAVE_DB) {
+  if (response.ok && env.SYNTILA_DB) {
     await recordAudit(env, context, "logout", "session", context.sessionId);
   }
   return response;
@@ -162,7 +162,7 @@ const DESKTOP_HUMAN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function desktopAuthAppOrigin(request: Request, env: SecurityEnv): string {
   const configured =
-    env.CONCLAVE_APP_URL?.trim() || env.BETTER_AUTH_URL?.trim();
+    env.SYNTILA_APP_URL?.trim() || env.BETTER_AUTH_URL?.trim();
   if (!configured) return new URL(request.url).origin;
 
   let parsed: URL;
@@ -345,10 +345,10 @@ export async function handleCreateDesktopAuthIntent(
     );
   }
   const intentId = crypto.randomUUID();
-  const pollToken = randomSecret("conclave_dap_");
+  const pollToken = randomSecret("syntila_dap_");
   const createdAt = new Date();
   const expiresAt = new Date(createdAt.getTime() + 10 * 60_000);
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     `INSERT INTO desktop_auth_intents
        (id, poll_token_hash, client_name, audience, created_at, expires_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6)`,
@@ -389,7 +389,7 @@ export async function handleDesktopAuthIntentStatus(
   const pollToken = extractBearerToken(request.headers);
   if (!pollToken)
     throw new HttpError(401, "Desktop auth polling credential required");
-  const intent = await env.CONCLAVE_DB.prepare(
+  const intent = await env.SYNTILA_DB.prepare(
     `SELECT expires_at AS expiresAt, approved_at AS approvedAt,
             claimed_at AS claimedAt, denied_at AS deniedAt
        FROM desktop_auth_intents WHERE id = ?1 AND poll_token_hash = ?2`,
@@ -420,7 +420,7 @@ export async function handleDesktopAuthIntentBrowserStatus(
   env: SecurityEnv,
   intentId: string,
 ): Promise<Response> {
-  const intent = await env.CONCLAVE_DB.prepare(
+  const intent = await env.SYNTILA_DB.prepare(
     `SELECT expires_at AS expiresAt, approved_at AS approvedAt,
             claimed_at AS claimedAt, denied_at AS deniedAt,
             client_name AS clientName, audience
@@ -464,7 +464,7 @@ export async function handleCancelDesktopAuthIntent(
     throw new HttpError(401, "Desktop auth polling credential required");
   }
   const now = new Date().toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE desktop_auth_intents SET denied_at = ?1
       WHERE id = ?2 AND poll_token_hash = ?3 AND approved_at IS NULL
         AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?1`,
@@ -486,7 +486,7 @@ export async function handleDenyDesktopAuthIntent(
   if (!identity)
     throw new HttpError(401, "Sign in before canceling this request");
   const now = new Date().toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE desktop_auth_intents SET denied_at = ?1
       WHERE id = ?2 AND approved_at IS NULL AND claimed_at IS NULL
         AND denied_at IS NULL AND expires_at > ?1`,
@@ -510,7 +510,7 @@ export async function handleApproveDesktopAuthIntent(
       401,
       "Sign in to Syntila before approving desktop sign-in",
     );
-  await provisionConclaveUser(env.CONCLAVE_DB, identity);
+  await provisionSyntilaUser(env.SYNTILA_DB, identity);
   const body: unknown = await request.json().catch(() => ({}));
   if (
     !body ||
@@ -520,14 +520,14 @@ export async function handleApproveDesktopAuthIntent(
   ) {
     throw new HttpError(400, "Desktop approval does not accept request fields");
   }
-  const intent = await env.CONCLAVE_DB.prepare(
+  const intent = await env.SYNTILA_DB.prepare(
     "SELECT audience FROM desktop_auth_intents WHERE id = ?1",
   )
     .bind(intentId)
     .first<{ audience: string }>();
   if (
     intent?.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&
-    env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+    env.SYNTILA_PROFILE_LAB_OWNER_EMAIL !== undefined &&
     !(await isProfileLabOwner(env, identity.userId))
   ) {
     throw new HttpError(
@@ -536,7 +536,7 @@ export async function handleApproveDesktopAuthIntent(
     );
   }
   const now = new Date().toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE desktop_auth_intents
         SET approved_at = ?1, approved_user_id = ?2
       WHERE id = ?3 AND approved_at IS NULL
@@ -572,7 +572,7 @@ export async function handleClaimDesktopAuthIntent(
   const pollToken = typeof body.pollToken === "string" ? body.pollToken : "";
   if (!pollToken)
     throw new HttpError(401, "Desktop auth polling credential required");
-  const intent = await env.CONCLAVE_DB.prepare(
+  const intent = await env.SYNTILA_DB.prepare(
     `SELECT approved_user_id AS userId, expires_at AS expiresAt, audience
        FROM desktop_auth_intents
       WHERE id = ?1 AND poll_token_hash = ?2 AND approved_at IS NOT NULL
@@ -585,7 +585,7 @@ export async function handleClaimDesktopAuthIntent(
       409,
       "Desktop sign-in is not approved, expired, or already claimed",
     );
-  const user = await env.CONCLAVE_DB.prepare(
+  const user = await env.SYNTILA_DB.prepare(
     "SELECT id AS userId, email, display_name AS displayName FROM users WHERE id = ?1 AND status = 'active'",
   )
     .bind(intent.userId)
@@ -594,7 +594,7 @@ export async function handleClaimDesktopAuthIntent(
 
   if (
     intent.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&
-    env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+    env.SYNTILA_PROFILE_LAB_OWNER_EMAIL !== undefined &&
     !(await isProfileLabOwner(env, user.userId))
   ) {
     throw new HttpError(
@@ -607,8 +607,8 @@ export async function handleClaimDesktopAuthIntent(
   const tokenHash = await hashToken(credential);
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + DESKTOP_HUMAN_SESSION_MS);
-  const results = await env.CONCLAVE_DB.batch([
-    env.CONCLAVE_DB.prepare(
+  const results = await env.SYNTILA_DB.batch([
+    env.SYNTILA_DB.prepare(
       `UPDATE desktop_auth_intents SET claimed_at = ?1, claimed_session_id = ?2
         WHERE id = ?3 AND poll_token_hash = ?4 AND approved_at IS NOT NULL
           AND claimed_at IS NULL AND denied_at IS NULL AND expires_at > ?1`,
@@ -618,7 +618,7 @@ export async function handleClaimDesktopAuthIntent(
       intentId,
       await hashToken(pollToken),
     ),
-    env.CONCLAVE_DB.prepare(
+    env.SYNTILA_DB.prepare(
       `INSERT INTO desktop_human_sessions (id, user_id, token_hash, audience, created_at, last_used_at, expires_at)
        SELECT ?1, ?2, ?3, ?4, ?5, ?5, ?6 FROM desktop_auth_intents
         WHERE id = ?7 AND claimed_session_id = ?1`,
@@ -659,7 +659,7 @@ export async function handleRevokeDesktopHumanSession(
   const credential = extractBearerToken(request.headers);
   if (!credential) throw new HttpError(401, "Desktop human session required");
   const now = new Date().toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE desktop_human_sessions SET revoked_at = ?1
       WHERE id = ?2 AND token_hash = ?3 AND revoked_at IS NULL AND expires_at > ?1`,
   )
@@ -679,7 +679,7 @@ export async function findDesktopHumanSession(
   const credential = extractBearerToken(request.headers);
   if (!credential) throw new HttpError(401, "Desktop human session required");
   const now = new Date().toISOString();
-  const session = await env.CONCLAVE_DB.prepare(
+  const session = await env.SYNTILA_DB.prepare(
     `SELECT s.id AS sessionId, s.user_id AS userId, s.audience, s.created_at AS createdAt,
             s.expires_at AS expiresAt,
             u.email, u.display_name AS displayName
@@ -706,7 +706,7 @@ export async function findDesktopHumanSession(
 
   if (
     session.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&
-    env.CONCLAVE_PROFILE_LAB_OWNER_EMAIL !== undefined &&
+    env.SYNTILA_PROFILE_LAB_OWNER_EMAIL !== undefined &&
     !(await isProfileLabOwner(env, session.userId))
   ) {
     throw new HttpError(
@@ -727,7 +727,7 @@ export async function findDesktopHumanSession(
     }
   }
 
-  await env.CONCLAVE_DB.prepare(
+  await env.SYNTILA_DB.prepare(
     "UPDATE desktop_human_sessions SET last_used_at = ?1 WHERE id = ?2",
   )
     .bind(now, session.sessionId)
@@ -766,7 +766,7 @@ export async function handleRotateDesktopHumanSession(
   const expiresAt = new Date(
     Date.now() + DESKTOP_HUMAN_SESSION_MS,
   ).toISOString();
-  const result = await env.CONCLAVE_DB.prepare(
+  const result = await env.SYNTILA_DB.prepare(
     `UPDATE desktop_human_sessions SET token_hash = ?1,
         last_used_at = ?2, expires_at = ?3
        WHERE id = ?4 AND token_hash = ?5 AND revoked_at IS NULL`,

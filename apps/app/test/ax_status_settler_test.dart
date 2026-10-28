@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:conclave_app/src/ax/ax_status_settler.dart';
+import 'package:syntila_app/src/ax/ax_status_settler.dart';
 
 void main() {
   final t0 = DateTime.utc(2026, 1, 1, 12);

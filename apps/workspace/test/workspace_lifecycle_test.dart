@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:conclave_workspace/workspace_lifecycle.dart';
-import 'package:conclave_workspace/workspace_lifecycle_store.dart';
+import 'package:syntila_workspace/workspace_lifecycle.dart';
+import 'package:syntila_workspace/workspace_lifecycle_store.dart';
 import 'package:test/test.dart';
 
 void main() {

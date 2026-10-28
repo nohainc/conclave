@@ -200,7 +200,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
     final actions = _buildActions();
 
     return Dialog(
-      constraints: ConclaveDialogStyle.large,
+      constraints: SyntilaDialogStyle.large,
       child: Focus(
         autofocus: true,
         onKeyEvent: (node, event) {
@@ -238,7 +238,7 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                   style: TextStyle(
                     fontSize: 14,
                     color:
-                        isDark ? ConclaveBrand.darkInk : ConclaveBrand.lightInk,
+                        isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Type a command, space, or Thread...',
@@ -249,8 +249,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? ConclaveBrand.darkLine
-                            : ConclaveBrand.lightLine,
+                            ? SyntilaBrand.darkLine
+                            : SyntilaBrand.lightLine,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -259,15 +259,15 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           color: isDark
-                              ? ConclaveBrand.darkInkMuted
-                              : ConclaveBrand.lightInkMuted,
+                              ? SyntilaBrand.darkInkMuted
+                              : SyntilaBrand.lightInkMuted,
                         ),
                       ),
                     ),
                     filled: true,
                     fillColor: isDark
-                        ? ConclaveBrand.darkPaper
-                        : ConclaveBrand.lightPaper,
+                        ? SyntilaBrand.darkPaper
+                        : SyntilaBrand.lightPaper,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
@@ -280,8 +280,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
               Divider(
                   height: 1,
                   color: isDark
-                      ? ConclaveBrand.darkLine
-                      : ConclaveBrand.lightLine),
+                      ? SyntilaBrand.darkLine
+                      : SyntilaBrand.lightLine),
               // Results List
               Flexible(
                 child: actions.isEmpty
@@ -292,8 +292,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                           style: TextStyle(
                             fontSize: 13,
                             color: isDark
-                                ? ConclaveBrand.darkInkMuted
-                                : ConclaveBrand.lightInkMuted,
+                                ? SyntilaBrand.darkInkMuted
+                                : SyntilaBrand.lightInkMuted,
                           ),
                         ),
                       )
@@ -307,18 +307,18 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                             dense: true,
                             selected: index == _highlightedIndex,
                             selectedTileColor: isDark
-                                ? ConclaveBrand.accentWashDark
-                                : ConclaveBrand.accentWash,
+                                ? SyntilaBrand.accentWashDark
+                                : SyntilaBrand.accentWash,
                             leading: Icon(action.icon,
-                                size: 18, color: ConclaveBrand.accent),
+                                size: 18, color: SyntilaBrand.accent),
                             title: Text(
                               action.title,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                                 color: isDark
-                                    ? ConclaveBrand.darkInk
-                                    : ConclaveBrand.lightInk,
+                                    ? SyntilaBrand.darkInk
+                                    : SyntilaBrand.lightInk,
                               ),
                             ),
                             subtitle: action.subtitle != null
@@ -327,8 +327,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: isDark
-                                          ? ConclaveBrand.darkInkMuted
-                                          : ConclaveBrand.lightInkMuted,
+                                          ? SyntilaBrand.darkInkMuted
+                                          : SyntilaBrand.lightInkMuted,
                                     ),
                                   )
                                 : null,
@@ -337,8 +337,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                               style: TextStyle(
                                 fontSize: 11.5,
                                 color: isDark
-                                    ? ConclaveBrand.darkInkMuted
-                                    : ConclaveBrand.lightInkMuted,
+                                    ? SyntilaBrand.darkInkMuted
+                                    : SyntilaBrand.lightInkMuted,
                               ),
                             ),
                             onTap: action.onSelect,

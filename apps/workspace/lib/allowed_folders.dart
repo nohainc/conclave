@@ -295,7 +295,7 @@ class AllowedFolderRegistry {
       return AllowedFolderStatus.denied;
     }
     final probeFile = File('$path${Platform.pathSeparator}'
-        '.conclave-write-check-$pid-${DateTime.now().microsecondsSinceEpoch}');
+        '.syntila-write-check-$pid-${DateTime.now().microsecondsSinceEpoch}');
     try {
       await probeFile.writeAsString('ok', flush: true);
     } on FileSystemException {

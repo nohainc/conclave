@@ -3,7 +3,7 @@ import {
   BUILTIN_WORKFLOWS,
   BUILTIN_WORKFLOW_CATALOG,
   type BuiltinWorkflowDefinition,
-} from "@conclave/core";
+} from "@syntila/core";
 
 const selectionCalls: Record<string, unknown>[] = [];
 vi.mock("../src/scheduler.js", () => ({
@@ -40,7 +40,7 @@ vi.mock("../src/scheduler.js", () => ({
 }));
 
 import { recordAssignmentResult } from "../src/assignment-dispatcher.js";
-import { ConclaveRunWorkflow } from "../src/workflow.js";
+import { SyntilaRunWorkflow } from "../src/workflow.js";
 
 const requestText =
   "  ## Improve Thread\n\n**Keep source** [docs](https://example.com)\n\n```ts\nconst ready = true;\n```\n  ";
@@ -249,9 +249,9 @@ function createAcceptanceRun(
     idFromName: (name: string) => name,
     get: () => gatewayStub,
   } as unknown as DurableObjectNamespace;
-  const instance = new ConclaveRunWorkflow(
+  const instance = new SyntilaRunWorkflow(
     {} as never,
-    { CONCLAVE_DB: database, CONCLAVE_WORKSPACE_GATEWAY: gateway } as never,
+    { SYNTILA_DB: database, SYNTILA_WORKSPACE_GATEWAY: gateway } as never,
   );
   const step = {
     do: async <T>(
