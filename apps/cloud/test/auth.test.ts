@@ -173,7 +173,7 @@ describe("IdentityService", () => {
       enabled: true,
       disableImplicitLinking: true,
       trustedProviders: ["github", "google"],
-      allowDifferentEmails: false,
+      allowDifferentEmails: true,
     });
     expect(options.emailAndPassword).toMatchObject({
       enabled: true,

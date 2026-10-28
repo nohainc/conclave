@@ -423,7 +423,9 @@ export function buildBetterAuthOptions(
         enabled: true,
         disableImplicitLinking: true,
         trustedProviders: ["github", "google"],
-        allowDifferentEmails: false,
+        // Explicit linking proves control of the signed-in Syntila session
+        // and the provider account; their email addresses may differ.
+        allowDifferentEmails: true,
       },
     },
     verification: {

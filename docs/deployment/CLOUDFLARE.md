@@ -522,6 +522,24 @@ are never printed; the temporary file is private and removed after the job.
 The restoration run on 2026-10-28 succeeded. Both live sign-in initiation routes
 returned HTTP 302 to the correct provider with a Syntila callback and an OAuth
 state cookie. Final provider consent and authenticated account linking still
-need to be completed by the account owner. Explicit linking retains the same
-email requirement and implicit account linking remains disabled. No database
+need to be completed by the account owner. Explicit linking permits different provider email addresses while implicit
+account linking remains disabled. The user must already be signed in to
+Syntila and complete the provider authorization. Linking leaves the Syntila
+account email unchanged and cannot claim a provider account belonging to
+another Syntila user. No database
 migration or application session-secret rotation was required.
+
+### Linking accounts with different emails
+
+On 2026-10-28, `allowDifferentEmails` was enabled for explicit Google/GitHub
+linking. A signed-in Syntila account may link a GitHub identity whose email
+differs from its Google or Syntila email. `disableImplicitLinking` remains true;
+a normal social sign-in does not merge accounts. No schema migration, email
+change, or session rotation is involved.
+
+The focused auth suite (26 tests), production deployment dry run, documentation
+links and live production health checks passed. The broader Cloud suite still
+reported three timeouts in assignment race tests; all 74 tests in the four
+relevant race-test files passed on a sequential rerun. The auth
+configuration regression asserts both different-email support and disabled
+implicit linking. Final GitHub authorization must be completed by the user.
