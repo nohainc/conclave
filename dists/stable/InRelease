@@ -1,24 +1,24 @@
 -----BEGIN PGP SIGNED MESSAGE-----
 Hash: SHA256
 
-Origin: Conclave
-Label: Conclave Workspace
+Origin: Syntila
+Label: Syntila Workspace
 Suite: stable
 Codename: stable
-Date: Tue, 27 Oct 2026 18:58:32 GMT
+Date: Wed, 28 Oct 2026 15:26:00 GMT
 Architectures: amd64 arm64
 Components: main
 Acquire-By-Hash: yes
-Description: Conclave Workspace packages
+Description: Syntila Workspace packages
 SHA256:
- 9a15113bcb42110824682767dff95baab5693f7fb704684a91a506dc661115a9 4146 main/binary-amd64/Packages
- f5708b9549cde1e50e0f12c4e6bf6c72f997d0a25839e62c21fa933829c5b120 787 main/binary-amd64/Packages.gz
- 4655b5c1bfc58ca24071bc5370ac27e500781aee99e12651d00ed06b0d9183ee 4146 main/binary-arm64/Packages
- b9c7407d206a691209e07fbae8eb88b1d17a9695a9cf0459267c9809ab02d70f 785 main/binary-arm64/Packages.gz
+ dc9ae03d795b0e25062d66a2f6558d67f46c6db57cc8701791ebe2570394cb12 656 main/binary-amd64/Packages
+ 6899de0ed7c4851bdcfad6e78618df6d67450baa46341be05a0f313869adb984 465 main/binary-amd64/Packages.gz
+ d5737e6cae85539d72cf894b121a0bb835e8278cd26f96841e1bf4d4baf54cde 656 main/binary-arm64/Packages
+ 6b7c6ccb51f72d69ccd6e351719adae08f1f8a4f703fd6a8f6bd1733361a371b 465 main/binary-arm64/Packages.gz
 -----BEGIN PGP SIGNATURE-----
 
-iHUEARYIAB0WIQRuoBPRLvecvcNNZgWBgszPz0F18gUCauD0WAAKCRCBgszPz0F1
-8l9KAP9O6DonyG6lWv/Cj5UJ/Uab44Z9/BeAhnszeulFPg9juQEAiYC/QV9enUAI
-43Qm0bCTnzTFesn7wZe3rrS7sq+xaQo=
-=C80m
+iHUEARYIAB0WIQRuoBPRLvecvcNNZgWBgszPz0F18gUCauIUCAAKCRCBgszPz0F1
+8ivBAQCYZxXFtWMFtX29Mqql1HtsWxou7LEup1PUeqjtaQFHjgEA/s1OaL352qjm
+w4W66KyNVb8raIbaF4m66TenERaBHwY=
+=mXZh
 -----END PGP SIGNATURE-----

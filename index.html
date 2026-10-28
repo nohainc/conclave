@@ -2,7 +2,7 @@
 <html lang="en">
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Conclave Workspace APT repository</title>
+  <title>Syntila Workspace APT repository</title>
   <style>
     body {
       font:
@@ -26,7 +26,7 @@
       color: #155abe;
     }
   </style>
-  <h1>Conclave Workspace for Linux</h1>
+  <h1>Syntila Workspace for Linux</h1>
   <p>
     Install the headless Workspace service, management CLI and Worker Engine on
     Ubuntu 22.04 or newer. Packages are available for amd64 and ARM64. Provider
@@ -35,27 +35,27 @@
   <h2>Install</h2>
   <p>Add this signed repository once:</p>
   <pre>
-curl --fail --location https://nohainc.github.io/conclave/conclave-archive-keyring.gpg -o /tmp/conclave-archive-keyring.gpg
-gpg --show-keys --with-fingerprint /tmp/conclave-archive-keyring.gpg
-sudo install -D -m 644 /tmp/conclave-archive-keyring.gpg /etc/apt/keyrings/conclave-archive-keyring.gpg
-printf 'Types: deb\nURIs: https://nohainc.github.io/conclave\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/conclave-archive-keyring.gpg\n' | sudo tee /etc/apt/sources.list.d/conclave.sources
+curl --fail --location https://nohainc.github.io/conclave/syntila-archive-keyring.gpg -o /tmp/syntila-archive-keyring.gpg
+gpg --show-keys --with-fingerprint /tmp/syntila-archive-keyring.gpg
+sudo install -D -m 644 /tmp/syntila-archive-keyring.gpg /etc/apt/keyrings/syntila-archive-keyring.gpg
+printf 'Types: deb\nURIs: https://nohainc.github.io/conclave\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/syntila-archive-keyring.gpg\n' | sudo tee /etc/apt/sources.list.d/syntila.sources
 sudo apt update
-sudo apt install conclave-workspace</pre>
+sudo apt install syntila</pre>
   <p>
     Check the key fingerprint against the publisher's release documentation:
     <code>6EA013D12EF79CBDC34D66058182CCCFCF4175F2</code>.
   </p>
   <p>Then, as your normal user:</p>
   <pre>
-conclave-workspace service install
-conclave-workspace service start
-conclave-workspace login
+syntila service install
+syntila service start
+syntila login
 # Open the returned verification URL in your browser and approve sign-in.
-conclave-workspace login status
+syntila login status
 # Once phase is complete:
-conclave-workspace connect
-conclave-workspace workers check
-conclave-workspace status</pre>
+syntila connect
+syntila workers check
+syntila status</pre>
   <p>
     For startup without a login session, enable lingering:
     <code>loginctl enable-linger "$USER"</code>.
@@ -63,11 +63,11 @@ conclave-workspace status</pre>
   <h2>Upgrade</h2>
   <p>After active work finishes:</p>
   <pre>
-conclave-workspace service stop
+syntila service stop
 sudo apt update
-sudo apt install --only-upgrade conclave-workspace
-conclave-workspace service start
-conclave-workspace status</pre>
+sudo apt install --only-upgrade syntila
+syntila service start
+syntila status</pre>
   <p>
     User state, credentials, sessions and work files are preserved. Package
     operations do not start a root-owned service or restart running assignments.
@@ -79,7 +79,7 @@ conclave-workspace status</pre>
     >
     · <a href="dists/stable/Release">Repository metadata</a> ·
     <a
-      href="pool/main/c/conclave-workspace/conclave-workspace_1.0.8_amd64.deb"
+      href="pool/main/c/syntila/syntila_1.0.9_amd64.deb"
       >amd64 package</a
     >
   </p>
