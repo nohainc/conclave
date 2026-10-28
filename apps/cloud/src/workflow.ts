@@ -41,10 +41,7 @@ import {
   revokeAssignment,
   type RevocationEnv,
 } from "./assignment-revocation.js";
-import type {
-  AssignmentLifecycleStatus,
-  ThreadBindingId,
-} from "@syntila/core";
+import type { AssignmentLifecycleStatus, ThreadBindingId } from "@syntila/core";
 import {
   prepareWorkerStepExecution,
   completeWorkerStepExecution,
@@ -357,9 +354,7 @@ export class SyntilaRunWorkflow extends WorkflowEntrypoint<
   }
 
   /** Extends the active Thread lease of this Work Request. Best effort. */
-  private async renewThreadLease(
-    params: SyntilaWorkflowParams,
-  ): Promise<void> {
+  private async renewThreadLease(params: SyntilaWorkflowParams): Promise<void> {
     if (!params.workRequestId || !params.threadId) return;
     try {
       const runtimeEnv = this.env as ExecutionEnv;

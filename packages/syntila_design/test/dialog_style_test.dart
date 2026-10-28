@@ -54,8 +54,7 @@ double _contrast(Color a, Color b) {
 void inputFocusTests() {
   for (final dark in [false, true]) {
     test('focused field label is readable (${dark ? 'dark' : 'light'})', () {
-      final theme =
-          dark ? SyntilaBrand.darkTheme() : SyntilaBrand.lightTheme();
+      final theme = dark ? SyntilaBrand.darkTheme() : SyntilaBrand.lightTheme();
       final input = theme.inputDecorationTheme;
       final label = WidgetStateProperty.resolveAs(
           input.floatingLabelStyle, {WidgetState.focused})!;

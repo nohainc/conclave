@@ -62,8 +62,7 @@ abstract final class SyntilaMenuStyle {
 /// A popup route entry whose child owns focus, hover, and activation.
 /// Avoid nesting PopupMenuItem's InkWell around a MenuItemButton.
 class SyntilaMenuEntry<T> extends PopupMenuEntry<T> {
-  const SyntilaMenuEntry(
-      {super.key, required this.value, required this.child});
+  const SyntilaMenuEntry({super.key, required this.value, required this.child});
 
   final T value;
   final Widget child;

@@ -35,10 +35,7 @@ function harness(member = true) {
       };
     },
   };
-  const gateway = new RealtimeGateway(
-    {} as never,
-    { SYNTILA_DB: db } as never,
-  );
+  const gateway = new RealtimeGateway({} as never, { SYNTILA_DB: db } as never);
   const clients = Reflect.get(gateway, "clients") as Map<string, unknown>;
   clients.set("client", {
     socket,

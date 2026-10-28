@@ -941,9 +941,7 @@ export async function handleGetAdminIssueReport(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const actor = await issueSupportContext(request, env, ctx);
-  const row = await env.SYNTILA_DB.prepare(
-    `${reportSelect()} WHERE ir.id = ?1`,
-  )
+  const row = await env.SYNTILA_DB.prepare(`${reportSelect()} WHERE ir.id = ?1`)
     .bind(reportId)
     .first<Record<string, unknown>>();
   if (!row) throw new HttpError(404, "Issue report not found");

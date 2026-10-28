@@ -347,9 +347,7 @@ export function verify3DArtworkIsolation(rootDir) {
 
   for (const dir of prohibitedDirs) {
     if (!existsSync(dir)) continue;
-    const files = findFilesRecursive(dir, (f) =>
-      /3d|syntila_mark_3d/i.test(f),
-    );
+    const files = findFilesRecursive(dir, (f) => /3d|syntila_mark_3d/i.test(f));
     for (const f of files) {
       violations.push(
         `3D artwork isolation violation: ${relative(
@@ -431,9 +429,7 @@ if (
     console.error(
       "=================================================================",
     );
-    console.error(
-      " Syntila Branding System Repository Enforcement Failed!",
-    );
+    console.error(" Syntila Branding System Repository Enforcement Failed!");
     console.error(
       "=================================================================",
     );

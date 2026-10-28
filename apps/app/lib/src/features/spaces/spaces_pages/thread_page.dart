@@ -2390,9 +2390,9 @@ class _ThreadPageState extends State<ThreadPage>
                               : _DiscussionMessageBubble(
                                   item: message,
                                   onEditingChanged: (editing) {
-                                    _editingMessages = (_editingMessages +
-                                            (editing ? 1 : -1))
-                                        .clamp(0, 1 << 20);
+                                    _editingMessages =
+                                        (_editingMessages + (editing ? 1 : -1))
+                                            .clamp(0, 1 << 20);
                                     // Editing a message means reading it, not
                                     // the newest content.
                                     if (editing) _followChat = false;

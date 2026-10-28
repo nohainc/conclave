@@ -65,8 +65,8 @@ void main() {
         find.byKey(const ValueKey('sidebar-running-indicator')), findsNothing);
 
     await render(running: true);
-    expect(
-        color('sidebar-running-indicator'), SyntilaColors.primaryRunningIndicator);
+    expect(color('sidebar-running-indicator'),
+        SyntilaColors.primaryRunningIndicator);
     expect(
         find.byKey(const ValueKey('sidebar-unread-indicator')), findsNothing);
   });

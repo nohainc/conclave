@@ -124,12 +124,7 @@ describe("CI acceptance orchestration", () => {
       mkdirSync(bin);
       writeFileSync(join(app, "pubspec.yaml"), "version: 1.0.0\n");
       writeFileSync(join(app, ".dart_tool", "package_config.json"), "{}\n");
-      const engine = join(
-        app,
-        "assets",
-        "engines",
-        "syntila-agent",
-      );
+      const engine = join(app, "assets", "engines", "syntila-agent");
       writeFileSync(engine, "#!/bin/sh\nexit 0\n");
       chmodSync(engine, 0o755);
       for (const command of [
@@ -265,17 +260,8 @@ describe("CI acceptance orchestration", () => {
       const prepared = run(["--prepared"]);
       expect(prepared.status, prepared.stderr.toString()).toBe(0);
       expect(readFileSync(log, "utf8")).toBe("dart compile exe\n");
-      const bundle = join(
-        root,
-        "dist",
-        "syntila",
-        "macos",
-        "syntila",
-      );
-      for (const file of [
-        "syntila",
-        "assets/engines/syntila-agent",
-      ]) {
+      const bundle = join(root, "dist", "syntila", "macos", "syntila");
+      for (const file of ["syntila", "assets/engines/syntila-agent"]) {
         expect(readFileSync(join(bundle, file)) !== undefined).toBe(true);
       }
       writeFileSync(log, "");

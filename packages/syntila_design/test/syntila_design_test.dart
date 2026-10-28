@@ -51,8 +51,7 @@ void main() {
       expect(darkTheme.colorScheme.surface, SyntilaColors.surfaceDark);
       expect(darkTheme.colorScheme.surfaceContainerLowest,
           SyntilaColors.canvasDark);
-      expect(
-          darkTheme.colorScheme.surfaceContainer, SyntilaColors.surfaceDark);
+      expect(darkTheme.colorScheme.surfaceContainer, SyntilaColors.surfaceDark);
       expect(darkTheme.colorScheme.surfaceContainerHigh,
           SyntilaColors.surfaceHoverDark);
       expect(darkTheme.colorScheme.surfaceContainerHighest,
@@ -87,8 +86,7 @@ void main() {
 
       // Verify no typography scale item is below 11px
       expect(SyntilaTypography.caption.fontSize!, greaterThanOrEqualTo(11.0));
-      expect(
-          SyntilaTypography.monoSmall.fontSize!, greaterThanOrEqualTo(11.0));
+      expect(SyntilaTypography.monoSmall.fontSize!, greaterThanOrEqualTo(11.0));
     });
 
     test('ThemeData TextTheme includes all core typographic levels', () {
@@ -117,8 +115,8 @@ void main() {
               SyntilaColors.textPrimaryLight, SyntilaColors.canvasLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(SyntilaColors.textPrimaryLight,
-              SyntilaColors.surfaceHoverLight),
+          _contrastRatio(
+              SyntilaColors.textPrimaryLight, SyntilaColors.surfaceHoverLight),
           greaterThanOrEqualTo(4.5));
 
       // 2. Muted text in Light mode
@@ -177,8 +175,8 @@ void main() {
 
       // 7. Selected sidebar item
       expect(
-          _contrastRatio(SyntilaColors.textPrimaryDark,
-              SyntilaColors.navigationSelected),
+          _contrastRatio(
+              SyntilaColors.textPrimaryDark, SyntilaColors.navigationSelected),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(SyntilaColors.primaryForegroundDark,
@@ -187,12 +185,12 @@ void main() {
 
       // 8. Links and Markdown links
       expect(
-          _contrastRatio(SyntilaColors.primaryForegroundLight,
-              SyntilaColors.surfaceLight),
+          _contrastRatio(
+              SyntilaColors.primaryForegroundLight, SyntilaColors.surfaceLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(SyntilaColors.primaryForegroundLight,
-              SyntilaColors.canvasLight),
+          _contrastRatio(
+              SyntilaColors.primaryForegroundLight, SyntilaColors.canvasLight),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(
@@ -209,8 +207,8 @@ void main() {
               SyntilaColors.codeBackgroundLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(SyntilaColors.textPrimaryDark,
-              SyntilaColors.codeBackgroundDark),
+          _contrastRatio(
+              SyntilaColors.textPrimaryDark, SyntilaColors.codeBackgroundDark),
           greaterThanOrEqualTo(4.5));
 
       // 10. Status badge foreground & wash pairings
@@ -223,8 +221,7 @@ void main() {
               const Color(0xff78350f), SyntilaColors.warningSoftLight),
           greaterThanOrEqualTo(4.5));
       expect(
-          _contrastRatio(
-              const Color(0xff7f1d1d), SyntilaColors.errorSoftLight),
+          _contrastRatio(const Color(0xff7f1d1d), SyntilaColors.errorSoftLight),
           greaterThanOrEqualTo(4.5));
       expect(
           _contrastRatio(const Color(0xff1e3a8a), SyntilaColors.infoSoftLight),
@@ -236,8 +233,8 @@ void main() {
               SyntilaColors.surfaceHoverLight),
           greaterThanOrEqualTo(3.0));
       expect(
-          _contrastRatio(SyntilaColors.textSecondaryDark,
-              SyntilaColors.surfaceHoverDark),
+          _contrastRatio(
+              SyntilaColors.textSecondaryDark, SyntilaColors.surfaceHoverDark),
           greaterThanOrEqualTo(3.0));
     });
 
@@ -312,8 +309,8 @@ void main() {
       expect(SyntilaBrandAssets.logoDarkPng192, contains('logo_dark_192.png'));
       expect(SyntilaBrandAssets.logoDarkPng512, contains('logo_dark_512.png'));
       expect(SyntilaBrandAssets.logoDarkPng1024, contains('logo_dark.png'));
-      expect(
-          SyntilaBrandAssets.logoPng1024For(false), SyntilaBrandAssets.logoPng1024);
+      expect(SyntilaBrandAssets.logoPng1024For(false),
+          SyntilaBrandAssets.logoPng1024);
       expect(SyntilaBrandAssets.logoPng1024For(true),
           SyntilaBrandAssets.logoDarkPng1024);
       expect(
@@ -322,7 +319,8 @@ void main() {
           SyntilaBrandAssets.logoDarkPng32);
     });
 
-    testWidgets('SyntilaBrand.logoMark selects light vs dark logo asset by theme',
+    testWidgets(
+        'SyntilaBrand.logoMark selects light vs dark logo asset by theme',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(

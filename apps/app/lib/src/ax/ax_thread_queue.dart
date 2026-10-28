@@ -29,9 +29,8 @@ class AxThreadQueueItem {
 
   String get workflowId => request['workflowId']?.toString() ?? '';
 
-  int get workflowVersion => request['workflowVersion'] is int
-      ? request['workflowVersion'] as int
-      : 1;
+  int get workflowVersion =>
+      request['workflowVersion'] is int ? request['workflowVersion'] as int : 1;
 
   List<Map<String, dynamic>> get attachments => [
         for (final item in (_input['attachments'] as List? ?? const []))
@@ -44,8 +43,8 @@ class AxThreadQueueItem {
           : const {};
 
   /// The quoted message, kept with its excerpt for display and editing.
-  AxReplyReference? get replyTo => AxReplyReference.fromJson(
-      request['replyReference'] ?? _input['replyTo']);
+  AxReplyReference? get replyTo =>
+      AxReplyReference.fromJson(request['replyReference'] ?? _input['replyTo']);
 
   factory AxThreadQueueItem.fromJson(Map<String, dynamic> json) =>
       AxThreadQueueItem(

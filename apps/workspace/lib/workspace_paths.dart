@@ -40,9 +40,7 @@ class WorkspacePaths {
         syntilaWorkspaceIsLocalBuild ? 'Syntila Local' : 'Syntila'
       ]));
     }
-    final folder = syntilaWorkspaceIsLocalBuild
-        ? '.syntila-local'
-        : '.syntila';
+    final folder = syntilaWorkspaceIsLocalBuild ? '.syntila-local' : '.syntila';
     final legacy =
         Directory('${runtime.homeDirectory}${Platform.pathSeparator}$folder');
     if (runtime.operatingSystem == 'linux') {

@@ -47,10 +47,7 @@ function harness() {
     queue: new BoundedRealtimeQueue(),
     flushScheduled: false,
   };
-  const gateway = new RealtimeGateway(
-    {} as never,
-    { SYNTILA_DB: db } as never,
-  );
+  const gateway = new RealtimeGateway({} as never, { SYNTILA_DB: db } as never);
   const replay = (scope: RealtimeScope) =>
     Reflect.get(gateway, "replayScope").call(
       gateway,

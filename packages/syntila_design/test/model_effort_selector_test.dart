@@ -606,8 +606,7 @@ void main() {
         findsOneWidget,
       );
       final surface = find.byWidgetPredicate((widget) =>
-          widget is Material &&
-          widget.shape == SyntilaMenuStyle.shape(isDark));
+          widget is Material && widget.shape == SyntilaMenuStyle.shape(isDark));
       expect(
           tester.getBottomLeft(surface).dy,
           closeTo(

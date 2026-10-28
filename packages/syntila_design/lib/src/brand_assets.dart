@@ -46,8 +46,7 @@ abstract final class SyntilaBrandAssets {
   }) {
     return Builder(
       builder: (context) {
-        final effectiveBrightness =
-            brightness ?? Theme.of(context).brightness;
+        final effectiveBrightness = brightness ?? Theme.of(context).brightness;
         final isDark = effectiveBrightness == Brightness.dark;
         final image = Image.asset(
           logoPng1024For(isDark),

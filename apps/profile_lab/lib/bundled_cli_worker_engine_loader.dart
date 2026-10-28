@@ -42,8 +42,7 @@ Future<File?> loadBundledCliWorkerEngine({
       await versionDirectory.create(recursive: true);
     }
 
-    final executable =
-        File('${versionDirectory.path}/syntila-agent');
+    final executable = File('${versionDirectory.path}/syntila-agent');
     var cacheMatches = false;
     if (await executable.exists()) {
       final existingDigest = await sha256.bind(executable.openRead()).first;

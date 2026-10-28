@@ -280,14 +280,13 @@ async function loadThreadRow(env: SecurityEnv, threadId: string) {
 }
 
 function threadAccessPermission(access: ThreadAccess): Permission {
-  return (
-    access === "view"
-      ? "spaces:read"
-      : access === "discuss"
-        ? "spaces:write"
-        : access === "execute"
-          ? "run.start"
-          : "spaces:write");
+  return access === "view"
+    ? "spaces:read"
+    : access === "discuss"
+      ? "spaces:write"
+      : access === "execute"
+        ? "run.start"
+        : "spaces:write";
 }
 
 export async function authorizeThreadAccess(

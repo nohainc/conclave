@@ -111,8 +111,7 @@ const result = await sendRenderedEmail(
       : {}),
     ...(process.env.SYNTILA_EMAIL_FALLBACK_FROM
       ? {
-          SYNTILA_EMAIL_FALLBACK_FROM:
-            process.env.SYNTILA_EMAIL_FALLBACK_FROM,
+          SYNTILA_EMAIL_FALLBACK_FROM: process.env.SYNTILA_EMAIL_FALLBACK_FROM,
         }
       : {}),
     ...(process.env.SYNTILA_EMAIL_FROM_NAME

@@ -66,9 +66,7 @@ describe("Invitation Email Delivery", () => {
     expect(sent.text).toContain(
       'Vitalii Noha invited you to join "Syntila Development" as a collaborator on Syntila.',
     );
-    expect(sent.text).toContain(
-      "https://app.syntila.dev/?invitation=pinv-123",
-    );
+    expect(sent.text).toContain("https://app.syntila.dev/?invitation=pinv-123");
     expect(sent.text).toContain(
       "Sign in with ulikossnokia@gmail.com to accept.",
     );
@@ -101,16 +99,13 @@ describe("Invitation Email Delivery", () => {
 
   it("returns false when production delivery is unavailable", async () => {
     await expect(
-      sendSpaceInvitationEmail(
-        { SYNTILA_ENVIRONMENT: "production" } as never,
-        {
-          recipientEmail: "person@example.com",
-          inviterName: "Vitalii Noha",
-          spaceName: "Syntila",
-          role: "collaborator",
-          appUrl: "https://app.syntila.dev",
-        },
-      ),
+      sendSpaceInvitationEmail({ SYNTILA_ENVIRONMENT: "production" } as never, {
+        recipientEmail: "person@example.com",
+        inviterName: "Vitalii Noha",
+        spaceName: "Syntila",
+        role: "collaborator",
+        appUrl: "https://app.syntila.dev",
+      }),
     ).resolves.toBe(false);
   });
 

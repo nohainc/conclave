@@ -31,10 +31,7 @@ describe("centralized email sender configuration", () => {
 
   it.each([
     ["SYNTILA_EMAIL_FROM", { SYNTILA_EMAIL_FROM: "invalid" }],
-    [
-      "SYNTILA_EMAIL_FALLBACK_FROM",
-      { SYNTILA_EMAIL_FALLBACK_FROM: "invalid" },
-    ],
+    ["SYNTILA_EMAIL_FALLBACK_FROM", { SYNTILA_EMAIL_FALLBACK_FROM: "invalid" }],
     ["SYNTILA_EMAIL_FROM", { SYNTILA_EMAIL_FROM: "auth@auth.earthuc.com" }],
     [
       "SYNTILA_EMAIL_FALLBACK_FROM",

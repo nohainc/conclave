@@ -138,8 +138,8 @@ void main() {
         profileDefinitionId: 'fixture-cli',
         engineVersion: '1.0.0');
     final candidate = resolution.release!;
-    final engineFile = File(
-        '$repository/apps/workspace/assets/engines/syntila-agent');
+    final engineFile =
+        File('$repository/apps/workspace/assets/engines/syntila-agent');
     expect(await engineFile.exists(), isTrue,
         reason: 'Build the CLI Worker Engine before acceptance tests');
     final supervisor =

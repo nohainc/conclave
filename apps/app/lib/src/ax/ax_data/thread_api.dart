@@ -362,10 +362,12 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
 
   Future<AxThreadQueue> _queueCall(String method, String threadId,
       {String path = '', Map<String, dynamic>? body}) async {
-    final request = http.Request(method,
-        Uri.parse('$baseUrl/threads/${Uri.encodeComponent(threadId)}/queue$path'))
-      ..headers.addAll(_headers(
-          contentType: body == null ? null : 'application/json'));
+    final request = http.Request(
+        method,
+        Uri.parse(
+            '$baseUrl/threads/${Uri.encodeComponent(threadId)}/queue$path'))
+      ..headers.addAll(
+          _headers(contentType: body == null ? null : 'application/json'));
     if (body != null) request.body = jsonEncode(body);
     final response = await http.Response.fromStream(await client.send(request));
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -420,15 +422,17 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     Map<String, dynamic> executionSelection = const {},
     AxReplyReference? replyTo,
   }) =>
-      _queueCall('PUT', threadId, path: '/${Uri.encodeComponent(itemId)}', body: {
-        'request': _queuedRequestBody(
-            workflowId: workflowId,
-            workflowVersion: workflowVersion,
-            prompt: prompt,
-            attachments: attachments,
-            executionSelection: executionSelection,
-            replyTo: replyTo),
-      });
+      _queueCall('PUT', threadId,
+          path: '/${Uri.encodeComponent(itemId)}',
+          body: {
+            'request': _queuedRequestBody(
+                workflowId: workflowId,
+                workflowVersion: workflowVersion,
+                prompt: prompt,
+                attachments: attachments,
+                executionSelection: executionSelection,
+                replyTo: replyTo),
+          });
 
   Future<AxThreadQueue> removeThreadQueueItem(String threadId, String itemId) =>
       _queueCall('DELETE', threadId, path: '/${Uri.encodeComponent(itemId)}');

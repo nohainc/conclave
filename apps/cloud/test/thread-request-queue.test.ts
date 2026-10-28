@@ -136,9 +136,10 @@ it("is shared by members and sent by Cloud as each author, in order", async () =
   await enqueue("owner", "first");
   const shared = await enqueue("member", "second");
   // Both members see both requests, with their authors.
-  expect((await call("owner", "GET")).items.map((i) => i.authorName)).toEqual(
-    ["OWNER", "MEMBER"],
-  );
+  expect((await call("owner", "GET")).items.map((i) => i.authorName)).toEqual([
+    "OWNER",
+    "MEMBER",
+  ]);
   expect(shared.items).toHaveLength(2);
   expect(created.calls).toHaveLength(0);
 
@@ -190,9 +191,7 @@ it("lets any member pause and resume the shared queue", async () => {
   const { env, call, enqueue, busy, finish } = fixture();
   busy();
   await enqueue("owner", "first");
-  expect((await call("member", "POST", { action: "pause" })).paused).toBe(
-    true,
-  );
+  expect((await call("member", "POST", { action: "pause" })).paused).toBe(true);
   finish("running");
   await advanceThreadQueue(env, "T");
   expect(created.calls).toHaveLength(0);

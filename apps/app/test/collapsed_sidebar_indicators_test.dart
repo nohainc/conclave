@@ -91,7 +91,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('collapsed own and shared Spaces get separate icons with pins first',
+  testWidgets(
+      'collapsed own and shared Spaces get separate icons with pins first',
       (tester) async {
     AxSpace item(String id, String role, {int? pin}) => AxSpace.fromJson({
           'id': id,
