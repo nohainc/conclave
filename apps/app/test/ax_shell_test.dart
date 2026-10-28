@@ -47,9 +47,9 @@ void main() {
             )),
       ))));
       await tester.pumpAndSettle();
-      expect(find.text('Conclave AX'), findsNothing);
+      expect(find.text('Syntila'), findsNothing);
       expect(find.byType(TextField), findsNothing);
-      final home = find.byTooltip('Conclave AX — Home');
+      final home = find.byTooltip('Syntila — Home');
       final search = find.byTooltip('Search...');
       final add = find.byTooltip('New Space');
       final alarm = find.byTooltip('Notifications');
@@ -285,10 +285,10 @@ void main() {
     expect(find.text('Profile & Security'), findsNothing);
     expect(
         find.text(
-            'Manage your Conclave identity, linked login methods, and active sessions.'),
+            'Manage your Syntila identity, linked login methods, and active sessions.'),
         findsNothing);
     expect(find.text('Profile'), findsNothing);
-    expect(find.text('Your stable Conclave identity'), findsNothing);
+    expect(find.text('Your stable Syntila identity'), findsNothing);
     expect(find.textContaining('Link another verified provider'), findsNothing);
     expect(find.textContaining('Revoke access from a device'), findsNothing);
     expect(find.byType(Divider), findsNothing);
@@ -573,7 +573,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         find.text(
-            'This permanently deletes your Conclave account and signs you out on every device. This action cannot be undone.'),
+            'This permanently deletes your Syntila account and signs you out on every device. This action cannot be undone.'),
         findsOneWidget);
 
     final confirmButton = find.widgetWithText(FilledButton, 'Delete account');
@@ -591,7 +591,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(data.deleted, isTrue);
     expect(data.confirmEmail, data.viewerEmail);
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
   });
 
   testWidgets('removed account is signed out when realtime disconnects',
@@ -607,13 +607,13 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to Conclave AX'), findsNothing);
+    expect(find.text('Welcome to Syntila'), findsNothing);
 
     // The account is deleted elsewhere; Cloud closes the realtime socket.
     data.removed = true;
     realtime.emit({'type': 'realtime.connection', 'status': 'reconnecting'});
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
   });
 
   testWidgets('profile email change needs codes from new then current email',
@@ -808,7 +808,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Space menu'));
       await tester.pumpAndSettle();
-      expect(find.text('Select Space'), findsOneWidget);
+      expect(find.text('Edit Space'), findsOneWidget);
       expect(find.text('Archive Space'), findsOneWidget);
       expect(find.text('Delete Space'), findsOneWidget);
       expect(find.text('Workflows'), findsNothing);
@@ -870,7 +870,7 @@ void main() {
   group('AxSidebar Canonical Component', () {
     const testSpace = AxSpace(
       id: 'space-1',
-      name: 'Conclave AX',
+      name: 'Syntila',
       branch: 'main',
       lastActivity: 'today',
       threads: [
@@ -936,13 +936,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check Header & Main Sections
-      expect(find.text('Conclave AX'), findsOneWidget); // Space only
+      expect(find.text('Syntila'), findsOneWidget); // Space only
       expect(find.text('Home'), findsNothing);
       expect(find.text('Spaces'), findsNothing);
       expect(find.text('SPACES'), findsNothing);
 
-      // Tapping Conclave AX brand navigates to Home
-      await tester.tap(find.byTooltip('Conclave AX — Home'));
+      // Tapping Syntila brand navigates to Home
+      await tester.tap(find.byTooltip('Syntila — Home'));
       expect(navigatedTo?.kind, AxRouteKind.home);
       navigatedTo = null;
 
@@ -968,7 +968,7 @@ void main() {
       expect(createSpaceCalled, isTrue);
 
       // Selecting an expanded Space from Home preserves its expansion.
-      await tester.tap(find.text('Conclave AX').last);
+      await tester.tap(find.text('Syntila').last);
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(navigatedTo?.spaceId, 'space-1');
       expect(toggledSpaceId, isNull);
@@ -1000,7 +1000,7 @@ void main() {
       expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('About Syntila'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('GitHub repository'), findsNothing);
@@ -1080,7 +1080,7 @@ void main() {
       expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('About Syntila'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('GitHub repository'), findsNothing);
@@ -1159,8 +1159,8 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Test 3: About Conclave AX
-      await tester.tap(find.text('About Conclave AX'));
+      // Test 3: About Syntila
+      await tester.tap(find.text('About Syntila'));
       await tester.pumpAndSettle();
       expect(aboutTriggered, isTrue);
 
@@ -1218,7 +1218,7 @@ void main() {
       expect(find.text('Archived Spaces'), findsOneWidget);
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('About Syntila'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
       expect(find.text('Usage'), findsNothing);
       expect(find.text('GitHub repository'), findsNothing);
@@ -1246,10 +1246,10 @@ void main() {
       expect(
           openedExternalUri, Uri.parse('https://conclaveax.com/how-it-works/'));
 
-      // Reopen and check About Conclave AX
+      // Reopen and check About Syntila
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('About Conclave AX'));
+      await tester.tap(find.text('About Syntila'));
       await tester.pumpAndSettle();
       expect(aboutTriggered, isTrue);
 
@@ -1265,7 +1265,7 @@ void main() {
         (tester) async {
       const spaceWithArchived = AxSpace(
         id: 'space-2',
-        name: 'Conclave Core',
+        name: 'Syntila Core',
         branch: 'main',
         lastActivity: 'today',
         threads: [
@@ -1326,7 +1326,7 @@ void main() {
   group('AxTopBar Canonical Component', () {
     const testSpace = AxSpace(
       id: 'space-1',
-      name: 'Conclave AX',
+      name: 'Syntila',
       branch: 'main',
       lastActivity: 'today',
       threads: [
@@ -1394,8 +1394,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Check Breadcrumbs: Conclave AX / Authentication redesign
-      expect(find.text('Conclave AX'), findsOneWidget);
+      // Check Breadcrumbs: Syntila / Authentication redesign
+      expect(find.text('Syntila'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
 
       // Check Search affordance (desktop)
@@ -1413,7 +1413,7 @@ void main() {
       expect(find.text('About'), findsNothing);
 
       // Click Space in breadcrumb
-      await tester.tap(find.text('Conclave AX'));
+      await tester.tap(find.text('Syntila'));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(navigatedTo?.spaceId, 'space-1');
 
@@ -1460,7 +1460,7 @@ void main() {
       expect(find.text('Vitalii Noha'), findsOneWidget);
       expect(find.byTooltip('Account menu'), findsNothing);
 
-      final opener = find.byTooltip('Conclave AX — Spaces');
+      final opener = find.byTooltip('Syntila — Spaces');
       final menu = find.byTooltip('Application menu');
       expect(opener, findsOneWidget);
       expect(menu, findsOneWidget);
@@ -1593,7 +1593,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Conclave AX'), findsOneWidget);
+      expect(find.text('Syntila'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
       expect(find.text('Run'), findsOneWidget);
 
@@ -1640,12 +1640,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // In compact mode, parent space 'Conclave AX' and thread are displayed
-      expect(find.text('Conclave AX'), findsOneWidget);
+      // In compact mode, parent space 'Syntila' and thread are displayed
+      expect(find.text('Syntila'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
 
       // Tapping parent space navigates back to the Space
-      await tester.tap(find.text('Conclave AX'));
+      await tester.tap(find.text('Syntila'));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(navigatedTo?.spaceId, 'space-1');
     });
@@ -1699,7 +1699,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // In compact mode, parent space and thread are displayed
-      expect(find.text('Conclave AX'), findsOneWidget);
+      expect(find.text('Syntila'), findsOneWidget);
       expect(find.text('Authentication redesign'), findsOneWidget);
       expect(find.text('Run'), findsOneWidget);
 
@@ -1759,7 +1759,7 @@ void main() {
 
       expect(tester.getSize(find.byType(AxIconRail)).width, 50);
       expect(tester.takeException(), isNull);
-      expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
+      expect(find.byTooltip('Syntila — Home'), findsOneWidget);
       expect(find.byTooltip('Expand sidebar'), findsOneWidget);
       expect(find.byTooltip('Search...'), findsOneWidget);
       expect(find.byTooltip('Add Space'), findsOneWidget);
@@ -1768,8 +1768,8 @@ void main() {
       expect(find.byType(CircleAvatar), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
-      // Tapping Conclave AX brand logo navigates to Home
-      await tester.tap(find.byTooltip('Conclave AX — Home'));
+      // Tapping Syntila brand logo navigates to Home
+      await tester.tap(find.byTooltip('Syntila — Home'));
       expect(navigatedTo, equals(const AxNavigation.home()));
 
       // Tapping Expand sidebar button expands sidebar
@@ -2011,7 +2011,7 @@ void main() {
   group('Phase 10 — Shell Cleanup, Regressions, and Deep Interactions', () {
     const spaceA = AxSpace(
       id: 'p-1',
-      name: 'Conclave Core',
+      name: 'Syntila Core',
       branch: 'main',
       lastActivity: 'today',
       threads: [
@@ -2088,7 +2088,7 @@ void main() {
         await tester.pumpAndSettle();
 
         // Ensure sidebar renders without error
-        expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
+        expect(find.byTooltip('Syntila — Home'), findsOneWidget);
       }
     });
 
@@ -2134,7 +2134,7 @@ void main() {
       );
 
       // Tap the space item -> should navigate to space and toggle expansion
-      await tester.tap(find.text('Conclave Core'));
+      await tester.tap(find.text('Syntila Core'));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(navigatedTo?.spaceId, 'p-1');
       expect(toggledSpaceId, 'p-1');
@@ -2179,7 +2179,7 @@ void main() {
       expect(find.text('Engine optimization'), findsOneWidget);
 
       // Tap the space item again -> toggles expansion to collapse and navigates
-      await tester.tap(find.text('Conclave Core'));
+      await tester.tap(find.text('Syntila Core'));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(toggledSpaceId, 'p-1');
     });
@@ -2228,7 +2228,7 @@ void main() {
 
       AxNavigation? navigatedTo;
 
-      // Test 1: Space route -> "Spaces / Conclave Core"
+      // Test 1: Space route -> "Spaces / Syntila Core"
       final spaceContext = AxShellContext(
         navigation: const AxNavigation.space('p-1'),
         spaces: [spaceA],
@@ -2253,9 +2253,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Conclave Core'), findsOneWidget);
+      expect(find.text('Syntila Core'), findsOneWidget);
 
-      // Test 1b: Thread route -> "Conclave Core / WS"
+      // Test 1b: Thread route -> "Syntila Core / WS"
       final threadContext = AxShellContext(
         navigation: const AxNavigation.thread('p-1', 'ws-1'),
         spaces: const [spaceA],
@@ -2280,8 +2280,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Conclave Core'), findsOneWidget);
-      await tester.tap(find.text('Conclave Core'));
+      expect(find.text('Syntila Core'), findsOneWidget);
+      await tester.tap(find.text('Syntila Core'));
       expect(navigatedTo?.kind, AxRouteKind.space);
 
       // Test 1c: Workspace route -> "Workspaces / Workspace Name"
@@ -2523,7 +2523,7 @@ void main() {
 
       const space = AxSpace(
         id: 'p-1',
-        name: 'Conclave AX',
+        name: 'Syntila',
         branch: 'main',
         lastActivity: 'today',
         threads: [
@@ -2587,7 +2587,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Space rows display the space name without legacy Goal counts.
-      expect(find.text('Conclave AX'), findsOneWidget); // Space only
+      expect(find.text('Syntila'), findsOneWidget); // Space only
       expect(find.text('5'), findsNothing);
 
       // Thread rows are rendered
@@ -2617,7 +2617,7 @@ void main() {
 
       const space = AxSpace(
         id: 'p-1',
-        name: 'Conclave AX',
+        name: 'Syntila',
         branch: 'main',
         lastActivity: 'today',
         threads: [ws1],
@@ -2717,7 +2717,7 @@ void main() {
 
       const space = AxSpace(
         id: 'p-1',
-        name: 'Conclave AX',
+        name: 'Syntila',
         branch: 'main',
         lastActivity: 'today',
         threads: [ws],
@@ -2830,13 +2830,13 @@ void main() {
 
       // Top HUD visible with breadcrumb and hamburger menu, pinned sidebar hidden
       expect(find.byType(AxTopBar), findsOneWidget);
-      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
-      expect(find.text('Conclave AX'), findsOneWidget); // breadcrumb space
+      expect(find.byTooltip('Syntila — Spaces'), findsOneWidget);
+      expect(find.text('Syntila'), findsOneWidget); // breadcrumb space
       expect(find.text('Authentication redesign'),
           findsOneWidget); // breadcrumb thread
 
       expect(find.byTooltip('Open menu'), findsNothing);
-      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
+      expect(find.byTooltip('Syntila — Spaces'), findsOneWidget);
       expect(find.byTooltip('Profile & Settings'), findsNothing);
       expect(find.byTooltip('Application menu'), findsOneWidget);
     });
@@ -2861,8 +2861,8 @@ void main() {
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
 
-      // Tap About Conclave AX to trigger dialog
-      await tester.tap(find.text('About Conclave AX'));
+      // Tap About Syntila to trigger dialog
+      await tester.tap(find.text('About Syntila'));
       await tester.pumpAndSettle();
 
       // Assert modal dialog contents
@@ -2875,7 +2875,7 @@ void main() {
       expect(
           find.textContaining('Team conversations, AI requests, and results'),
           findsOneWidget);
-      expect(find.textContaining('Conclave Workspace and the provider CLIs'),
+      expect(find.textContaining('Syntila Workspace and the provider CLIs'),
           findsOneWidget);
       expect(find.textContaining('coordinates AI Workers across models'),
           findsNothing);
@@ -2910,7 +2910,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Zero-space screen with Pending Invitation in Join a Space priority card
-      expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+      expect(find.text('Welcome to Syntila'), findsOneWidget);
       expect(find.text('Join a Space'), findsOneWidget);
       expect(find.text('You have 1 invitation.'), findsOneWidget);
       expect(find.text('Joined AX Core'), findsWidgets);
@@ -2920,7 +2920,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Invitation is accepted and disappears, user is navigated into space
-      expect(find.text('Welcome to Conclave AX'), findsNothing);
+      expect(find.text('Welcome to Syntila'), findsNothing);
       expect(find.text('Join a Space'), findsNothing);
       expect(find.text('Joined AX Core'), findsWidgets);
 
@@ -2998,7 +2998,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     await tester.tap(find.text('New here? Create an account'));
     await tester.pumpAndSettle();
 
@@ -3117,7 +3117,7 @@ void main() {
       find.text('Password changed. You can sign in now.'),
       findsOneWidget,
     );
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

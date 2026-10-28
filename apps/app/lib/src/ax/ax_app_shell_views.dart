@@ -3,7 +3,7 @@ part of 'ax_app.dart';
 extension _AxAppShellViews on _AxAppStateMixin {
   Widget _buildApp(BuildContext context) {
     return MaterialApp(
-      title: 'Conclave AX',
+      title: 'Syntila',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       scaffoldMessengerKey: messengerKey,
@@ -74,6 +74,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                     onToggleSpaceExpanded: _toggleSpaceExpanded,
                                     onCreateSpace: _createSpace,
                                     onCreateThread: _createThread,
+                                    onEditSpace: _editSpace,
                                     onArchiveSpace: _archiveSpace,
                                     onDeleteSpace: (space) =>
                                         _deleteSpace(space.id),
@@ -130,7 +131,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
         body: Center(
           child: Semantics(
             liveRegion: true,
-            label: 'Loading your Conclave workspace',
+            label: 'Loading your Syntila workspace',
             child: Card(
               margin: const EdgeInsets.all(24),
               child: Padding(
@@ -144,7 +145,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 6),
                     const Text(
-                        'Your existing work stays safe while Conclave AX connects.',
+                        'Your existing work stays safe while Syntila connects.',
                         textAlign: TextAlign.center),
                   ],
                 ),
@@ -177,7 +178,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                 ? 'Verify your email address'
                 : authSignUp
                     ? 'Create your account'
-                    : 'Welcome to Conclave AX';
+                    : 'Welcome to Syntila';
     return _authFormFrame(AutofillGroup(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -202,7 +203,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
                         : awaitingSignUpCode
                             ? 'Enter the 6-digit verification code we sent to ${authEmailController.text.trim()}.'
                             : authSignUp
-                                ? 'Create an account to start using Conclave AX. We will send a one-time code to verify your email.'
+                                ? 'Create an account to start using Syntila. We will send a one-time code to verify your email.'
                                 : 'Sign in to continue approving $pendingDesktopAppName.',
                 textAlign: TextAlign.center),
           ],
@@ -619,7 +620,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
         body: Center(
           child: _RecoveryPanel(
             icon: Icons.cloud_off_rounded,
-            title: 'Conclave AX could not load live data',
+            title: 'Syntila could not load live data',
             happened: loadError ?? 'The workspace connection did not respond.',
             safe: 'Your existing work is safe. No new work was started.',
             nextStep: 'Check your connection, then try again.',
@@ -680,6 +681,7 @@ extension _AxAppShellViews on _AxAppStateMixin {
             _toggleSpaceExpanded(spaceId);
           },
           onCreateThread: _createThread,
+          onEditSpace: _editSpace,
           onArchiveSpace: _archiveSpace,
           onDeleteSpace: (space) => _deleteSpace(space.id),
           onRenameThread: _renameThreadFromSidebar,

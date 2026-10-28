@@ -36,6 +36,33 @@ class LongListSource extends AxFixtureDataSource {
 }
 
 void main() {
+  testWidgets('Edit Space menu opens the Space edit dialog on mobile',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(ConclaveAppShell(
+      services: const DefaultPlatformServices(),
+      dataSource: const AxFixtureDataSource(),
+      initialUri: Uri.parse('/spaces'),
+    ));
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('sidebar-space-row-space-auth'));
+    await tester
+        .tap(find.descendant(of: row, matching: find.byTooltip('Space menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit Space'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('space-edit-dialog')), findsOneWidget);
+    expect(find.text('Space Name'), findsOneWidget);
+    expect(find.text('Description'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('mobile list preserves scroll across Thread navigation',
       (tester) async {
     tester.view.physicalSize = const Size(390, 800);
@@ -57,7 +84,7 @@ void main() {
     final before = tester.getTopLeft(row).dy;
     await tester.tap(row);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Conclave AX — Spaces'));
+    await tester.tap(find.byTooltip('Syntila — Spaces'));
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(row).dy, closeTo(before, 1));
     expect(tester.takeException(), isNull);
@@ -113,8 +140,7 @@ void main() {
           .whereType<Text>()
           .map((text) => text.data)
           .toList();
-      expect(labels.indexOf('Open Space') + 1, labels.indexOf('Select Space'));
-      expect(labels, isNot(contains('Edit Space')));
+      expect(labels.indexOf('Open Space') + 1, labels.indexOf('Edit Space'));
       await tester.tapAt(const Offset(5, 500));
       await tester.pumpAndSettle();
 
@@ -161,7 +187,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ThreadPage), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Conclave AX — Spaces'));
+      await tester.tap(find.byTooltip('Syntila — Spaces'));
       await tester.pumpAndSettle();
       expect(thread, findsOneWidget);
       expect(find.byType(ThreadPage), findsNothing);
@@ -190,7 +216,7 @@ void main() {
               matching: find.text('Profile & Security')),
           findsNothing);
 
-      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
+      expect(find.byTooltip('Syntila — Spaces'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     });

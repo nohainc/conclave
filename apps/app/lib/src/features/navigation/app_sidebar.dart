@@ -8,7 +8,7 @@ import 'app_menu.dart';
 import 'space_tree.dart';
 import 'ax_shell_context.dart';
 
-/// Canonical Application Sidebar for Conclave AX.
+/// Canonical Application Sidebar for Syntila.
 class AppSidebar extends StatelessWidget {
   const AppSidebar({
     super.key,
@@ -17,6 +17,7 @@ class AppSidebar extends StatelessWidget {
     ValueChanged<String>? onToggleSpaceExpanded,
     VoidCallback? onCreateSpace,
     this.onCreateThread,
+    this.onEditSpace,
     this.onArchiveSpace,
     this.onDeleteSpace,
     this.onRenameThread,
@@ -52,6 +53,7 @@ class AppSidebar extends StatelessWidget {
   final ValueChanged<String> onToggleSpaceExpanded;
   final VoidCallback onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
+  final Future<void> Function(AxSpace space)? onEditSpace;
   final Future<void> Function(AxSpace space)? onArchiveSpace;
   final Future<void> Function(AxSpace space)? onDeleteSpace;
   final Future<void> Function(AxThread thread, String name)? onRenameThread;
@@ -115,10 +117,10 @@ class AppSidebar extends StatelessWidget {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Semantics(
-                      label: 'Conclave AX — Home',
+                      label: 'Syntila — Home',
                       child: Tooltip(
                         excludeFromSemantics: true,
-                        message: 'Conclave AX — Home',
+                        message: 'Syntila — Home',
                         child: InkWell(
                           onTap: () {
                             onNavigateTo(const AxNavigation.home());
@@ -258,6 +260,7 @@ class AppSidebar extends StatelessWidget {
                     onToggleSpaceExpanded: onToggleSpaceExpanded,
                     onCreateSpace: onCreateSpace,
                     onCreateThread: onCreateThread,
+                    onEditSpace: onEditSpace,
                     onArchiveSpace: onArchiveSpace,
                     onDeleteSpace: onDeleteSpace,
                     onRenameThread: onRenameThread,
@@ -503,10 +506,10 @@ class AppIconRail extends StatelessWidget {
         children: [
           // Logo navigates to Home
           Semantics(
-              label: 'Conclave AX — Home',
+              label: 'Syntila — Home',
               child: Tooltip(
                 excludeFromSemantics: true,
-                message: 'Conclave AX — Home',
+                message: 'Syntila — Home',
                 child: InkWell(
                   onTap: () => onNavigateTo(const AxNavigation.home()),
                   borderRadius: BorderRadius.circular(ConclaveRadius.sm),

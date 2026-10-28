@@ -679,6 +679,97 @@ mixin _AxAppStateMixin on State<ConclaveAppShell> {
     }
   }
 
+  /// Sidebar "Edit Space": edits the name and description in a dialog,
+  /// without navigating. Errors stay in the dialog so nothing typed is lost.
+  Future<void> _editSpace(AxSpace space) async {
+    final nameController = TextEditingController(text: space.name);
+    final descriptionController =
+        TextEditingController(text: space.description);
+    String? errorText;
+    var saving = false;
+    // The controllers are left to the garbage collector: disposing them right
+    // after the dialog closes would break its closing animation.
+    await showDialog<void>(
+        context: navigatorKey.currentContext ?? context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submit() async {
+              if (saving) return;
+              final name = nameController.text.trim();
+              if (name.isEmpty) {
+                setDialogState(() => errorText = 'Space name cannot be empty.');
+                return;
+              }
+              setDialogState(() {
+                saving = true;
+                errorText = null;
+              });
+              final error = await _saveSpaceEdits(
+                  space, name, descriptionController.text.trim());
+              if (!dialogContext.mounted) return;
+              if (error == null) {
+                Navigator.pop(dialogContext);
+                return;
+              }
+              setDialogState(() {
+                saving = false;
+                errorText = error;
+              });
+            }
+
+            return AlertDialog(
+              key: const ValueKey('space-edit-dialog'),
+              title: const Text('Edit Space'),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        autofocus: true,
+                        enabled: !saving,
+                        onChanged: (_) {
+                          if (errorText != null) {
+                            setDialogState(() => errorText = null);
+                          }
+                        },
+                        onSubmitted: (_) => submit(),
+                        decoration: InputDecoration(
+                          labelText: 'Space Name',
+                          errorText: errorText,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: descriptionController,
+                        enabled: !saving,
+                        decoration:
+                            const InputDecoration(labelText: 'Description'),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      saving ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: saving ? null : submit,
+                  child: Text(saving ? 'Saving…' : 'Save'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+  }
+
   /// Saves an inline Space edit; returns an error for the form or null.
   Future<String?> _saveSpaceEdits(
       AxSpace space, String name, String description) async {

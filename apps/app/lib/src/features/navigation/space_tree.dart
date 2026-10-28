@@ -16,7 +16,7 @@ import '../../ax/sync/ax_query_builder.dart';
 const double _menuSlotWidth = 28;
 const double _sidebarRowHeight = 30;
 
-/// Interactive Space Tree component for the Conclave AX App Sidebar.
+/// Interactive Space Tree component for the Syntila App Sidebar.
 class SpaceTree extends StatelessWidget {
   const SpaceTree({
     super.key,
@@ -25,6 +25,7 @@ class SpaceTree extends StatelessWidget {
     this.onToggleSpaceExpanded,
     this.onCreateSpace,
     this.onCreateThread,
+    this.onEditSpace,
     this.onArchiveSpace,
     this.onDeleteSpace,
     this.onRenameThread,
@@ -47,6 +48,7 @@ class SpaceTree extends StatelessWidget {
   final ValueChanged<String>? onToggleSpaceExpanded;
   final VoidCallback? onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
+  final Future<void> Function(AxSpace space)? onEditSpace;
   final Future<void> Function(AxSpace space)? onArchiveSpace;
   final Future<void> Function(AxSpace space)? onDeleteSpace;
   final Future<void> Function(AxThread thread, String name)? onRenameThread;
@@ -651,13 +653,8 @@ class SpaceTree extends StatelessWidget {
         case 'unpin':
           unawaited(onSetSpacePinned?.call(space, action == 'pin'));
           break;
-        case 'select':
-          if (pageLayout) {
-            onToggleSpaceExpanded?.call(space.id);
-          } else {
-            onNavigateTo(AxNavigation.space(space.id));
-            if (compact) Scaffold.maybeOf(context)?.closeDrawer();
-          }
+        case 'edit':
+          unawaited(onEditSpace?.call(space));
           break;
         case 'archive':
           unawaited(onArchiveSpace?.call(space));
@@ -736,10 +733,9 @@ class SpaceTree extends StatelessWidget {
             ),
           MenuItemButton(
             style: itemStyle(),
-            leadingIcon:
-                Icon(Icons.folder_open_outlined, size: 16, color: iconColor),
-            onPressed: () => select('select'),
-            child: const Text('Select Space'),
+            leadingIcon: Icon(Icons.edit_outlined, size: 16, color: iconColor),
+            onPressed: () => select('edit'),
+            child: const Text('Edit Space'),
           ),
           MenuItemButton(
             style: itemStyle(),

@@ -94,7 +94,7 @@ void main() {
       scaffoldKey.currentState!.openDrawer();
       await tester.pumpAndSettle();
       final row = find.text(isThread ? 'Thread A' : 'Space A');
-      final action = find.text(isThread ? 'Rename Thread' : 'Select Space');
+      final action = find.text(isThread ? 'Rename Thread' : 'Edit Space');
 
       // Moving to scroll before the hold threshold cancels menu activation.
       final gesture = await tester.startGesture(tester.getCenter(row));
@@ -179,9 +179,9 @@ void main() {
     expect(find.text('Rename Thread'), findsOneWidget);
   });
 
-  testWidgets('Select Space menu item navigates without opening edit fields',
+  testWidgets('Edit Space menu item dispatches the selected Space',
       (tester) async {
-    AxNavigation? navigatedTo;
+    AxSpace? selectedSpace;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SpaceTree(
@@ -189,7 +189,8 @@ void main() {
             navigation: AxNavigation.home(),
             spaces: [_space],
           ),
-          onNavigateTo: (route) => navigatedTo = route,
+          onNavigateTo: (_) {},
+          onEditSpace: (space) async => selectedSpace = space,
         ),
       ),
     ));
@@ -200,19 +201,14 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip('Space menu'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit Space'), findsNothing);
-    await tester.tap(find.text('Select Space'));
+    await tester.tap(find.text('Edit Space'));
     await tester.pumpAndSettle();
 
-    expect(navigatedTo?.kind, AxRouteKind.space);
-    expect(navigatedTo?.spaceId, 'space-a');
-    expect(find.byKey(const ValueKey('space-edit-form')), findsNothing);
+    expect(selectedSpace?.id, 'space-a');
   });
 
-  testWidgets('Select Space in the page layout selects without navigating',
-      (tester) async {
-    final selectedSpaces = <String>[];
-    AxNavigation? navigatedTo;
+  testWidgets('Edit Space in page layout invokes edit action', (tester) async {
+    AxSpace? selectedSpace;
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         body: SpaceTree(
@@ -221,8 +217,8 @@ void main() {
             navigation: AxNavigation.spaces(),
             spaces: [_space],
           ),
-          onNavigateTo: (route) => navigatedTo = route,
-          onToggleSpaceExpanded: selectedSpaces.add,
+          onNavigateTo: (_) {},
+          onEditSpace: (space) async => selectedSpace = space,
         ),
       ),
     ));
@@ -233,10 +229,9 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip('Space menu'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Select Space'));
+    await tester.tap(find.text('Edit Space'));
     await tester.pumpAndSettle();
 
-    expect(selectedSpaces, ['space-a']);
-    expect(navigatedTo, isNull);
+    expect(selectedSpace?.id, 'space-a');
   });
 }

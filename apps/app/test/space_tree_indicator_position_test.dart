@@ -247,7 +247,7 @@ void main() {
         await tester.pump();
         expect(
             find.text(
-                navigation.threadId == null ? 'Select Space' : 'Rename Thread'),
+                navigation.threadId == null ? 'Edit Space' : 'Rename Thread'),
             findsOneWidget);
         await tester.tapAt(const Offset(500, 500));
         await tester.pump();
