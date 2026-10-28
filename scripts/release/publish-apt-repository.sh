@@ -34,7 +34,7 @@ seen = set()
 for package in sys.argv[2:]:
     fields = subprocess.check_output(['dpkg-deb', '--field', package, 'Package', 'Version', 'Architecture'], text=True)
     info = dict(line.split(': ', 1) for line in fields.splitlines())
-    assert info['Package'] == 'syntila-workspace' and info['Version'] == version
+    assert info['Package'] == 'syntila' and info['Version'] == version
     assert info['Architecture'] not in seen
     seen.add(info['Architecture'])
 assert seen == {'amd64', 'arm64'}

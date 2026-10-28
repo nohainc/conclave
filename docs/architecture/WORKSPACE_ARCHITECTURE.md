@@ -14,7 +14,7 @@ workspace (headless Dart service)
                  │ authenticated local IPC (status and operations)
                  │ workspace.nano (restart-applied desired configuration)
                  │
-syntila-workspace (management CLI)
+syntila (management CLI)
     account/setup flows, configuration editing, host service controls
 
 workspace → Worker subsystem → syntila-agent → provider CLI
@@ -27,8 +27,8 @@ it receives a profile, command, environment policy, working directory, input,
 execution options, and cancellation, and returns output. It has no Cloud,
 Space, Thread, Workflow, D1, or UI dependency.
 
-The service is the unified Dart executable `syntila-workspace` (run as
-`syntila-workspace run`, or invoked under its alias name `workspace`) and keeps the
+The service is the unified Dart executable `syntila` (run as
+`syntila run`) and keeps the
 generic Engine as a separately supervised child (`syntila-agent`). The service
 holds the per-installation lock, owns process cleanup, and is the only runtime
 owner. Closing a terminal or the CLI closes its IPC client and does not stop execution.
@@ -87,10 +87,10 @@ configured, the client reports that state instead of using a connection retry as
 a fallback.
 
 Human management authentication is a separate concern from runtime
-authentication. `syntila-workspace login` (Cloud email and password) stores a
-short-lived `DesktopHumanSession`; `syntila-workspace register` uses it for
+authentication. `syntila login` (Cloud email and password) stores a
+short-lived `DesktopHumanSession`; `syntila register` uses it for
 account ownership checks and registration (a Workspace that Cloud has released
-is claimed as a new one); `syntila-workspace logout` deletes the stored session
+is claimed as a new one); `syntila logout` deletes the stored session
 locally and leaves the registration and runtime credential in place. The Workspace Service uses the registered
 Workspace runtime identity and secure runtime credential for Cloud reconnect and
 execution. Losing or expiring the human session does not disconnect Cloud, stop
@@ -249,7 +249,7 @@ registry, credential, Work Root, Profile, Engine, or session identity changes.
 Browsers cannot browse or verify local folders, and whether a provider CLI can
 write to a path depends on the host account the service runs as. The
 Workspace owner therefore maintains an explicit Allowed Folders list with
-`syntila-workspace folders`; Spaces can only choose from that list.
+`syntila folders`; Spaces can only choose from that list.
 
 - The list is private service state at
   `<Application Support>/Registry/allowed-folders.json` (schema version 1).
@@ -271,7 +271,7 @@ Workspace owner therefore maintains an explicit Allowed Folders list with
   Workspace belongs to the requesting user, and switching a Space to another
   Workspace detaches its folders (files untouched).
 
-`syntila-workspace folders [list]`, `folders add PATH [--name NAME]` and
+`syntila folders [list]`, `folders add PATH [--name NAME]` and
 `folders remove ID` call the same IPC commands. Removing a folder never touches
 its files.
 
@@ -407,22 +407,20 @@ apps/profile_lab/assets/engines/syntila-agent
 ```
 
 The two app paths are materialized copies for their bundles, not independent
-source artifacts. The script also writes the legacy `syntila_cli_worker_engine`
-name for consumers that have not migrated (Profile Lab, Windows tooling and
-already published Linux packages); new code uses `syntila-agent`.
+source artifacts.
 
-`scripts/build-workspace-service.sh` compiles the unified `syntila-workspace`
-binary (plus the `workspace` alias and the Engine) into `dist/syntila-workspace/`,
-or `dist/syntila-workspace/linux-<arch>/` when cross-compiling.
+`scripts/build-workspace-service.sh` compiles the unified `syntila`
+binary (plus the Engine) into `dist/syntila/`,
+or `dist/syntila/linux-<arch>/` when cross-compiling.
 `scripts/run-workspace-service.sh` launches that compiled executable by default
 and reserves `--source` for Dart debugging; `scripts/check-workspace-service.sh`
 compiles the service and runs a one-shot lifecycle in temporary directories.
 `scripts/build-workspace-macos.sh` produces the signed macOS bundle directory
-(`syntila-workspace`, the `workspace` symlink, `assets/engines/syntila-agent`)
+(`syntila`, `assets/engines/syntila-agent`)
 and a zip; `scripts/verify-workspace-service-bundle.sh` validates it and
 `scripts/package-workspace-macos.sh` wraps it in a `.pkg`. There is no `.app` and
 no `SMAppService`: the installer does not register or start the service, and
-`syntila-workspace service install` writes the per-user LaunchAgent, so upgrades
+`syntila service install` writes the per-user LaunchAgent, so upgrades
 keep existing Application Support state. Linux uses
 `scripts/build-workspace-linux-headless.sh` and `scripts/package-workspace-linux.sh`
 (see [Linux releases](../deployment/WORKSPACE_LINUX_RELEASES.md)). Set
@@ -468,14 +466,14 @@ Service or `0600` file credential store; see the
   containers; Unix-domain socket IPC under the `0700` state root; Secret
   Service or a `0600` file, selected once per state root and recorded
   (`systemd-creds` is not implemented); `$XDG_STATE_HOME/syntila/workspace`,
-  with an existing legacy `~/.syntila-workspace` root kept in place.
+  with an existing legacy `~/.syntila` root kept in place.
 - Windows: per-user logon task in the interactive session (not a Service
   Control Manager service); named-pipe IPC restricted to the owning user;
   DPAPI secret store; `%LOCALAPPDATA%\Syntila\Workspace`.
 - On every platform the Service, Engine, and provider CLIs run as the same
   user that owns the CLI logins; Syntila never manages provider credentials.
 - Headless operation is primary. Hosts are configured through `workspace.nano`
-  and managed through the `syntila-workspace` client over authenticated local
+  and managed through the `syntila` client over authenticated local
   IPC. Existing Cloud email/password sign-in works in the terminal without a
   browser; browser approval remains an MFA fallback.
 

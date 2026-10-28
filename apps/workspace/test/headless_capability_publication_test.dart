@@ -83,7 +83,7 @@ Future<void> main(List<String> args) async {
     }
     final engine = CliWorkerEngineSupervisor(
         engineExecutable:
-            File('assets/engines/syntila_cli_worker_engine').absolute.path,
+            File('assets/engines/syntila-agent').absolute.path,
         environmentOverrides: {
           'PATH':
               '${File(_dartExecutable()).parent.path}:${Platform.environment['PATH'] ?? ''}'

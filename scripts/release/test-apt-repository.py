@@ -32,7 +32,7 @@ class RepositoryTest(unittest.TestCase):
                 def package(version, arch, payload='original'):
                     stage = root / f'stage-{version}-{arch}'
                     (stage / 'DEBIAN').mkdir(parents=True, exist_ok=True)
-                    (stage / 'DEBIAN/control').write_text(f'Package: syntila-workspace\nVersion: {version}\nArchitecture: {arch}\nMaintainer: Test <test@example.invalid>\nDescription: fixture\n')
+                    (stage / 'DEBIAN/control').write_text(f'Package: syntila\nVersion: {version}\nArchitecture: {arch}\nMaintainer: Test <test@example.invalid>\nDescription: fixture\n')
                     (stage / 'payload').write_text(payload)
                     dest = root / f'{version}-{arch}.deb'
                     subprocess.run(['dpkg-deb', '--build', '--root-owner-group', str(stage), str(dest)], check=True, stdout=subprocess.DEVNULL)

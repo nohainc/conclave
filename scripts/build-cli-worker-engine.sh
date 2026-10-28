@@ -47,9 +47,7 @@ fi
   "-DENGINE_VERSION=$VERSION" \
   bin/syntila_cli_worker.dart \
   -o "$OUTPUT")
-cp "$OUTPUT" "$OUTPUT_DIR/syntila_cli_worker_engine${OUTPUT##*syntila-agent}" 2>/dev/null || true
 cp "$OUTPUT" "$PROFILE_LAB_OUTPUT" 2>/dev/null || true
-cp "$OUTPUT" "$ROOT/apps/profile_lab/assets/engines/syntila_cli_worker_engine${OUTPUT##*syntila-agent}" 2>/dev/null || true
 if [[ "$CROSS_BUILD" == 1 ]]; then
   chmod 755 "$OUTPUT"
   echo "Built generic CLI Worker Engine $VERSION: $OUTPUT"
@@ -79,8 +77,6 @@ if [[ "$OUTPUT" != *.exe ]]; then
   if [[ "$(uname -s)" == "Darwin" ]] && command -v codesign >/dev/null 2>&1; then
     codesign -s - --force "$OUTPUT" >/dev/null 2>&1 || true
     codesign -s - --force "$PROFILE_LAB_OUTPUT" >/dev/null 2>&1 || true
-    codesign -s - --force "$OUTPUT_DIR/syntila_cli_worker_engine" >/dev/null 2>&1
-    codesign -s - --force "$ROOT/apps/profile_lab/assets/engines/syntila_cli_worker_engine" >/dev/null 2>&1
   fi
 fi
 echo "Built generic CLI Worker Engine $VERSION: $OUTPUT and $PROFILE_LAB_OUTPUT"

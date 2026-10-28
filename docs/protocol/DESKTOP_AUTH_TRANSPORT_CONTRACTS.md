@@ -1,6 +1,6 @@
 # Desktop Authentication and Runtime Transport Contracts
 
-> **Updated (2026-10).** The credential and transport contracts below are current. The lifecycle sections were written for the Flutter `Workspace.app`; the GUI-only management-lock and launch-at-login dimensions were removed, and Workspace is now a headless Dart service plus the `syntila-workspace` CLI configured by `workspace.nano` (see [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md)).
+> **Updated (2026-10).** The credential and transport contracts below are current. The lifecycle sections were written for the Flutter `Workspace.app`; the GUI-only management-lock and launch-at-login dimensions were removed, and Workspace is now a headless Dart service plus the `syntila` CLI configured by `workspace.nano` (see [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md)).
 
 **Contract:** `syntila.desktop-auth-transport` **1.0**
 **Canonical validators/types:** `packages/workspace-runtime-protocol/src/desktop-auth-transport.ts`
@@ -188,7 +188,7 @@ also preserves its non-secret registration and cached owner metadata so the
 owner can choose Release later; `desiredRuntimeState = disconnected` prevents
 that retained record from starting the runtime. It preserves the human session.
 Host service registration (login startup) is managed separately with
-`syntila-workspace service install|uninstall`.
+`syntila service install|uninstall`.
 
 ## Runtime transport abstraction
 

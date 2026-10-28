@@ -141,7 +141,7 @@ void main() {
 
       final engine = File(
         '$repository/apps/workspace/assets/engines/'
-        'syntila_cli_worker_engine',
+        'syntila-agent',
       );
       expect(engine.existsSync(), isTrue);
       final supervisor = CliWorkerEngineSupervisor(

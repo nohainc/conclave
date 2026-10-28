@@ -1,6 +1,6 @@
 # Linux Workspace APT releases
 
-The headless install unit contains `workspace`, `syntila-workspace`, and
+The headless install unit contains `workspace`, `syntila`, and
 one canonical generic CLI Worker Engine. Provider CLIs are installed separately.
 There is no Flutter desktop bundle; the headless install unit is the only Linux artifact.
 
@@ -47,8 +47,8 @@ bash scripts/build-workspace-linux-headless.sh arm64
 bash scripts/package-workspace-linux.sh arm64
 ```
 
-Outputs are under `dist/syntila-workspace`: `linux-<arch>`, headless
-`.tar.gz` bundles, and `deb/syntila-workspace_<version>_<amd64|arm64>.deb`.
+Outputs are under `dist/syntila`: `linux-<arch>`, headless
+`.tar.gz` bundles, and `deb/syntila_<version>_<amd64|arm64>.deb`.
 `SYNTILA_WORKSPACE_VERSION` overrides the pubspec version at compile/package
 time; use a new version for every release. Build-only target inputs are
 `SYNTILA_BUILD_TARGET_OS=linux` and `SYNTILA_BUILD_TARGET_ARCH=x64|arm64`.

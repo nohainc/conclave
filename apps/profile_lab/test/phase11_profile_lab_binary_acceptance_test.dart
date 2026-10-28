@@ -28,7 +28,7 @@ void main() {
       final candidate = LocalDraftProfileCandidate.fromProfileMap(profile);
       final engine = File(
         '$repository/apps/profile_lab/assets/engines/'
-        'syntila_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+        'syntila-agent${Platform.isWindows ? '.exe' : ''}',
       );
       expect(engine.existsSync(), isTrue);
       expect(engine.statSync().mode & 0x49, isNonZero);

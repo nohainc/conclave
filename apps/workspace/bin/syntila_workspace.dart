@@ -4,7 +4,7 @@ import 'package:syntila_workspace/workspace_cli.dart';
 import 'syntila_workspace_service.dart' as service;
 
 /// Unified entrypoint for Syntila Workspace:
-/// - `syntila-workspace run [args...]` runs the background service daemon.
+/// - `syntila run [args...]` runs the background service daemon.
 /// - Any other subcommand (or `--help`) dispatches to the CLI client.
 Future<void> main(List<String> args) async {
   if (args.isNotEmpty &&

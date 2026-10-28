@@ -87,7 +87,7 @@ $info = if ($task) { Get-ScheduledTaskInfo -TaskName $name } else { $null }
             '${executable.parent.path}/assets/engines/syntila-agent.exe',
           ).existsSync() ||
           File(
-            '${executable.parent.path}/assets/engines/syntila_cli_worker_engine.exe',
+            '${executable.parent.path}/assets/engines/syntila-agent.exe',
           ).existsSync(),
       registration: result['registered'] == true
           ? ServiceInstallationState.registered

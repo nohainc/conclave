@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Builds the pure-Dart Syntila Workspace for macOS: the unified
-# `syntila-workspace` binary (CLI + service, also reachable as `workspace`)
+# `syntila` binary (CLI + service)
 # and the generic CLI Worker Engine (`syntila-agent`). There is no .app: the
 # service is a user LaunchAgent that the binary itself registers with
-# `syntila-workspace service install` (see macos_service_manager.dart).
+# `syntila service install` (see macos_service_manager.dart).
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 ENTITLEMENTS="$ROOT/packaging/macos/workspace-helper.entitlements"
-DIST_DIR="$ROOT/dist/syntila-workspace/macos"  # suffixed with -local for local builds below
+DIST_DIR="$ROOT/dist/syntila/macos"  # suffixed with -local for local builds below
 
 # --all builds the production bundle and then the local one with the remaining
 # options, so both end up in their own dist folders (and are installed with
@@ -119,11 +119,11 @@ if [[ -n "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
   fi
 fi
 
-BUNDLE_NAME="syntila-workspace"
+BUNDLE_NAME="syntila"
 ZIP_SUFFIX=""
 if [[ "$TARGET_ENV" == "local" ]]; then
-  DIST_DIR="$ROOT/dist/syntila-workspace/macos-local"
-  BUNDLE_NAME="syntila-workspace-local"
+  DIST_DIR="$ROOT/dist/syntila/macos-local"
+  BUNDLE_NAME="syntila-local"
   ZIP_SUFFIX="-local"
 fi
 
@@ -137,7 +137,7 @@ PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
 echo "Building Syntila Workspace $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$WORKSPACE_DIR"
 if [[ "$PREPARED" == "1" ]]; then
-  [[ -f .dart_tool/package_config.json && ( -x assets/engines/syntila-agent || -x assets/engines/syntila_cli_worker_engine ) ]] || {
+  [[ -f .dart_tool/package_config.json && -x assets/engines/syntila-agent ]] || {
     echo "Prepared build requires resolved app dependencies and a freshly built Engine." >&2
     exit 1
   }
@@ -146,7 +146,6 @@ else
   bash "$ROOT/scripts/build-cli-worker-engine.sh"
 fi
 ENGINE="$WORKSPACE_DIR/assets/engines/syntila-agent"
-[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/syntila_cli_worker_engine"
 if [[ ! -x "$ENGINE" ]]; then
   echo "The generic CLI Worker Engine is missing: $ENGINE" >&2
   exit 1
@@ -161,9 +160,9 @@ dart compile exe \
   --define="SYNTILA_RELEASE_TRUST_KEYS_JSON=$PUBLIC_RELEASE_ROOTS" \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   "$WORKSPACE_DIR/bin/syntila_workspace.dart" \
-  -o "$BUNDLE/syntila-workspace"
+  -o "$BUNDLE/syntila"
 cp "$ENGINE" "$BUNDLE/assets/engines/syntila-agent"
-chmod 755 "$BUNDLE/syntila-workspace" "$BUNDLE/assets/engines/syntila-agent"
+chmod 755 "$BUNDLE/syntila" "$BUNDLE/assets/engines/syntila-agent"
 
 SIGN_ARGS=(--force --options runtime --entitlements "$ENTITLEMENTS")
 if [[ -n "${SYNTILA_MACOS_SIGN_IDENTITY:-}" ]]; then
@@ -176,7 +175,7 @@ fi
 # Dart AOT executables map executable memory; the hardened runtime needs the
 # helper entitlements or launchd kills them with OS_REASON_CODESIGNING.
 codesign "${SIGN_ARGS[@]}" --identifier "syntila-agent" "$BUNDLE/assets/engines/syntila-agent"
-codesign "${SIGN_ARGS[@]}" --identifier "syntila-workspace" "$BUNDLE/syntila-workspace"
+codesign "${SIGN_ARGS[@]}" --identifier "syntila" "$BUNDLE/syntila"
 
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$BUNDLE"
 
@@ -205,11 +204,11 @@ if [[ "$INSTALL_BUNDLE" == "1" ]]; then
   rm -rf "$INSTALL_ROOT"
   ditto "$BUNDLE" "$INSTALL_ROOT"
   if [[ "$TARGET_ENV" == "local" ]]; then
-    ln -sf "$INSTALL_ROOT/syntila-workspace" "$BIN_DIR/syntila-workspace-local"
+    ln -sf "$INSTALL_ROOT/syntila" "$BIN_DIR/syntila-local"
   else
-    ln -sf "$INSTALL_ROOT/syntila-workspace" "$BIN_DIR/syntila-workspace"
+    ln -sf "$INSTALL_ROOT/syntila" "$BIN_DIR/syntila"
     rm -f "$BIN_DIR/workspace"
   fi
   echo "Installed: $INSTALL_ROOT (links in $BIN_DIR; make sure it is on PATH)"
-  echo "Restart a running service with: $BIN_DIR/syntila-workspace$([[ "$TARGET_ENV" == "local" ]] && echo -local) service restart"
+  echo "Restart a running service with: $BIN_DIR/syntila$([[ "$TARGET_ENV" == "local" ]] && echo -local) service restart"
 fi

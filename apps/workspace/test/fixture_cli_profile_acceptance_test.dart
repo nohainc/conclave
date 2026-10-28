@@ -221,7 +221,7 @@ void main() {
       expect(providerBuild.exitCode, 0, reason: '${providerBuild.stderr}');
       final bundledEngine = File(
         '$repository/apps/workspace/assets/engines/'
-        'syntila_cli_worker_engine${Platform.isWindows ? '.exe' : ''}',
+        'syntila-agent${Platform.isWindows ? '.exe' : ''}',
       );
       final dartDirectory = File(_dartExecutable()).parent.path;
       final inheritedPath = Platform.environment['PATH'] ?? '';

@@ -353,8 +353,8 @@ class WorkspaceRegistrationException implements Exception {
         kind: WorkspaceRegistrationErrorKind.workspaceNameTaken,
         message: 'You already have a Workspace with this name.',
         action: 'Change workspace.name in workspace.nano '
-            '(see: syntila-workspace config path), then run: '
-            'syntila-workspace register',
+            '(see: syntila config path), then run: '
+            'syntila register',
         statusCode: statusCode,
         serverError: serverError,
         serverCode: serverCode,

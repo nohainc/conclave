@@ -47,7 +47,7 @@ const sourceDigest = digest(
 );
 const bundle = resolve(directory);
 const files = Object.fromEntries(
-  ["syntila-workspace", "assets/engines/syntila-agent"].map((name) => [
+  ["syntila", "assets/engines/syntila-agent"].map((name) => [
     name,
     digest(readFileSync(join(bundle, name))),
   ]),

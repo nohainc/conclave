@@ -23,9 +23,9 @@ done
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-SERVICE_BUILD="$ROOT/dist/syntila-workspace/service"
-OUTPUT="$ROOT/dist/syntila-workspace/linux/$MODE"
-ARCHIVE="$ROOT/dist/syntila-workspace/syntila-workspace-linux-$ARCH-$MODE.tar.gz"
+SERVICE_BUILD="$ROOT/dist/syntila/service"
+OUTPUT="$ROOT/dist/syntila/linux/$MODE"
+ARCHIVE="$ROOT/dist/syntila/syntila-workspace-linux-$ARCH-$MODE.tar.gz"
 
 # Reuse the canonical Engine and standalone service build.
 bash "$ROOT/scripts/build-workspace-service.sh"
@@ -46,7 +46,7 @@ BUILD="$WORKSPACE_DIR/build/linux/$ARCH/$MODE/bundle"
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
 cp -R "$BUILD/." "$OUTPUT/"
-cp "$SERVICE_BUILD/workspace" "$SERVICE_BUILD/syntila-workspace" "$OUTPUT/"
+cp "$SERVICE_BUILD/workspace" "$SERVICE_BUILD/syntila" "$OUTPUT/"
 # The standalone service discovers assets relative to its own executable; the
 # Flutter UI uses its data/flutter_assets copy of the same Engine.
 cp -R "$SERVICE_BUILD/assets" "$OUTPUT/"
@@ -55,21 +55,21 @@ cp "$ROOT/docs/operations/WORKSPACE_LINUX.md" "$OUTPUT/README.md"
 DART_PAYLOAD="lib/libapp.so"
 [[ "$MODE" == "debug" ]] && DART_PAYLOAD="data/flutter_assets/kernel_blob.bin"
 for file in syntila_workspace lib/libflutter_linux_gtk.so "$DART_PAYLOAD" \
-  data/flutter_assets/assets/engines/syntila_cli_worker_engine \
-  assets/engines/syntila_cli_worker_engine workspace; do
+  data/flutter_assets/assets/engines/syntila-agent \
+  assets/engines/syntila-agent; do
   [[ -e "$OUTPUT/$file" ]] || { echo "Bundle is missing $file" >&2; exit 1; }
 done
-CANONICAL="$(sha256sum "$WORKSPACE_DIR/assets/engines/syntila_cli_worker_engine" | cut -d' ' -f1)"
-for engine in "$OUTPUT/data/flutter_assets/assets/engines/syntila_cli_worker_engine" \
-  "$OUTPUT/assets/engines/syntila_cli_worker_engine"; do
+CANONICAL="$(sha256sum "$WORKSPACE_DIR/assets/engines/syntila-agent" | cut -d' ' -f1)"
+for engine in "$OUTPUT/data/flutter_assets/assets/engines/syntila-agent" \
+  "$OUTPUT/assets/engines/syntila-agent"; do
   [[ "$(sha256sum "$engine" | cut -d' ' -f1)" == "$CANONICAL" ]] || {
     echo "Bundled Engine does not match the canonical build: $engine" >&2
     exit 1
   }
 done
-chmod 755 "$OUTPUT/syntila_workspace" "$OUTPUT/workspace" \
-  "$OUTPUT/syntila-workspace" \
-  "$OUTPUT/assets/engines/syntila_cli_worker_engine"
+chmod 755 "$OUTPUT/syntila_workspace" \
+  "$OUTPUT/syntila" \
+  "$OUTPUT/assets/engines/syntila-agent"
 
 tar -C "$OUTPUT" -czf "$ARCHIVE" .
 echo "Built unsigned Linux Workspace bundle: $ARCHIVE"

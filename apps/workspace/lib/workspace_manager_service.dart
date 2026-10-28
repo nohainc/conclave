@@ -406,7 +406,7 @@ class WorkspaceManagerService {
       throw const WorkspaceManagerProtocolException(
         'login_not_ready',
         'Disconnect Cloud and finish active work before registering: '
-            'syntila-workspace disconnect',
+            'syntila disconnect',
       );
     }
     return _headlessAuth ??= WorkspaceHeadlessAuth(

@@ -35,7 +35,7 @@ are implementation details shown only in Advanced Diagnostics.
 - **Syntila Cloud** — TypeScript/Cloudflare collaboration, scheduling,
   Workspace Gateway, Worker catalog and Profile release control plane.
 - **Syntila Workspace** — headless Dart execution/security service and
-  management CLI (`syntila-workspace`) for macOS, Linux and Windows.
+  management CLI (`syntila`) for macOS, Linux and Windows.
 - **Syntila Profile Lab** — internal macOS Flutter/Dart engineering desktop
   application for Worker and Tool Profile authoring, testing, and lifecycle
   management.
@@ -51,8 +51,8 @@ Follow the one-time repository setup there, then install with:
 
 ```bash
 sudo apt update
-sudo apt install syntila-workspace
-syntila-workspace setup
+sudo apt install syntila
+syntila setup
 # Existing Cloud email/password; no browser needed on the server.
 sudo loginctl enable-linger "$USER"
 ```

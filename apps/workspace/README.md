@@ -19,7 +19,7 @@ lifecycle contract is the
 
 | Name | Role |
 | --- | --- |
-| `syntila-workspace` | Unified binary (`bin/syntila_workspace.dart`): the management CLI, and the service when run as `syntila-workspace run` |
+| `syntila` | Unified binary (`bin/syntila_workspace.dart`): the management CLI, and the service when run as `syntila run` |
 | `workspace` | Alias of the same binary. When invoked under this name it runs the service, which is what systemd, containers and `--once` smoke tests use |
 | `syntila-agent` | The separately supervised generic CLI Worker Engine, bundled under `assets/engines/` |
 
@@ -40,11 +40,11 @@ name, parallel execution slots, and a map of named absolute folders. The service
 reads it once at process start; there is no live reload or settings IPC command.
 
 ~~~text
-syntila-workspace config init|show|validate|path
+syntila config init|show|validate|path
 ~~~
 
 Edit the file while the service is stopped (or edit and then run
-`syntila-workspace service restart`). Credentials, identities, Cloud
+`syntila service restart`). Credentials, identities, Cloud
 registration, Worker registry, Profiles and sessions live in dedicated stores,
 never in `workspace.nano`. `connect`, `disconnect`, `setup` and sign-in update
 the relevant keys for you.
@@ -55,23 +55,23 @@ The CLI drives the whole lifecycle; it speaks only the authenticated local IPC
 protocol and never starts Engines or provider CLIs itself.
 
 ~~~text
-syntila-workspace service install|start|stop|restart|status|uninstall
-syntila-workspace setup                 # config, name, login, register, then optionally start the service
-syntila-workspace login                 # Cloud email/password sign-in (stores the session only)
-syntila-workspace register              # register this Workspace with Cloud (after login)
-syntila-workspace logout                # delete the stored sign-in session
-syntila-workspace unregister            # unregister from Cloud and clear identity
-syntila-workspace reset                 # stop, unregister and clear local runtime state
-syntila-workspace work-dir [PATH]       # inspect or update primary Work Root path
-syntila-workspace connect | disconnect  # Cloud connection intent
-syntila-workspace pause | resume        # stop or resume accepting new work
-syntila-workspace status | version | logs | metrics
-syntila-workspace workers               # list configured workers
-syntila-workspace workers catalog       # list available catalog workers
-syntila-workspace workers add TYPE      # add worker from catalog (gemini, chatgpt, etc.)
-syntila-workspace workers remove TYPE   # remove a configured worker
-syntila-workspace workers [check|test|enable|disable]
-syntila-workspace slots | assignments [cancel ID] | folders [add|remove]
+syntila service install|start|stop|restart|status|uninstall
+syntila setup                 # config, name, login, register, then optionally start the service
+syntila login                 # Cloud email/password sign-in (stores the session only)
+syntila register              # register this Workspace with Cloud (after login)
+syntila logout                # delete the stored sign-in session
+syntila unregister            # unregister from Cloud and clear identity
+syntila reset                 # stop, unregister and clear local runtime state
+syntila work-dir [PATH]       # inspect or update primary Work Root path
+syntila connect | disconnect  # Cloud connection intent
+syntila pause | resume        # stop or resume accepting new work
+syntila status | version | logs | metrics
+syntila workers               # list configured workers
+syntila workers catalog       # list available catalog workers
+syntila workers add TYPE      # add worker from catalog (gemini, chatgpt, etc.)
+syntila workers remove TYPE   # remove a configured worker
+syntila workers [check|test|enable|disable]
+syntila slots | assignments [cancel ID] | folders [add|remove]
 ~~~
 
 `service install` registers the per-user background service with the host
@@ -107,8 +107,8 @@ the same Workspace installation.
 
 ## Cloud connection
 
-Sign in with `syntila-workspace login` (Cloud email and password), then run
-`syntila-workspace register`. Workspace verifies installation ownership, registers or
+Sign in with `syntila login` (Cloud email and password), then run
+`syntila register`. Workspace verifies installation ownership, registers or
 recovers through `POST /api/workspace-runtime/register`, and then connects to the
 Workspace Gateway using its runtime credential. The service journals assignment
 outcomes and classifies interrupted work on startup before accepting new work.
@@ -126,7 +126,7 @@ can execute and does not request or store provider credentials. See
 
 Normal Workspace execution uses the generic Engine and current Worker Profiles.
 If Profile Lab can list a Worker but Workspace reports its Profile as
-unavailable, check `syntila-workspace logs` and the diagnostics report for the
+unavailable, check `syntila logs` and the diagnostics report for the
 schema, digest, identity, Engine-compatibility or Cloud-connectivity error. Do
 not bypass local Profile validation or delete the cached Profile directories.
 Worker readiness remains a local execution fact; Cloud receives only safe
@@ -139,7 +139,7 @@ helper, and macOS, Linux or Windows for the matching package.
 
 | Task | Command |
 | --- | --- |
-| Compile the unified binary and Engine (host OS) | `bash scripts/build-workspace-service.sh` → `dist/syntila-workspace/` |
+| Compile the unified binary and Engine (host OS) | `bash scripts/build-workspace-service.sh` → `dist/syntila/` |
 | Run the compiled service | `scripts/run-workspace-service.sh` (`--source` runs from Dart source) |
 | Run from source against local Cloud | `pnpm workspace:run:local` |
 | One-shot compile + start + stop check | `bash scripts/check-workspace-service.sh` |
@@ -158,13 +158,13 @@ This changes only the local display name.
 
 ### macOS
 
-`build-workspace-macos.sh` produces `dist/syntila-workspace/macos/syntila-workspace/`
-(`syntila-workspace`, the `workspace` symlink and `assets/engines/syntila-agent`)
+`build-workspace-macos.sh` produces `dist/syntila/macos/syntila/`
+(`syntila`, the `workspace` symlink and `assets/engines/syntila-agent`)
 signed with the hardened-runtime entitlements in
 `packaging/macos/workspace-helper.entitlements`, plus
 `Syntila-Workspace-<version>-macos.zip`. There is no `.app` and no `SMAppService`;
 `--install` copies the bundle to `~/.local/lib` and links the commands into
-`~/.local/bin`, and `syntila-workspace service install` writes the LaunchAgent.
+`~/.local/bin`, and `syntila service install` writes the LaunchAgent.
 An Apple identity is optional for local use (ad-hoc signatures are used when none
 is available). Update metadata is signed by an independent Ed25519 application
 release key and binds the archive digest, version, channel, supported platform,
@@ -201,6 +201,6 @@ Local builds are compiled with `SYNTILA_WORKSPACE_ENVIRONMENT=local`, ignore
 `cloud.url` from `workspace.nano`, and write to a separate state directory so they
 never touch a production registration or session. Start the local API/web stack
 first with `pnpm app:run:local`. The local bundle installs as
-`syntila-workspace-local`; the production and local services can run side by
+`syntila-local`; the production and local services can run side by
 side, each with its own state directory, installation lock, IPC socket and
 LaunchAgent label.

@@ -7,10 +7,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $Root = Split-Path $PSScriptRoot -Parent
-$Bundle = Join-Path $Root 'dist/syntila-workspace/windows/release'
-$Output = Join-Path $Root 'dist/syntila-workspace/installer'
+$Bundle = Join-Path $Root 'dist/syntila/windows/release'
+$Output = Join-Path $Root 'dist/syntila/installer'
 if (-not (Test-Path $Compiler)) { throw 'Inno Setup 6 ISCC.exe is required.' }
-foreach ($File in @('syntila-workspace.exe', 'assets/engines/syntila-agent.exe')) {
+foreach ($File in @('syntila.exe', 'assets/engines/syntila-agent.exe')) {
     if (-not (Test-Path (Join-Path $Bundle $File))) { throw "Missing release bundle file: $File" }
 }
 $VersionLine = (Select-String -Path (Join-Path $Root 'apps/workspace/pubspec.yaml') -Pattern '^version:').Line

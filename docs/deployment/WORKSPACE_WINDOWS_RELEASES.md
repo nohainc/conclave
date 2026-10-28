@@ -10,7 +10,7 @@ Release tagged `workspace-windows-v<version>`.
 Signing is done by [`scripts/sign-workspace-windows.ps1`](../../scripts/sign-workspace-windows.ps1).
 Every signature uses SHA-256 and an RFC 3161 timestamp, and is verified with
 `signtool verify /pa` and `Get-AuthenticodeSignature` before packaging and again
-on the installer. The headless bundle contains `syntila-workspace.exe` and
+on the installer. The headless bundle contains `syntila.exe` and
 `assets/engines/syntila-agent.exe`; both are signed before packaging.
 
 ## One-time setup
@@ -124,12 +124,12 @@ and [Basic pricing](https://learn.microsoft.com/en-us/azure/artifact-signing/how
 
 - Right-click Setup.exe → Properties → Digital Signatures shows the Syntila
   publisher with a timestamp; `Get-AuthenticodeSignature` reports `Valid` for
-  Setup.exe, `syntila-workspace.exe` and the Engine.
+  Setup.exe, `syntila.exe` and the Engine.
 - The installer UAC/SmartScreen prompt names the publisher (no "Unknown
   publisher").
 - Sign-in, registration, service install/start, a real provider assignment,
   logon/reboot recovery, upgrade over the previous version and uninstall
-  (`syntila-workspace service uninstall` first) all work; see
+  (`syntila service uninstall` first) all work; see
   [the installer notes](../operations/WORKSPACE_WINDOWS_INSTALLER.md).
 - Run `sha256sum -c SHA256SUMS` against the downloaded release assets.
 
@@ -151,7 +151,7 @@ through GitHub Settings → Environments → workspace-windows-release; never
 commit certificates or secrets. Windows packaging uses the unified Dart CLI
 and `run` service command, without a Flutter UI or a second service executable.
 The installer does not automatically register or start the service. After
-installation, run `syntila-workspace.exe service install` and `setup` from
+installation, run `syntila.exe service install` and `setup` from
 PowerShell in the installation directory. No runtime-state migration is added.
 
 The pinned Trusted Signing client `1.0.53` was confirmed in the official NuGet

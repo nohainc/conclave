@@ -96,18 +96,18 @@ jobs:
           WORKSPACE_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          ARCHIVE="dist/syntila-workspace/macos/Syntila-Workspace-$WORKSPACE_VERSION-macos.zip"
+          ARCHIVE="dist/syntila/macos/Syntila-Workspace-$WORKSPACE_VERSION-macos.zip"
           mkdir -p "$RUNNER_TEMP/workspace-bundle-check"
           ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/workspace-bundle-check"
-          BUNDLE="$RUNNER_TEMP/workspace-bundle-check/syntila-workspace"
+          BUNDLE="$RUNNER_TEMP/workspace-bundle-check/syntila"
           bash scripts/verify-workspace-service-bundle.sh "$BUNDLE"
           # Bare executables are not assessable by spctl; require a Developer ID signature.
-          codesign -dv --verbose=4 "$BUNDLE/syntila-workspace" 2>&1 | grep -q "Authority=Developer ID Application"
+          codesign -dv --verbose=4 "$BUNDLE/syntila" 2>&1 | grep -q "Authority=Developer ID Application"
           codesign -dv --verbose=4 "$BUNDLE/assets/engines/syntila-agent" 2>&1 | grep -q "Authority=Developer ID Application"
 
       - name: Sign, publish, download, and verify immutable metadata
         env:
-          WORKSPACE_ARCHIVE: dist/syntila-workspace/macos/Syntila-Workspace-${{ inputs.version }}-macos.zip
+          WORKSPACE_ARCHIVE: dist/syntila/macos/Syntila-Workspace-${{ inputs.version }}-macos.zip
           WORKSPACE_VERSION: ${{ inputs.version }}
           RELEASE_CHANNEL: ${{ inputs.channel }}
           RELEASE_NOTES: ${{ inputs.release_notes }}

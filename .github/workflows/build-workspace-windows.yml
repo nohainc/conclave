@@ -36,7 +36,7 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          SYNTILA_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\syntila-workspace\syntila-workspace.exe
+          SYNTILA_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\syntila\syntila.exe
         run: |
           dart test test/windows_runtime_test.dart test/windows_service_lifecycle_test.dart test/windows_service_manager_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -56,14 +56,14 @@ jobs:
         shell: pwsh
         working-directory: apps/workspace
         env:
-          SYNTILA_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\syntila-workspace\windows\release\syntila-workspace.exe
+          SYNTILA_TEST_WINDOWS_SERVICE: ${{ github.workspace }}\dist\syntila\windows\release\syntila.exe
         run: |
           dart test test/windows_service_lifecycle_test.dart
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Smoke test packaged CLI
         shell: pwsh
         run: |
-          & ./dist/syntila-workspace/windows/release/syntila-workspace.exe --help
+          & ./dist/syntila/windows/release/syntila.exe --help
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Build unsigned per-user installer
         shell: pwsh
@@ -75,11 +75,11 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: syntila-workspace-windows-x64-installer
-          path: dist/syntila-workspace/installer/*Setup.exe
+          path: dist/syntila/installer/*Setup.exe
           if-no-files-found: error
       - name: Retain preview bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: syntila-workspace-windows-x64-preview
-          path: dist/syntila-workspace/*-preview.zip
+          path: dist/syntila/*-preview.zip
           if-no-files-found: error

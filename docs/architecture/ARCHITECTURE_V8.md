@@ -446,7 +446,7 @@ into the managed application-support directory:
   Engines/
     cli_worker/
       1.0.0-<sha256>/
-        syntila_cli_worker_engine[.exe]
+        syntila-agent[.exe]
 ~~~
 
 The version and digest make each materialized artifact immutable and
@@ -701,7 +701,7 @@ The user cannot add arbitrary catalog/profile entries in v8.
 
 ## 17. Workspace UI
 
-> **Note (2026-10):** the Flutter Workspace UI described in this section was removed. Workspace is a headless Dart service plus the `syntila-workspace` CLI; Worker-centric presentation now lives in AX and the CLI `workers` output. See [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
+> **Note (2026-10):** the Flutter Workspace UI described in this section was removed. Workspace is a headless Dart service plus the `syntila` CLI; Worker-centric presentation now lives in AX and the CLI `workers` output. See [WORKSPACE_ARCHITECTURE.md](WORKSPACE_ARCHITECTURE.md).
 
 Keep current UX.
 

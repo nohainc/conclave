@@ -1,7 +1,7 @@
 # Workspace on Linux
 
 Linux x64/arm64 support is headless: the standalone Dart Workspace Service,
-the `syntila-workspace` management CLI and the separately supervised generic
+the `syntila` management CLI and the separately supervised generic
 CLI Worker Engine (ADR-021), shipped together as a Debian package through a
 signed APT repository or as a headless tarball. See [Linux release operations](../deployment/WORKSPACE_LINUX_RELEASES.md)
 for publication setup and qualification requirements.
@@ -18,19 +18,19 @@ gpg --show-keys --with-fingerprint /tmp/syntila-archive-keyring.gpg
 sudo install -D -m 644 /tmp/syntila-archive-keyring.gpg /etc/apt/keyrings/syntila-archive-keyring.gpg
 printf 'Types: deb\nURIs: %s\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/syntila-archive-keyring.gpg\n' "$APT_URL" | sudo tee /etc/apt/sources.list.d/syntila.sources
 sudo apt update
-sudo apt install syntila-workspace
+sudo apt install syntila
 ```
 
 Run all following commands as the normal user who owns the provider CLI logins,
 without `sudo`. The package does not install provider CLIs or manage their logins.
-It installs binaries under `/usr/lib/syntila-workspace`, and symlinks under
+It installs binaries under `/usr/lib/syntila`, and symlinks under
 `/usr/bin`; GTK and a desktop session are not needed.
 
 ```bash
-syntila-workspace setup
+syntila setup
 # Enter your existing Syntila Cloud email and password at the prompts.
 # Password input is hidden. Never pass it as a command-line argument.
-syntila-workspace status
+syntila status
 sudo loginctl enable-linger "$USER"
 ```
 
@@ -52,9 +52,9 @@ The package creates `<state>/workspace.nano` on first setup. Inspect and
 validate it with:
 
 ```bash
-syntila-workspace config path
-syntila-workspace config show
-syntila-workspace config validate
+syntila config path
+syntila config show
+syntila config validate
 ```
 
 Stop the service before editing this Nano Markup file, then restart it. Settings
@@ -66,10 +66,10 @@ and the named absolute-path `folders` map. Required aliases are `root`,
 but do not grant Worker access. Passwords, tokens, and registration IDs must
 never be added to this file.
 
-For an already running service, `syntila-workspace login --password` performs
-only account sign-in/registration; follow it with `syntila-workspace connect`.
+For an already running service, `syntila login --password` performs
+only account sign-in/registration; follow it with `syntila connect`.
 Accounts that require additional verification must use the existing browser
-flow (`syntila-workspace login`, opening the returned URL on another device).
+flow (`syntila login`, opening the returned URL on another device).
 Password sign-in does not bypass MFA, disabled accounts or ownership checks.
 Passwords and temporary authentication cookies are never stored in Workspace
 state, CLI output or diagnostics. The temporary Cloud login session is closed
@@ -110,11 +110,11 @@ unit and preserves all user files.
 Update after active assignments finish:
 
 ```bash
-syntila-workspace service stop
+syntila service stop
 sudo apt update
-sudo apt install --only-upgrade syntila-workspace
-syntila-workspace service start
-syntila-workspace status
+sudo apt install --only-upgrade syntila
+syntila service start
+syntila status
 ```
 
 APT updates the complete service/CLI/Engine unit. Package installation, upgrade,
@@ -129,7 +129,7 @@ run `service uninstall` first if you want to remove its systemd unit too.
 ## Build
 
 There is no Linux desktop GUI: the install unit is the headless service, the
-`syntila-workspace` management CLI (also reachable as `workspace`) and the
+`syntila` management CLI and the
 generic CLI Worker Engine (`syntila-agent`). Build on any host with the Dart
 SDK and Node.js; Dart cross-compiles Linux x64/arm64 executables:
 
@@ -139,8 +139,8 @@ bash scripts/build-workspace-linux-headless.sh x64   # or arm64
 bash scripts/package-workspace-linux.sh x64          # Debian package, needs dpkg
 ```
 
-This produces `dist/syntila-workspace/linux-<arch>/`, a headless `.tar.gz` and
-`dist/syntila-workspace/deb/syntila-workspace_<version>_<arch>.deb`. See
+This produces `dist/syntila/linux-<arch>/`, a headless `.tar.gz` and
+`dist/syntila/deb/syntila_<version>_<arch>.deb`. See
 [Linux release operations](../deployment/WORKSPACE_LINUX_RELEASES.md). The
 **Release Linux Workspace** workflow builds and tests natively on Ubuntu amd64
 and ARM64, including a real APT install/upgrade and a headless setup smoke test.
@@ -171,14 +171,14 @@ restarts and SIGTERM performs a graceful stop:
 Persist the state root, Work Root, and the provider CLI credential directories
 (`~/.claude`, `~/.codex`, `~/.gemini`) on volumes.
 
-Manage a running service with `syntila-workspace` (ADR-021 §2.6). It speaks
+Manage a running service with `syntila` (ADR-021 §2.6). It speaks
 the local authenticated IPC only; pass `--data-dir` if the service did:
 
 ```bash
-./syntila-workspace status          # also: version, metrics, logs
-./syntila-workspace connect         # disconnect, pause, resume
-./syntila-workspace workers         # workers check|test|enable|disable
-./syntila-workspace slots           # assignments, assignments cancel ID, folders
+./syntila status          # also: version, metrics, logs
+./syntila connect         # disconnect, pause, resume
+./syntila workers         # workers check|test|enable|disable
+./syntila slots           # assignments, assignments cancel ID, folders
 ```
 
 Add `--json` for raw output. Use `login`, `login status` and `login cancel`
@@ -188,7 +188,7 @@ can use these commands without systemd; its supervisor owns process lifecycle.
 ## Platform behavior
 
 - **State root:** `$XDG_STATE_HOME/syntila/workspace` (default
-  `~/.local/state/syntila/workspace`). If a legacy `~/.syntila-workspace` root
+  `~/.local/state/syntila/workspace`). If a legacy `~/.syntila` root
   exists it remains authoritative in place; nothing is moved or re-registered.
   `SYNTILA_WORKSPACE_DATA_DIR` / `--data-dir` override as on other platforms.
 - **IPC:** Unix-domain socket `runtime/manager.sock` under the `0700` state

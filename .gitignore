@@ -16,7 +16,6 @@ coverage/
 **/build/
 apps/site/.astro/
 apps/site/dist/
-apps/workspace/assets/engines/syntila_cli_worker_engine*
 apps/workspace/assets/engines/syntila-agent*
 apps/profile_lab/assets/engines/syntila-agent*
 

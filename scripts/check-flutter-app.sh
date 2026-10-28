@@ -20,7 +20,7 @@ if [[ "$PREPARED" == 0 ]]; then
   fi
 else
   [[ -f .dart_tool/package_config.json ]] || { echo "Resolve dependencies first." >&2; exit 1; }
-  if [[ "$APP" != app && ! -x assets/engines/syntila-agent && ! -x assets/engines/syntila_cli_worker_engine ]]; then
+  if [[ "$APP" != app && ! -x assets/engines/syntila-agent ]]; then
     echo "Build the Engine before prepared app checks." >&2; exit 1
   fi
 fi

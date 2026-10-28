@@ -12,7 +12,7 @@ import 'package:syntila_workspace/workspace_settings.dart';
 /// Headless Workspace service entry point. It imports only the Dart runtime
 /// graph; Flutter is used by the separate desktop management application.
 Future<void> main(List<String> args) async {
-  setCurrentProcessName('syntila-workspace');
+  setCurrentProcessName('syntila');
   initializeWindowsProcessJob();
   final dataDirectory = WorkspaceConfig.resolveDataDirectory(args);
   final initialStop = File('${dataDirectory.path}/runtime/stop-request');

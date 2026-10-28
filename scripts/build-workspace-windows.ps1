@@ -34,17 +34,17 @@ try {
     $Trust = & node scripts/resolve-build-release-trust.mjs
     if ($LASTEXITCODE -ne 0) { throw 'Public application-release trust is required.' }
     Invoke-Checked $GitBash @('scripts/build-workspace-service.sh')
-    $Output = Join-Path $Root "dist/syntila-workspace/windows/$Mode"
+    $Output = Join-Path $Root "dist/syntila/windows/$Mode"
     New-Item -ItemType Directory -Force $Output | Out-Null
     Get-ChildItem $Output | Remove-Item -Recurse -Force
-    $Canonical = Join-Path $Root 'dist/syntila-workspace'
-    Copy-Item (Join-Path $Canonical 'syntila-workspace.exe') $Output
+    $Canonical = Join-Path $Root 'dist/syntila'
+    Copy-Item (Join-Path $Canonical 'syntila.exe') $Output
     Copy-Item (Join-Path $Canonical 'assets') $Output -Recurse -Force
-    foreach ($File in @('syntila-workspace.exe', 'assets/engines/syntila-agent.exe')) {
+    foreach ($File in @('syntila.exe', 'assets/engines/syntila-agent.exe')) {
         if (-not (Test-Path (Join-Path $Output $File))) { throw "Bundle is missing $File" }
     }
     Copy-Item (Join-Path $Root 'docs/operations/WORKSPACE_WINDOWS_PREVIEW.md') (Join-Path $Output 'README.md')
-    $Archive = Join-Path $Root "dist/syntila-workspace/syntila-workspace-windows-x64-$Mode-preview.zip"
+    $Archive = Join-Path $Root "dist/syntila/syntila-workspace-windows-x64-$Mode-preview.zip"
     Compress-Archive -Path "$Output/*" -DestinationPath $Archive -Force
     Write-Host "Built unsigned Windows CLI preview: $Archive"
     Write-Warning 'Unsigned runtime candidate. Real provider execution, logon/reboot and release signing require qualification on the target Windows device.'

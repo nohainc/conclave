@@ -3,12 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-SERVICE_DIR="$ROOT/dist/syntila-workspace"
-SERVICE_NAME="syntila-workspace"
+SERVICE_DIR="$ROOT/dist/syntila"
+SERVICE_NAME="syntila"
 ENGINE_NAME="syntila-agent"
 
 if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
-  SERVICE_NAME="syntila-workspace.exe"
+  SERVICE_NAME="syntila.exe"
   ENGINE_NAME="syntila-agent.exe"
 fi
 
@@ -51,7 +51,6 @@ if [[ ! -f "$WORKSPACE_DIR/.dart_tool/package_config.json" ]]; then
 fi
 
 ENGINE="$WORKSPACE_DIR/assets/engines/syntila-agent"
-[[ -x "$ENGINE" ]] || ENGINE="$WORKSPACE_DIR/assets/engines/syntila_cli_worker_engine"
 if [[ ! -x "$ENGINE" ]]; then
   echo "The bundled CLI Worker Engine is missing. Run scripts/build-cli-worker-engine.sh first." >&2
   exit 1

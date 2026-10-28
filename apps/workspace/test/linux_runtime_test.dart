@@ -33,7 +33,7 @@ void main() {
     });
 
     test('an existing legacy root keeps its authority in place', () {
-      final legacy = Directory('${root.path}/.syntila-workspace');
+      final legacy = Directory('${root.path}/.syntila');
       final target = Directory('${root.path}/state/syntila/workspace');
       expect(
         WorkspacePaths.resolveLinuxStateDirectory(

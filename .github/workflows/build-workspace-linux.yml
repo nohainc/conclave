@@ -37,12 +37,12 @@ jobs:
         run: |
           state="$(mktemp -d)"
           SYNTILA_WORKSPACE_SECRET_STORE=file \
-            dist/syntila-workspace/linux/release/workspace \
+            dist/syntila/linux/release/workspace \
             --data-dir "$state/state" --once
           test -f "$state/state/installation-id"
       - name: Smoke test packaged UI startup
         run: |
-          bundle="$PWD/dist/syntila-workspace/linux/release"
+          bundle="$PWD/dist/syntila/linux/release"
           export HOME="$(mktemp -d)"
           xvfb-run -a "$bundle/syntila_workspace" &
           app=$!
@@ -56,5 +56,5 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: syntila-workspace-linux-x64
-          path: dist/syntila-workspace/*.tar.gz
+          path: dist/syntila/*.tar.gz
           if-no-files-found: error

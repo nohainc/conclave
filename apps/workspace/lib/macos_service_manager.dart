@@ -5,7 +5,7 @@ import 'workspace_configuration.dart';
 
 typedef LaunchctlRunner = Future<ProcessResult> Function(List<String> args);
 
-/// Pure-Dart macOS LaunchAgent manager for `syntila-workspace run`.
+/// Pure-Dart macOS LaunchAgent manager for `syntila run`.
 ///
 /// Installs and supervises the user agent directly in `~/Library/LaunchAgents`,
 /// avoiding any Flutter UI or `SMAppService` framework dependency.

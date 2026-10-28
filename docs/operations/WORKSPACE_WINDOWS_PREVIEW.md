@@ -1,7 +1,7 @@
 # Workspace Windows runtime candidate
 
 Windows x64 source support includes the standalone Dart Workspace Service, the
-`syntila-workspace` management CLI, and the separately supervised generic CLI
+`syntila` management CLI, and the separately supervised generic CLI
 Worker Engine. The package is an unsigned qualification candidate, with manual
 updates; Windows installer packaging and release signing remain separate ADR-021
 phases.
@@ -17,10 +17,10 @@ roots, then run from PowerShell at the repository root:
 ```
 
 The script uses the canonical Engine/service build scripts and creates
-`dist/syntila-workspace/syntila-workspace-windows-x64-release-preview.zip`.
+`dist/syntila/syntila-workspace-windows-x64-release-preview.zip`.
 Extract the entire ZIP to a stable per-user installation directory. The target
 machine needs the Microsoft Visual C++ x64 redistributable. Run
-`syntila-workspace.exe service install` and `setup` (or `login`, then `connect`).
+`syntila.exe service install` and `setup` (or `login`, then `connect`).
 Moving an installation changes its scheduled task executable path; stop and
 unregister the old task before registering the new path. Existing data is kept.
 For manual updates, stop the service, replace the complete application directory,
@@ -48,7 +48,7 @@ keys or provider credentials are needed by CI.
   Only ciphertext is written under `Credentials` in private Workspace state.
   State uses `%LOCALAPPDATA%\Syntila\Workspace`; user work defaults to
   `%USERPROFILE%\Documents\Syntila`, independently of application files.
-- Legacy `~/.syntila-workspace` state stops default activation with a
+- Legacy `~/.syntila` state stops default activation with a
   recoverable error. Registries may hold absolute paths, so the application does
   not move files or guess which root is authoritative. Select the existing root
   with `SYNTILA_WORKSPACE_DATA_DIR` (or the service's `--data-dir`) to retain its

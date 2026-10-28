@@ -115,7 +115,7 @@ latter speaks only the Workspace Runtime Protocol with Syntila Workspace.
 
 **Technology**
 - Dart (no Flutter);
-- headless background service and management CLI (`syntila-workspace`);
+- headless background service and management CLI (`syntila`);
 - macOS, Linux and Windows.
 
 **Targets**
@@ -148,7 +148,7 @@ Thread policy determines how that capacity is used.
 
 Syntila Workspace is background-first. Human CLI authentication is
 distinct from Workspace runtime participation and from Worker/provider
-credentials. Signing in (`syntila-workspace login`) establishes management identity; an explicit **Connect
+credentials. Signing in (`syntila login`) establishes management identity; an explicit **Connect
 Workspace** action (`connect`) registers/recovers runtime participation. A connected
 Workspace may auto-start/reconnect in the background after OS login using its
 runtime credential even when the human management session later requires

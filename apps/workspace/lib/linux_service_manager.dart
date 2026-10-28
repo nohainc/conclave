@@ -156,7 +156,7 @@ WantedBy=default.target
             '${executable.parent.path}/assets/engines/syntila-agent',
           ).existsSync() ||
           File(
-            '${executable.parent.path}/assets/engines/syntila_cli_worker_engine',
+            '${executable.parent.path}/assets/engines/syntila-agent',
           ).existsSync(),
       registration: unit.existsSync() && values['UnitFileState'] == 'enabled'
           ? ServiceInstallationState.registered

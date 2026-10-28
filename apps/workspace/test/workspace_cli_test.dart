@@ -186,7 +186,7 @@ void main() {
       request: (_, __) async => throw const SocketException('down'),
     ).run(['--data-dir', root.path, 'register']);
     expect(code, 1);
-    expect(err.toString(), contains('syntila-workspace login'));
+    expect(err.toString(), contains('syntila login'));
   });
 
   test(
@@ -372,7 +372,7 @@ void main() {
         err: err,
         hostManager: (state) => LinuxWorkspaceServiceManager(
           dataDirectory: state,
-          executable: File('/bin/syntila-workspace'),
+          executable: File('/bin/syntila'),
           unitDirectory: Directory('${root.path}/units'),
           systemctl: (args) async => ProcessResult(
             0,
@@ -448,7 +448,7 @@ void main() {
       ]) {
         final result = await runDown(args);
         expect(result.$1, 69);
-        expect(result.$3, contains('syntila-workspace setup'));
+        expect(result.$3, contains('syntila setup'));
       }
     });
 

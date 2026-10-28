@@ -176,8 +176,8 @@ Each boundary has its own identity, authorization, transport, versioning, and wi
 See [Protocol Boundaries](docs/architecture/PROTOCOL_BOUNDARIES.md) and the [Tool Profile v1 specification](docs/specifications/TOOL_PROFILE_V1.md).
 
 Workspace is a persistent, headless Dart service (the unified
-`syntila-workspace` binary) that retains the separate CLI Worker Engine
-process. The `syntila-workspace` CLI is an IPC management client and does
+`syntila` binary) that retains the separate CLI Worker Engine
+process. The `syntila` CLI is an IPC management client and does
 not compose or start an in-process runtime; there is no Workspace GUI. The canonical ownership, lifecycle,
 filesystem, security, build, and validation contract is
 [Workspace architecture](docs/architecture/WORKSPACE_ARCHITECTURE.md).
@@ -299,7 +299,7 @@ People is a private, automatic directory of established collaborators, separate 
 
 The user owns a private People directory of known collaborators and participates in Spaces through Members, Invitations, and Permissions. First collaboration follows email invitation → acceptance → People relationship; future collaboration follows People selection → Space invitation → acceptance. Both invitation entry points share one permission-aware subsystem, with known recipients persisted by user ID.
 
-Workspace lifecycle: `syntila-workspace service install|start|stop|restart|status`
+Workspace lifecycle: `syntila service install|start|stop|restart|status`
 manages the per-user background service through the host manager (systemd user
 unit, macOS LaunchAgent, Windows scheduled task), while runtime commands and
 Worker tests use authenticated local IPC. The service process (`workspace`)

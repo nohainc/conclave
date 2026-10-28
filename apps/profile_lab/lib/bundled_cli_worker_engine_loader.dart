@@ -13,7 +13,7 @@ Future<File?> loadBundledCliWorkerEngine({
   required Directory enginesDirectory,
   AssetBundle? bundle,
 }) async {
-  const assetName = 'assets/engines/syntila_cli_worker_engine';
+  const assetName = 'assets/engines/syntila-agent';
   final assets = bundle ?? rootBundle;
   List<int>? bytes;
 
@@ -23,7 +23,7 @@ Future<File?> loadBundledCliWorkerEngine({
     bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   } catch (_) {
     // 2. Fallback to direct relative filesystem file (useful in tests or local runs)
-    final localFallback = File('assets/engines/syntila_cli_worker_engine');
+    final localFallback = File('assets/engines/syntila-agent');
     if (await localFallback.exists()) {
       bytes = await localFallback.readAsBytes();
     }
@@ -43,7 +43,7 @@ Future<File?> loadBundledCliWorkerEngine({
     }
 
     final executable =
-        File('${versionDirectory.path}/syntila_cli_worker_engine');
+        File('${versionDirectory.path}/syntila-agent');
     var cacheMatches = false;
     if (await executable.exists()) {
       final existingDigest = await sha256.bind(executable.openRead()).first;

@@ -76,7 +76,7 @@ The protocol (versioning, capability-key authentication, frame bounds,
 snapshot then events) is unchanged. Only the transport is per-platform:
 
 - macOS/Linux: Unix-domain socket in a `0700` runtime directory
-  (`$XDG_RUNTIME_DIR/syntila-workspace/` on Linux).
+  (`$XDG_RUNTIME_DIR/syntila/` on Linux).
 - Windows: named pipe `\\.\pipe\syntila-workspace-<installation-id>` with a
   DACL granting only the owning user SID; remote clients are rejected
   (`PIPE_REJECT_REMOTE_CLIENTS`).
@@ -98,7 +98,7 @@ Work Root remains user-chosen (default `~/Documents/Syntila` or
 ### 2.6 Headless management
 
 Hosts are managed through a small
-`syntila-workspace` command-line client that speaks the same authenticated
+`syntila` command-line client that speaks the same authenticated
 IPC protocol (status, connect/disconnect Cloud, start/stop, Worker list and
 verification, logs). It does not spawn Engines or provider CLIs and does not
 talk to Cloud directly; the Service remains the only owner. Initial Cloud
@@ -126,7 +126,7 @@ platform, implemented with an exclusive OS file lock in the state root
 1. Platform seams: paths, secret store, IPC transport, and lock behind
    injected interfaces; shared runtime has no macOS-only imports; Engine
    Windows supervision.
-2. Linux: systemd user adapter, foreground mode, `syntila-workspace` CLI,
+2. Linux: systemd user adapter, foreground mode, `syntila` CLI,
    Linux x64/arm64 artifacts, container/Fly template.
 3. Windows: logon-task adapter, named-pipe IPC, DPAPI store, artifacts.
    Installer packaging and code signing are a later, separate phase.

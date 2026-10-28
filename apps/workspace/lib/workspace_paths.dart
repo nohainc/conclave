@@ -41,8 +41,8 @@ class WorkspacePaths {
       ]));
     }
     final folder = syntilaWorkspaceIsLocalBuild
-        ? '.syntila-workspace-local'
-        : '.syntila-workspace';
+        ? '.syntila-local'
+        : '.syntila';
     final legacy =
         Directory('${runtime.homeDirectory}${Platform.pathSeparator}$folder');
     if (runtime.operatingSystem == 'linux') {
@@ -71,7 +71,7 @@ class WorkspacePaths {
         '$base/syntila/${syntilaWorkspaceIsLocalBuild ? 'workspace-local' : 'workspace'}');
   }
 
-  /// Earlier Linux service runs used `~/.syntila-workspace`. That root keeps
+  /// Earlier Linux service runs used `~/.syntila`. That root keeps
   /// its authority in place so installation and runtime identities, the
   /// credential, registry, Profiles, and sessions are never moved or forked.
   static Directory resolveLinuxStateDirectory(
@@ -95,7 +95,7 @@ class WorkspacePaths {
     if (runtime.operatingSystem == 'windows') {
       final target = defaultWorkspaceDirectory(platform: runtime);
       final legacy = Directory(
-          '${runtime.homeDirectory}/${syntilaWorkspaceIsLocalBuild ? '.syntila-workspace-local' : '.syntila-workspace'}');
+          '${runtime.homeDirectory}/${syntilaWorkspaceIsLocalBuild ? '.syntila-local' : '.syntila'}');
       return resolveWindowsStateDirectory(legacy: legacy, target: target);
     }
     return defaultApplicationDataRoot(platform: runtime);

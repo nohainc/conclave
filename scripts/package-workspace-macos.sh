@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Packages a built macOS Workspace bundle (syntila-workspace, the `workspace`
+# Packages a built macOS Workspace bundle (syntila, the `workspace`
 # alias and the CLI Worker Engine) into an installer .pkg that installs under
 # /usr/local/lib and links the commands into /usr/local/bin. The installer does
-# not register or start the service; run `syntila-workspace service install`
+# not register or start the service; run `syntila service install`
 # afterwards. Existing Application Support state (installation ID, credentials,
 # Work Root, sessions) is never touched.
 
@@ -50,13 +50,13 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-DIST_DIR="$ROOT/dist/syntila-workspace/macos"
-BUNDLE_NAME="syntila-workspace"
+DIST_DIR="$ROOT/dist/syntila/macos"
+BUNDLE_NAME="syntila"
 PKG_ID="com.syntila.workspace.pkg"
 SUFFIX=""
 if [[ "$TARGET_ENV" == "local" ]]; then
-  DIST_DIR="$ROOT/dist/syntila-workspace/macos-local"
-  BUNDLE_NAME="syntila-workspace-local"
+  DIST_DIR="$ROOT/dist/syntila/macos-local"
+  BUNDLE_NAME="syntila-local"
   PKG_ID="com.syntila.workspace.local.pkg"
   SUFFIX="-local"
 fi
@@ -72,7 +72,7 @@ if [[ ! -d "$BUNDLE" ]]; then
   exit 1
 fi
 
-# Refuse to ship a bundle without the service binary, alias and Engine.
+# Refuse to ship a bundle without the service binary and Engine.
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$BUNDLE"
 
 VERSION="${SYNTILA_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$ROOT/apps/workspace/pubspec.yaml")}"
@@ -85,9 +85,9 @@ BIN="$STAGING/root/usr/local/bin"
 mkdir -p "$LIB" "$BIN"
 ditto "$BUNDLE" "$LIB"
 if [[ "$TARGET_ENV" == "local" ]]; then
-  ln -s "../lib/$BUNDLE_NAME/syntila-workspace" "$BIN/syntila-workspace-local"
+  ln -s "../lib/$BUNDLE_NAME/syntila" "$BIN/syntila-local"
 else
-  ln -s "../lib/$BUNDLE_NAME/syntila-workspace" "$BIN/syntila-workspace"
+  ln -s "../lib/$BUNDLE_NAME/syntila" "$BIN/syntila"
 fi
 xattr -crs "$STAGING/root"
 

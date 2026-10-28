@@ -75,7 +75,7 @@ Workspace removal, and uninstall/reinstall preserve the user Work Root.
 
 ## Connection stages
 
-The runtime records these stages for `syntila-workspace status` and diagnostics:
+The runtime records these stages for `syntila status` and diagnostics:
 
 1. `validating`: local runtime credential and WebSocket endpoint are checked.
 2. `connecting`: DNS/TLS and the HTTP WebSocket upgrade are attempted.

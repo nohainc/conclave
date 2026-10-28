@@ -114,7 +114,7 @@ fi
 echo "Building Syntila Profile Lab $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$PROFILE_LAB_DIR"
 if [[ "$PREPARED" == "1" ]]; then
-  [[ -f .dart_tool/package_config.json && -x assets/engines/syntila_cli_worker_engine ]] || {
+  [[ -f .dart_tool/package_config.json && -x assets/engines/syntila-agent ]] || {
     echo "Prepared build requires resolved app dependencies and a freshly built Engine." >&2
     exit 1
   }

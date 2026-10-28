@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
-OUT_DIR="$ROOT/dist/syntila-workspace"
+OUT_DIR="$ROOT/dist/syntila"
 ENVIRONMENT="${SYNTILA_WORKSPACE_ENVIRONMENT:-production}"
 
 for arg in "$@"; do
@@ -40,13 +40,13 @@ if [[ -n "${SYNTILA_BUILD_TARGET_OS:-}${SYNTILA_BUILD_TARGET_ARCH:-}" ]]; then
   [[ "${SYNTILA_BUILD_TARGET_OS:-}" == linux ]] || { echo "Only Linux cross-builds are supported." >&2; exit 2; }
   case "${SYNTILA_BUILD_TARGET_ARCH:-}" in x64|arm64) ;; *) echo "Target architecture must be x64 or arm64." >&2; exit 2 ;; esac
   TARGET_FLAGS=(--target-os=linux "--target-arch=$SYNTILA_BUILD_TARGET_ARCH")
-  OUT_DIR="$ROOT/dist/syntila-workspace/linux-$SYNTILA_BUILD_TARGET_ARCH"
+  OUT_DIR="$ROOT/dist/syntila/linux-$SYNTILA_BUILD_TARGET_ARCH"
 fi
 ENGINE_NAME="syntila-agent"
-OUTPUT_NAME="syntila-workspace"
+OUTPUT_NAME="syntila"
 if [[ -z "${SYNTILA_BUILD_TARGET_OS:-}" ]] && [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
   ENGINE_NAME="syntila-agent.exe"
-  OUTPUT_NAME="syntila-workspace.exe"
+  OUTPUT_NAME="syntila.exe"
 fi
 
 command -v dart >/dev/null 2>&1 || {

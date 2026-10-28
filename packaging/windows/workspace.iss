@@ -29,7 +29,7 @@ WizardStyle=modern
 DisableProgramGroupPage=yes
 CloseApplications=no
 RestartApplications=no
-UninstallDisplayIcon={app}\syntila-workspace.exe
+UninstallDisplayIcon={app}\syntila.exe
 SetupLogging=yes
 #ifdef SignInstaller
 ; Signs Setup.exe and the embedded uninstaller with the "syntila" sign tool
@@ -50,7 +50,7 @@ begin
   try
     Locator := CreateOleObject('WbemScripting.SWbemLocator');
     Services := Locator.ConnectServer('', 'root\CIMV2');
-    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''syntila-workspace.exe'' OR Name = ''workspace.exe'' OR Name = ''syntila-service.exe''');
+    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''syntila.exe'' OR Name = ''syntila-service.exe''');
     Result := Processes.Count > 0;
   except
     // If process inspection fails, preserve the existing installation.

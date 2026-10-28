@@ -290,7 +290,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                     constraints: SyntilaDialogStyle.small,
                     title: Text('Unregister ${workspace.name}?'),
                     content: const Text(
-                      'This will disconnect and revoke the Workspace registration in Cloud. You can register it again at any time with syntila-workspace login.',
+                      'This will disconnect and revoke the Workspace registration in Cloud. You can register it again at any time with syntila login.',
                     ),
                     actions: [
                       TextButton(

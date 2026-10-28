@@ -79,14 +79,14 @@ jobs:
       - name: Test actual APT install and upgrade
         run: bash scripts/test-workspace-linux-package.sh '${{ matrix.arch }}'
       - name: Test headless setup without a keyring or Workers
-        run: bash scripts/test-workspace-headless-candidate.sh 'dist/syntila-workspace/linux-${{ matrix.arch }}'
+        run: bash scripts/test-workspace-headless-candidate.sh 'dist/syntila/linux-${{ matrix.arch }}'
       - name: Retain tested candidates
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-workspace-${{ matrix.arch }}
           path: |
-            dist/syntila-workspace/deb/syntila-workspace_${{ needs.preflight.outputs.version }}_*.deb
-            dist/syntila-workspace/syntila-workspace-headless-linux-${{ matrix.arch }}.tar.gz
+            dist/syntila/deb/syntila_${{ needs.preflight.outputs.version }}_*.deb
+            dist/syntila/syntila-workspace-headless-linux-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   publish:

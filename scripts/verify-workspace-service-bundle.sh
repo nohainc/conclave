@@ -2,15 +2,15 @@
 set -euo pipefail
 
 # Verifies a built macOS Workspace bundle directory: the unified
-# `syntila-workspace` binary and the generic CLI Worker Engine, plus their
+# `syntila` binary and the generic CLI Worker Engine, plus their
 # signatures when signed.
 BUNDLE="${1:-}"
 if [[ -z "$BUNDLE" || ! -d "$BUNDLE" ]]; then
-  echo "Usage: $(basename "$0") '/path/to/syntila-workspace'" >&2
+  echo "Usage: $(basename "$0") '/path/to/syntila'" >&2
   exit 2
 fi
 
-BINARY="$BUNDLE/syntila-workspace"
+BINARY="$BUNDLE/syntila"
 ENGINE="$BUNDLE/assets/engines/syntila-agent"
 for path in "$BINARY" "$ENGINE"; do
   [[ -e "$path" ]] || { echo "Missing bundle item: $path" >&2; exit 1; }
@@ -43,7 +43,7 @@ if codesign -dv "$BINARY" >/dev/null 2>&1; then
     com.apple.security.cs.allow-unsigned-executable-memory \
     com.apple.security.cs.disable-library-validation; do
     [[ "$BINARY_ENTITLEMENTS" == *"$entitlement"* ]] || {
-      echo "syntila-workspace is missing hardened-runtime entitlement: $entitlement" >&2
+      echo "syntila is missing hardened-runtime entitlement: $entitlement" >&2
       exit 1
     }
     [[ "$ENGINE_ENTITLEMENTS" == *"$entitlement"* ]] || {
@@ -52,8 +52,8 @@ if codesign -dv "$BINARY" >/dev/null 2>&1; then
     }
   done
 
-  [[ "$(identifier "$BINARY")" == "syntila-workspace" ]] || {
-    echo "syntila-workspace has an unexpected designated identifier: $(identifier "$BINARY")." >&2
+  [[ "$(identifier "$BINARY")" == "syntila" ]] || {
+    echo "syntila has an unexpected designated identifier: $(identifier "$BINARY")." >&2
     exit 1
   }
   [[ "$(identifier "$ENGINE")" == "syntila-agent" ]] || {
@@ -72,7 +72,7 @@ if codesign -dv "$BINARY" >/dev/null 2>&1; then
     codesign --verify --strict --verbose=2 \
       --test-requirement '=anchor apple generic' "$ENGINE"
     [[ -n "$BINARY_TEAM_ID" && "$BINARY_TEAM_ID" == "$ENGINE_TEAM_ID" ]] || {
-      echo "syntila-workspace and the Worker Engine are not signed by the same team." >&2
+      echo "syntila and the Worker Engine are not signed by the same team." >&2
       exit 1
     }
   fi

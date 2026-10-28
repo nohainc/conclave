@@ -82,7 +82,7 @@ Directory? _defaultBundleDirectory() {
     final exeSuffix = Platform.isWindows ? '.exe' : '';
     if (File('${directory.path}/assets/engines/syntila-agent$exeSuffix')
             .existsSync() ||
-        File('${directory.path}/assets/engines/syntila_cli_worker_engine$exeSuffix')
+        File('${directory.path}/assets/engines/syntila-agent$exeSuffix')
             .existsSync()) {
       return directory;
     }

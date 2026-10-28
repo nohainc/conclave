@@ -128,7 +128,7 @@ describe("CI acceptance orchestration", () => {
         app,
         "assets",
         "engines",
-        "syntila_cli_worker_engine",
+        "syntila-agent",
       );
       writeFileSync(engine, "#!/bin/sh\nexit 0\n");
       chmodSync(engine, 0o755);
@@ -268,12 +268,12 @@ describe("CI acceptance orchestration", () => {
       const bundle = join(
         root,
         "dist",
-        "syntila-workspace",
+        "syntila",
         "macos",
-        "syntila-workspace",
+        "syntila",
       );
       for (const file of [
-        "syntila-workspace",
+        "syntila",
         "assets/engines/syntila-agent",
       ]) {
         expect(readFileSync(join(bundle, file)) !== undefined).toBe(true);
