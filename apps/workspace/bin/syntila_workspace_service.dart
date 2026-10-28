@@ -82,8 +82,37 @@ Future<void> main(List<String> args) async {
       }
     }
   } finally {
-    await sleepInhibitor.close();
-    await manager.close();
-    await manager.workspace.stop();
+    // systemd gives the unit `TimeoutStopSec` to exit after SIGTERM and then
+    // sends SIGKILL, which makes `service stop` hang and the unit end as
+    // failed. Each step is bounded and reported, and a watchdog forces the
+    // exit if teardown still has not finished.
+    final watchdog = Timer(_shutdownDeadline, () {
+      stderr.writeln(
+        'Workspace shutdown exceeded ${_shutdownDeadline.inSeconds}s; exiting.',
+      );
+      exit(0);
+    });
+    await _boundedShutdownStep('sleep inhibitor', sleepInhibitor.close);
+    await _boundedShutdownStep('management server', manager.close);
+    await _boundedShutdownStep('workspace', manager.workspace.stop);
+    watchdog.cancel();
+  }
+}
+
+/// Must stay below the systemd unit's `TimeoutStopSec`.
+const _shutdownDeadline = Duration(seconds: 15);
+const _shutdownStepTimeout = Duration(seconds: 6);
+
+Future<void> _boundedShutdownStep(
+  String name,
+  Future<void> Function() step,
+) async {
+  try {
+    await step().timeout(_shutdownStepTimeout);
+  } on TimeoutException {
+    stderr.writeln('Workspace shutdown: $name did not finish in '
+        '${_shutdownStepTimeout.inSeconds}s; continuing.');
+  } on Object catch (error) {
+    stderr.writeln('Workspace shutdown: $name failed: $error');
   }
 }

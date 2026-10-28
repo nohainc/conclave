@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'workspace_background_service.dart';
@@ -33,10 +35,24 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
     return Directory('$base/systemd/user');
   }
 
-  static Future<ProcessResult> _runSystemctl(List<String> args) => Process.run(
-        'systemctl',
-        ['--user', ...args],
-      ).timeout(const Duration(seconds: 30));
+  /// `stop` and `restart` wait for the unit's `TimeoutStopSec` (20 s, or 30 s
+  /// in units written by older versions) plus a SIGKILL, so they get a longer
+  /// client deadline than queries.
+  static Future<ProcessResult> _runSystemctl(List<String> args) async {
+    final slow =
+        args.isNotEmpty && (args.first == 'stop' || args.first == 'restart');
+    final process = await Process.start('systemctl', ['--user', ...args]);
+    final stdout = utf8.decodeStream(process.stdout);
+    final stderr = utf8.decodeStream(process.stderr);
+    try {
+      final code =
+          await process.exitCode.timeout(Duration(seconds: slow ? 75 : 30));
+      return ProcessResult(process.pid, code, await stdout, await stderr);
+    } on TimeoutException {
+      process.kill();
+      rethrow;
+    }
+  }
 
   Future<String> _unitName() async {
     await dataDirectory.create(recursive: true);
@@ -95,7 +111,7 @@ RestartSec=5
 # SIGTERM lets the service stop its Engine and provider CLIs; anything left in
 # the unit's cgroup afterwards is killed when the stop timeout expires.
 KillMode=mixed
-TimeoutStopSec=30
+TimeoutStopSec=20
 
 [Install]
 WantedBy=default.target

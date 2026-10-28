@@ -11,7 +11,9 @@ Future<void> main(List<String> args) async {
       (args.first == 'run' || args.contains('--background-service'))) {
     final serviceArgs = args.first == 'run' ? args.sublist(1) : args;
     await service.main(serviceArgs);
-    return;
+    // Shutdown is complete. A leftover timer, socket or child-process handle
+    // must not keep the process alive until the service manager kills it.
+    exit(exitCode);
   }
   exitCode = await WorkspaceCli(out: stdout, err: stderr).run(args);
 }
