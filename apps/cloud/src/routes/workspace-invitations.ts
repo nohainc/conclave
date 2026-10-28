@@ -230,7 +230,8 @@ export async function handleAcceptWorkspaceInvitation(
 }
 
 /**
- * Owner-only: end a person's grant. They lose access at their next request,
+ * End a person's grant: the owner revokes anyone, and a borrower may revoke
+ * their own grant with person id "me". They lose access at their next request,
  * and every Space grant their Spaces hold on this Workspace is revoked so the
  * scheduler stops dispatching to it.
  */
@@ -242,7 +243,8 @@ export async function handleRevokePersonGrant(
   ctx?: ExecutionContext,
 ): Promise<Response> {
   const context = await securityContext(request, env, ctx);
-  await ownedWorkspace(env, workspaceId, context.userId);
+  if (personId === "me") personId = context.userId;
+  else await ownedWorkspace(env, workspaceId, context.userId);
   if (request.method !== "POST") throw new HttpError(405, "Unsupported method");
   const now = new Date().toISOString();
   const results = await env.SYNTILA_DB.batch([
@@ -328,4 +330,28 @@ export async function handlePersonGrantQuota(
     ...(limit !== undefined ? { maxConcurrentRequests: limit } : {}),
     ...(runSeconds !== undefined ? { maxRunSecondsPerMonth: runSeconds } : {}),
   });
+}
+
+/**
+ * Decline an invitation as the invited email. The status schema has no
+ * "declined" value, so the invitation is closed as revoked; the owner may
+ * invite the person again.
+ */
+export async function handleDeclineWorkspaceInvitation(
+  request: Request,
+  env: SecurityEnv,
+  invitationId: string,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  if (request.method !== "POST") throw new HttpError(405, "Unsupported method");
+  const now = new Date().toISOString();
+  const result = await env.SYNTILA_DB.prepare(
+    "UPDATE workspace_invitations SET status='revoked',updated_at=?1 WHERE id=?2 AND status='pending' AND LOWER(email)=?3",
+  )
+    .bind(now, invitationId, context.user.email.trim().toLowerCase())
+    .run();
+  if (!result.meta?.changes)
+    throw new HttpError(404, "Workspace invitation not found");
+  return json({ status: "declined" });
 }

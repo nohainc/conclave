@@ -206,6 +206,40 @@ class AxStore {
         auth = AuthStore(dataSource),
         runs = RunStore(dataSource) {
     invitations.addListener(_updateUnreadNotifications);
+    workspaceInvitations.addListener(_updateUnreadNotifications);
+  }
+
+  /// Workspace invitations addressed to the signed-in person, surfaced in the
+  /// Inbox like Space invitations.
+  final ValueNotifier<List<AxMyWorkspaceInvitation>> workspaceInvitations =
+      ValueNotifier(const []);
+
+  Future<void> refreshWorkspaceInvitations() async {
+    final AxDataSource raw = dataSource;
+    if (raw is! AxWorkspaceSharingDataSource) return;
+    final source = raw as AxWorkspaceSharingDataSource;
+    try {
+      workspaceInvitations.value = await source.loadMyWorkspaceInvitations();
+    } catch (_) {
+      // Optional; a failed check simply shows nothing.
+    }
+  }
+
+  Future<void> declineWorkspaceInvitation(
+      AxMyWorkspaceInvitation invite) async {
+    final AxDataSource raw = dataSource;
+    if (raw is! AxWorkspaceSharingDataSource) return;
+    final source = raw as AxWorkspaceSharingDataSource;
+    await source.declineWorkspaceInvitation(invite.id);
+    await refreshWorkspaceInvitations();
+  }
+
+  Future<void> acceptWorkspaceInvitation(AxMyWorkspaceInvitation invite) async {
+    final AxDataSource raw = dataSource;
+    if (raw is! AxWorkspaceSharingDataSource) return;
+    final source = raw as AxWorkspaceSharingDataSource;
+    await source.acceptWorkspaceInvitation(invite.id);
+    await refreshWorkspaceInvitations();
   }
 
   final AxReadCacheBackend? _readCacheBackend;
@@ -402,8 +436,9 @@ class AxStore {
   }
 
   void _updateUnreadNotifications() {
-    unreadNotifications.value =
-        notifications.where((n) => !n.read).length + invitations.items.length;
+    unreadNotifications.value = notifications.where((n) => !n.read).length +
+        invitations.items.length +
+        workspaceInvitations.value.length;
   }
 
   Future<void> acceptInvitation(AxSpaceInvitation invite) =>
@@ -417,6 +452,8 @@ class AxStore {
     topBarChanges.dispose();
     profileSecurityChanges.dispose();
     invitations.removeListener(_updateUnreadNotifications);
+    workspaceInvitations.removeListener(_updateUnreadNotifications);
+    workspaceInvitations.dispose();
     invitations.dispose();
     lifecycle.dispose();
     lifecycleNotice.dispose();

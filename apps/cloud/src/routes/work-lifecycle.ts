@@ -41,6 +41,7 @@ import type { SecurityEnv } from "./handlers.js";
 
 import { createOrGetRun } from "./work-creation.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
+import { advanceThreadQueueSafely } from "./thread-request-queue.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
 import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 import {
@@ -1248,8 +1249,30 @@ export async function handleCancelWorkRequest(
   workRequestId: string,
   accessContext?: ExecutionContext,
 ): Promise<Response> {
+  const response = await cancelWorkRequest(
+    request,
+    env,
+    workRequestId,
+    accessContext,
+  );
+  // A cancelled request may free the Thread for its next queued request.
+  const thread = await env.SYNTILA_DB.prepare(
+    "SELECT thread_id AS threadId FROM work_requests WHERE id = ?1",
+  )
+    .bind(workRequestId)
+    .first<{ threadId: string }>();
+  if (thread) await advanceThreadQueueSafely(env, thread.threadId);
+  return response;
+}
+
+async function cancelWorkRequest(
+  request: Request,
+  env: SecurityEnv,
+  workRequestId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
   const row = await env.SYNTILA_DB.prepare(
-    "SELECT thread_id AS threadId, mode, status, cancel_requested_at AS cancelRequestedAt FROM work_requests WHERE id = ?1",
+    "SELECT thread_id AS threadId, mode, status, cancel_requested_at AS cancelRequestedAt, requested_by_user_id AS requestedByUserId FROM work_requests WHERE id = ?1",
   )
     .bind(workRequestId)
     .first<{
@@ -1257,15 +1280,22 @@ export async function handleCancelWorkRequest(
       mode: string;
       status: string;
       cancelRequestedAt: string | null;
+      requestedByUserId: string;
     }>();
   if (!row) throw new HttpError(404, "Work Request not found");
-  await authorizeThreadAccess(
+  const { context } = await authorizeThreadAccess(
     request,
     env,
     row.threadId,
     "execute",
     accessContext,
   );
+  // Members share a Thread's requests but cancel only their own.
+  if (row.requestedByUserId !== context.userId)
+    throw new HttpError(
+      403,
+      "Only the person who sent this request can cancel it",
+    );
   if (row.status === "cancelled")
     return json({ workRequestId, status: "cancelled" });
   if (row.status === "failed") {

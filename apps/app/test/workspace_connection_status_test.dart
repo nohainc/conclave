@@ -42,7 +42,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Connection status'), findsNothing);
-      expect(find.text('Not connected'), findsOneWidget);
+      expect(find.byTooltip('Not connected'), findsOneWidget);
       expect(find.text('Machine'), findsNothing);
       expect(find.text('Connect Machine'), findsNothing);
 
@@ -68,7 +68,7 @@ void main() {
         onRevoke: (_) {},
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Online'), findsOneWidget);
+      expect(find.byTooltip('Online'), findsOneWidget);
       expect(find.text('Machine'), findsNothing);
       expect(find.text('MacBook Pro'), findsWidgets);
       expect(find.text('macOS'), findsOneWidget);

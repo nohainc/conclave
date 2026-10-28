@@ -124,10 +124,33 @@ class _ThreadPageState extends State<ThreadPage>
   bool _dispatchingQueuedWork = false;
   String get _workQueueKey =>
       '${widget.currentUserId ?? ''}|${widget.thread.id}';
-  _WorkQueuePause? get _workQueuePause => _workQueuePauses[_workQueueKey];
-  set _workQueuePause(_WorkQueuePause? pause) => pause == null
-      ? _workQueuePauses.remove(_workQueueKey)
-      : _workQueuePauses[_workQueueKey] = pause;
+  _WorkQueuePause? get _workQueuePause {
+    if (_sharedQueueSource != null) {
+      if (!_sharedQueue.paused) return null;
+      return _sharedQueue.pauseReason == 'failure'
+          ? _WorkQueuePause.failure
+          : _WorkQueuePause.user;
+    }
+    return _workQueuePauses[_workQueueKey];
+  }
+
+  // Cloud pauses the shared queue itself; only the local queue is set here.
+  set _workQueuePause(_WorkQueuePause? pause) {
+    if (_sharedQueueSource != null) return;
+    pause == null
+        ? _workQueuePauses.remove(_workQueueKey)
+        : _workQueuePauses[_workQueueKey] = pause;
+  }
+
+  /// The Thread's queue shared by all members, kept in Cloud, which sends
+  /// each request as its author. Data sources without it keep a local,
+  /// per-person queue instead.
+  AxThreadQueueDataSource? get _sharedQueueSource =>
+      widget.isDraft || widget.dataSource is! AxThreadQueueDataSource
+          ? null
+          : widget.dataSource as AxThreadQueueDataSource;
+  AxThreadQueue _sharedQueue = AxThreadQueue.empty;
+  int _sharedQueueGeneration = 0;
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
       widget.dataSource is AxWorkerUsageDataSource
@@ -848,6 +871,9 @@ class _ThreadPageState extends State<ThreadPage>
       !_workPresentation.hasData && _workPresentation.isFetching;
   String? get _workTimelineError => _workPresentation.error?.toString();
   String? _workSubmitError;
+
+  /// The last send was blocked by an incomplete Worker/model/effort choice.
+  bool _workSelectionMissing = false;
   final _reportedIssues = <String, AxIssueReport>{};
   final _reportedIssueKeys = <String, String>{};
   final _issueReportErrors = <String, String>{};
@@ -884,6 +910,9 @@ class _ThreadPageState extends State<ThreadPage>
   /// Workers from Workspaces the viewer owns outside the Space Workspace.
   /// They answer only the Chat workflow, when the Space allows own Workers.
   List<AxWorker> _ownChatWorkers = const [];
+
+  /// The Space Workspace query answered, even if the Space has none yet.
+  bool _workflowWorkspaceLoaded = false;
   bool get _chatWorkflowSelected =>
       _effectiveWorkflow.split(':').first == 'chat';
   List<AxWorker> get _composerWorkers => _chatWorkflowSelected
@@ -1282,6 +1311,7 @@ class _ThreadPageState extends State<ThreadPage>
     _loadWorkChoices();
     _loadWorkflowCatalog();
     _restoreThreadViewState();
+    _loadSharedQueue();
   }
 
   void _applyWorkers(List<AxWorker> workers) {
@@ -1291,7 +1321,7 @@ class _ThreadPageState extends State<ThreadPage>
     // Until the Space Workspace is known, a Worker cannot be told apart from
     // the Space's own, so none is offered as the viewer's own.
     _ownChatWorkers = widget.space.effectivePermissions.useOwnWorkers &&
-            _selectedWorkflowWorkspaceId != null
+            (_selectedWorkflowWorkspaceId != null || _workflowWorkspaceLoaded)
         ? [
             for (final worker in workers)
               if (!worker.shared &&
@@ -1418,17 +1448,20 @@ class _ThreadPageState extends State<ThreadPage>
     final cache = _workflowConfigurations;
     if (cache == null) {
       _selectedWorkflowWorkspaceId = null;
+      _workflowWorkspaceLoaded = false;
       _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
       return;
     }
     final state = cache.engine.peek(cache.workspaceQuery);
     _selectedWorkflowWorkspaceId = state.data?.workspaceId;
+    _workflowWorkspaceLoaded = state.data != null;
     _applyWorkers(_catalogs.engine.peek(_catalogs.workers).data ?? const []);
     _cancelWorkflowWorkspace =
         cache.engine.watch(cache.workspaceQuery, (state) {
       if (!mounted) return;
       _updateState(() {
         _selectedWorkflowWorkspaceId = state.data?.workspaceId;
+        _workflowWorkspaceLoaded = state.data != null;
         _applyWorkers(
             _catalogs.engine.peek(_catalogs.workers).data ?? const []);
         _reconcilePendingThreadViewState();
@@ -1478,6 +1511,10 @@ class _ThreadPageState extends State<ThreadPage>
         oldWidget.isDraft != widget.isDraft) {
       _releaseWorkQueue(oldWidget);
       _claimWorkQueue();
+    }
+    if (threadChanged || oldWidget.dataSource != widget.dataSource) {
+      _sharedQueue = AxThreadQueue.empty;
+      _loadSharedQueue();
     }
     if (threadChanged) {
       _invalidateInteractionCallbacks();
@@ -1674,7 +1711,10 @@ class _ThreadPageState extends State<ThreadPage>
       if (type is String &&
           payload is Map &&
           payload['threadId'] == widget.thread.id) {
-        if (type == 'thread.archived') {
+        if (type == 'thread.queue_updated') {
+          // A member changed the shared queue, or Cloud sent its next request.
+          _loadSharedQueue();
+        } else if (type == 'thread.archived') {
           // Thread was archived by another user or session
           _handleThreadArchived(Map<String, dynamic>.from(payload));
         } else if (type == 'thread.chat_cleared') {
@@ -2621,6 +2661,10 @@ class _ThreadPageState extends State<ThreadPage>
         onExecutionSelectionChanged: (selection) {
           _updateState(() {
             _markSelectionChangedByUser();
+            if (_workSelectionMissing) {
+              _workSelectionMissing = false;
+              _workSubmitError = null;
+            }
             _workExecutionSelection = {
               ..._workExecutionSelection,
               ...selection
@@ -2687,6 +2731,11 @@ class _ThreadPageState extends State<ThreadPage>
           _scheduleThreadViewStateSave();
         },
         onRun: _runWork,
+        selectionMissing: _workSelectionMissing,
+        onSelectionMissing: (message) => _updateState(() {
+          _workSelectionMissing = true;
+          _workSubmitError = message;
+        }),
         usageController: _workerUsage,
       );
 }

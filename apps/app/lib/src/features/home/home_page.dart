@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../ax/ax_models.dart';
 import '../../brand.dart';
 import '../../ax/worker_presentation.dart';
+import '../invitations/invitation_card.dart';
+import '../../ax/ax_workspace_member_access.dart';
 import 'home_analytics.dart';
 
 export 'home_analytics.dart';
@@ -30,6 +32,9 @@ class HomePage extends StatelessWidget {
     this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
+    this.workspaceInvitations = const [],
+    this.onAcceptWorkspaceInvitation,
+    this.onDeclineWorkspaceInvitation,
     this.onOpenThread,
     this.onOpenNotifications,
     this.onReadAttentionItem,
@@ -65,6 +70,9 @@ class HomePage extends StatelessWidget {
   final bool isOffline;
   final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
   final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
+  final List<AxMyWorkspaceInvitation> workspaceInvitations;
+  final ValueChanged<AxMyWorkspaceInvitation>? onAcceptWorkspaceInvitation;
+  final ValueChanged<AxMyWorkspaceInvitation>? onDeclineWorkspaceInvitation;
   final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback? onOpenNotifications;
   final ValueChanged<String>? onReadAttentionItem;
@@ -102,6 +110,9 @@ class HomePage extends StatelessWidget {
           isOffline: isOffline,
           onAcceptInvitation: onAcceptInvitation,
           onDeclineInvitation: onDeclineInvitation,
+          workspaceInvitations: workspaceInvitations,
+          onAcceptWorkspaceInvitation: onAcceptWorkspaceInvitation,
+          onDeclineWorkspaceInvitation: onDeclineWorkspaceInvitation,
           run: run,
           openFindingCount: openFindingCount,
           onOpenWorkspaces: onOpenWorkspaces,
@@ -625,6 +636,9 @@ class EstablishedUserHome extends StatelessWidget {
     this.isOffline = false,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
+    this.workspaceInvitations = const [],
+    this.onAcceptWorkspaceInvitation,
+    this.onDeclineWorkspaceInvitation,
     required this.run,
     required this.openFindingCount,
     required this.onOpenWorkspaces,
@@ -657,6 +671,9 @@ class EstablishedUserHome extends StatelessWidget {
   final bool isOffline;
   final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
   final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
+  final List<AxMyWorkspaceInvitation> workspaceInvitations;
+  final ValueChanged<AxMyWorkspaceInvitation>? onAcceptWorkspaceInvitation;
+  final ValueChanged<AxMyWorkspaceInvitation>? onDeclineWorkspaceInvitation;
   final AxRun? run;
   final int openFindingCount;
   final VoidCallback onOpenWorkspaces;
@@ -764,7 +781,8 @@ class EstablishedUserHome extends StatelessWidget {
     } catch (_) {
       effectiveAttentionItems = const [];
     }
-    final hasAttentionItems = effectiveAttentionItems.isNotEmpty;
+    final hasAttentionItems =
+        effectiveAttentionItems.isNotEmpty || workspaceInvitations.isNotEmpty;
     final authorizedSpaceIds = spaces.map((p) => p.id).toSet();
     final isRunAuthorized = run != null &&
         (run!.spaceId == null ||
@@ -856,6 +874,9 @@ class EstablishedUserHome extends StatelessWidget {
               spaces: spaces,
               onAcceptInvitation: onAcceptInvitation,
               onDeclineInvitation: onDeclineInvitation,
+              workspaceInvitations: workspaceInvitations,
+              onAcceptWorkspaceInvitation: onAcceptWorkspaceInvitation,
+              onDeclineWorkspaceInvitation: onDeclineWorkspaceInvitation,
               onOpenSpace: onOpenSpace,
               onOpenThread: onOpenThread,
               onOpenWorkspaces: onOpenWorkspaces,
@@ -1111,7 +1132,7 @@ class AxHomeAttentionProjector {
 
     // 1. Invitations
     for (final inv in pendingInvitations) {
-      if (readItemIds.contains('invite-${inv.id}')) continue;
+      // A pending invitation always needs an answer, so reading never hides it.
       final inviter = inv.invitedByUserName.isNotEmpty
           ? inv.invitedByUserName
           : (inv.invitedByUserEmail.isNotEmpty
@@ -1122,9 +1143,14 @@ class AxHomeAttentionProjector {
         type: AxHomeAttentionType.spaceInvitation,
         kind: AxHomeAttentionType.spaceInvitation,
         categoryLabel: 'Space invitation',
-        title: '$inviter invited you to ${inv.spaceName}',
-        description:
-            '${inv.role.toUpperCase()} · ${_formatRelativeTime(inv.createdAt)}',
+        title:
+            '$inviter invited you to ${inv.spaceName.isNotEmpty ? inv.spaceName : 'a Space'}',
+        description: inv.spaceName.isNotEmpty
+            ? 'Space: ${inv.spaceName} · Role: ${inv.role.toUpperCase()}'
+            : 'Role: ${inv.role.toUpperCase()}',
+        subtitle: inv.spaceName.isNotEmpty
+            ? 'Space: ${inv.spaceName} · Role: ${inv.role.toUpperCase()}'
+            : 'Role: ${inv.role.toUpperCase()}',
         timestamp: DateTime.tryParse(inv.createdAt),
         timestampDisplay: _formatRelativeTime(inv.createdAt),
         invitation: inv,
@@ -1318,6 +1344,9 @@ class _ForYouSection extends StatelessWidget {
     List<AxSpace>? spaces,
     this.onAcceptInvitation,
     this.onDeclineInvitation,
+    this.workspaceInvitations = const [],
+    this.onAcceptWorkspaceInvitation,
+    this.onDeclineWorkspaceInvitation,
     ValueChanged<String>? onOpenSpace,
     this.onOpenThread,
     required this.onOpenWorkspaces,
@@ -1335,6 +1364,9 @@ class _ForYouSection extends StatelessWidget {
   final List<AxSpace> spaces;
   final ValueChanged<AxSpaceInvitation>? onAcceptInvitation;
   final ValueChanged<AxSpaceInvitation>? onDeclineInvitation;
+  final List<AxMyWorkspaceInvitation> workspaceInvitations;
+  final ValueChanged<AxMyWorkspaceInvitation>? onAcceptWorkspaceInvitation;
+  final ValueChanged<AxMyWorkspaceInvitation>? onDeclineWorkspaceInvitation;
   final ValueChanged<String> onOpenSpace;
   final void Function(String spaceId, String threadId)? onOpenThread;
   final VoidCallback onOpenWorkspaces;
@@ -1346,7 +1378,8 @@ class _ForYouSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final eligibleItems = AxHomeAttentionProjector.space(
       limit: null,
-      invitations: invitations,
+      // Invitations render as their own cards below, never as tiles.
+      invitations: const [],
       rawAttentionItems: attentionItems,
       readItemIds: readAttentionItemIds,
       openFindingCount: openFindingCount,
@@ -1358,8 +1391,18 @@ class _ForYouSection extends StatelessWidget {
       onOpenWorkspaces: onOpenWorkspaces,
     );
 
-    final items = eligibleItems.take(4).toList();
-    if (items.isEmpty) return const SizedBox.shrink();
+    final pendingSpaceInvitations =
+        invitations.where((invite) => invite.status == 'pending').toList();
+    // Invitations are never truncated; other items fill the rest of the cap.
+    final invitationCount =
+        pendingSpaceInvitations.length + workspaceInvitations.length;
+    final items =
+        eligibleItems.take((4 - invitationCount).clamp(0, 4)).toList();
+    if (items.isEmpty &&
+        pendingSpaceInvitations.isEmpty &&
+        workspaceInvitations.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1385,22 +1428,56 @@ class _ForYouSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        LayoutBuilder(builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 700;
-          return GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: isWide ? 2 : 1,
-              mainAxisExtent: isWide ? 150 : 160,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: items.length,
-            itemBuilder: (_, index) => _ForYouItemTile(
-                item: items[index], onRead: onReadAttentionItem),
-          );
-        }),
+        // Every pending invitation is always listed, with its own controls.
+        for (final invite in workspaceInvitations)
+          AxInvitationCard(
+            key: ValueKey('home-workspace-invitation-${invite.id}'),
+            icon: Icons.computer_outlined,
+            title: invite.workspaceName,
+            badge: 'WORKSPACE',
+            invitedBy: invite.ownerName,
+            onDecline: () => onDeclineWorkspaceInvitation?.call(invite),
+            onAccept: () => onAcceptWorkspaceInvitation?.call(invite),
+          ),
+        for (final invite in pendingSpaceInvitations)
+          AxInvitationCard(
+            key: ValueKey('home-space-invitation-${invite.id}'),
+            icon: Icons.folder_outlined,
+            title: invite.spaceName.isNotEmpty
+                ? invite.spaceName
+                : 'Space invitation',
+            badge: 'SPACE',
+            invitedBy: invite.invitedByDisplay,
+            onDecline: () {
+              AxHomeAnalytics.trackDeclineInvitation(
+                  invitationId: invite.id, spaceId: invite.spaceId);
+              onDeclineInvitation?.call(invite);
+            },
+            onAccept: () {
+              AxHomeAnalytics.trackAcceptInvitation(
+                  invitationId: invite.id,
+                  spaceId: invite.spaceId,
+                  role: invite.role);
+              onAcceptInvitation?.call(invite);
+            },
+          ),
+        if (items.isNotEmpty)
+          LayoutBuilder(builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 700;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: isWide ? 2 : 1,
+                mainAxisExtent: isWide ? 168 : 176,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: items.length,
+              itemBuilder: (_, index) => _ForYouItemTile(
+                  item: items[index], onRead: onReadAttentionItem),
+            );
+          }),
         const SizedBox(height: 24),
       ],
     );

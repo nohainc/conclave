@@ -642,8 +642,8 @@ void main() {
     // 1. FOR YOU (unified prioritized card projection)
     expect(find.text('For you'), findsOneWidget);
     expect(find.text('View all notifications →'), findsOneWidget);
-    expect(find.text('Space invitation'), findsOneWidget);
-    expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
+    expect(find.text('SPACE'), findsOneWidget);
+    expect(find.text('Family Travel'), findsOneWidget);
     expect(find.text('Decline'), findsOneWidget);
     expect(find.text('Accept'), findsOneWidget);
 
@@ -784,8 +784,8 @@ void main() {
     expect(find.text('View all notifications →'), findsOneWidget);
 
     // Priority 1: Invitation (present)
-    expect(find.text('Space invitation'), findsOneWidget);
-    expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
+    expect(find.text('SPACE'), findsOneWidget);
+    expect(find.text('Family Travel'), findsOneWidget);
 
     // Priority 2: Needs your input (present)
     expect(find.text('Needs your input'), findsOneWidget);
@@ -3403,7 +3403,7 @@ void main() {
       )));
 
       expect(find.text('For you'), findsOneWidget);
-      expect(find.text('Julia invited you to Family Travel'), findsOneWidget);
+      expect(find.text('Family Travel'), findsOneWidget);
       expect(find.text('Accept'), findsOneWidget);
       expect(find.text('Decline'), findsOneWidget);
     });
@@ -3451,7 +3451,7 @@ void main() {
         onCreateSpace: () {},
       )));
 
-      expect(find.text('Julia invited you to Family Travel'), findsNothing);
+      expect(find.text('Family Travel'), findsNothing);
       expect(find.text('FAMILY TRAVEL'), findsNothing);
     });
 

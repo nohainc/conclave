@@ -1,3 +1,5 @@
+import { advanceThreadQueueSafely } from "./routes/thread-request-queue.js";
+import type { SecurityEnv } from "./routes/http-security.js";
 import {
   WorkflowEntrypoint,
   type WorkflowEvent,
@@ -573,6 +575,17 @@ export class SyntilaRunWorkflow extends WorkflowEntrypoint<
           status: options.status,
         },
       });
+      if (
+        type === "work_request.completed" ||
+        type === "work_request.failed" ||
+        type === "work_request.cancelled"
+      ) {
+        // The Thread is free again: send the next queued request, or pause
+        // the queue when this request failed.
+        await advanceThreadQueueSafely(this.env as SecurityEnv, threadId, {
+          failedRequest: type === "work_request.failed",
+        });
+      }
     } catch (error) {
       console.error(`Failed to publish ${type}`, error);
     }

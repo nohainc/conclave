@@ -1723,6 +1723,118 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('the request queue is shared with members and kept in Cloud',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final data = _SharedQueueDataSource()..ready.complete([]);
+    data.requests = [
+      const AxWorkRequest(
+        id: 'r1',
+        requestedByName: 'Mia',
+        requestedByUserId: 'user-mia',
+        prompt: 'Running for Mia',
+        workflowId: 'direct',
+        workflowVersion: 1,
+        status: 'running',
+        createdAt: '2026-10-06T10:00:00Z',
+        steps: [],
+      )
+    ];
+    data.queue =
+        AxThreadQueue(items: [data.item('m1', 'user-mia', 'Mia asks next')]);
+    final realtime = StreamController<Map<String, dynamic>>.broadcast();
+    addTearDown(realtime.close);
+    final prompts = <String>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+      initialTab: 1,
+      space: const AxSpace(
+          id: 'space-1',
+          name: 'Space',
+          branch: '',
+          lastActivity: '',
+          role: 'owner'),
+      thread: const AxThread(
+          id: 'thread-1',
+          spaceId: 'space-1',
+          name: 'Stream',
+          lead: '',
+          status: 'active',
+          brief: '',
+          primaryWorkspace: '',
+          queueStatus: ''),
+      dataSource: data,
+      currentUserId: 'user-owner',
+      realtimeEvents: realtime.stream,
+      onBackToSpace: _noop,
+      onArchive: _noop,
+      onRunWork: (prompt, __, ___, key) async {
+        prompts.add(prompt);
+        return 'saved-${prompts.length}';
+      },
+    ))));
+    await tester.pumpAndSettle();
+    await _askAi(tester);
+
+    // Another member's queued request is shown with its author, read-only.
+    expect(find.text('Mia: Mia asks next'), findsOneWidget);
+    expect(find.byTooltip('Remove from queue'), findsNothing);
+    expect(find.byTooltip('Edit'), findsNothing);
+
+    // A new message joins the shared queue in Cloud instead of being sent.
+    await tester.enterText(find.byType(TextField).first, 'Mine next');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    expect(prompts, isEmpty);
+    expect(data.calls, ['enqueue:Mine next']);
+    expect(find.textContaining('Queued · 2'), findsOneWidget);
+    expect(find.byTooltip('Remove from queue'), findsOneWidget);
+
+    // Any member pauses the shared queue.
+    await tester.tap(find.byTooltip('Pause queue'));
+    await tester.pumpAndSettle();
+    expect(data.calls.last, 'pause');
+    expect(find.textContaining('— paused'), findsOneWidget);
+
+    // Another member's change arrives through realtime.
+    data.queue =
+        AxThreadQueue(items: [data.item('q2', 'user-owner', 'Mine next')]);
+    realtime.add({
+      'type': 'thread.queue_updated',
+      'payload': {'threadId': 'thread-1', 'entityId': 'thread-1'},
+    });
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Queued · 1'), findsOneWidget);
+    expect(find.textContaining('paused'), findsNothing);
+
+    // Cloud sends the queue; the page never sends it itself.
+    data.requests = [
+      for (final request in data.requests)
+        AxWorkRequest(
+          id: request.id,
+          requestedByName: request.requestedByName,
+          requestedByUserId: request.requestedByUserId,
+          prompt: request.prompt,
+          workflowId: 'direct',
+          workflowVersion: 1,
+          status: 'completed',
+          createdAt: request.createdAt,
+          steps: const [],
+          finalText: 'Done',
+        )
+    ];
+    await AxWorkHistoryCache.forSource(data).refresh('thread-1');
+    await tester.pumpAndSettle();
+    expect(prompts, isEmpty);
+
+    await tester.tap(find.byTooltip('Remove from queue'));
+    await tester.pumpAndSettle();
+    expect(data.calls.last, 'remove:q2');
+    expect(find.byKey(const ValueKey('work-queue-panel')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('a failed request pauses the queue until the user resumes it',
       (tester) async {
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
@@ -4373,6 +4485,90 @@ class _PinnedHistoryDataSource extends _WorkHistoryDataSource {
                 body: 'Chat message $i',
                 createdAt: '2026-10-06T10:00:00Z',
               ));
+}
+
+/// A Thread whose queue is shared in Cloud with another member.
+class _SharedQueueDataSource extends _SlowSubmissionDataSource
+    implements AxThreadQueueDataSource {
+  AxThreadQueue queue = AxThreadQueue.empty;
+  final calls = <String>[];
+
+  AxThreadQueueItem item(String id, String author, String text) =>
+      AxThreadQueueItem(
+          id: id,
+          authorUserId: author,
+          authorName: author == 'user-owner' ? 'You' : 'Mia',
+          status: 'queued',
+          request: {
+            'workflowId': 'direct',
+            'workflowVersion': 1,
+            'input': {'originalRequest': text},
+          });
+
+  AxThreadQueue _set(AxThreadQueue next) => queue = next;
+
+  @override
+  Future<AxThreadQueue> loadThreadQueue(String threadId) async => queue;
+
+  @override
+  Future<AxThreadQueue> enqueueThreadRequest({
+    required String threadId,
+    required String workflowId,
+    required int workflowVersion,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    AxReplyReference? replyTo,
+  }) async {
+    calls.add('enqueue:$prompt');
+    return _set(AxThreadQueue(
+        paused: queue.paused,
+        pauseReason: queue.pauseReason,
+        items: [
+          ...queue.items,
+          item('q${queue.items.length + 1}', 'user-owner', prompt)
+        ]));
+  }
+
+  @override
+  Future<AxThreadQueue> updateThreadQueueItem({
+    required String threadId,
+    required String itemId,
+    required String workflowId,
+    required int workflowVersion,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    AxReplyReference? replyTo,
+  }) async {
+    calls.add('update:$itemId');
+    return queue;
+  }
+
+  @override
+  Future<AxThreadQueue> removeThreadQueueItem(
+      String threadId, String itemId) async {
+    calls.add('remove:$itemId');
+    return _set(AxThreadQueue(
+        items: queue.items.where((i) => i.id != itemId).toList()));
+  }
+
+  @override
+  Future<AxThreadQueue> sendThreadQueueItemNow(
+      String threadId, String itemId) async {
+    calls.add('send-now:$itemId');
+    return queue;
+  }
+
+  @override
+  Future<AxThreadQueue> setThreadQueuePaused(
+      String threadId, bool paused) async {
+    calls.add(paused ? 'pause' : 'resume');
+    return _set(AxThreadQueue(
+        paused: paused,
+        pauseReason: paused ? 'user' : null,
+        items: queue.items));
+  }
 }
 
 class _SlowSubmissionDataSource extends _WorkFormDataSource {

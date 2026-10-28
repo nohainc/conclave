@@ -244,9 +244,10 @@ export async function handleWorkflowWorkspace(
           ),
         );
       } catch (error) {
-        // A lent Workspace whose grant was revoked stays readable so the owner
-        // can see and change the selection.
-        if (!(error instanceof HttpError && error.status === 403)) throw error;
+        // Reading never fails on the grant: a Workspace that is revoked,
+        // no longer lent, or whose grant is suspended or expired stays
+        // readable so the owner can see and change the selection.
+        if (!(error instanceof HttpError)) throw error;
       }
     }
     return json({

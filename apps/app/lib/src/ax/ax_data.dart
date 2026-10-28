@@ -10,6 +10,8 @@ import 'ax_workspace_member_access.dart';
 export 'ax_workspace_member_access.dart';
 import 'worker_usage.dart';
 export 'worker_usage.dart';
+import 'ax_thread_queue.dart';
+export 'ax_thread_queue.dart';
 export 'worker_usage_parser.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -207,6 +209,7 @@ class AxApiClient extends _AxApiClientCore
         AxNotificationDataSource,
         AxPinDataSource,
         AxNotesDataSource,
-        AxUserFilesDataSource {
+        AxUserFilesDataSource,
+        AxThreadQueueDataSource {
   AxApiClient({super.baseUrl, super.client});
 }

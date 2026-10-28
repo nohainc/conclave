@@ -58,6 +58,11 @@ class SharingSource implements AxWorkspaceSharingDataSource {
   Future<List<AxMyWorkspaceInvitation>> loadMyWorkspaceInvitations() async =>
       mine;
   @override
+  Future<void> declineWorkspaceInvitation(String id) async {
+    calls.add('decline:$id');
+  }
+
+  @override
   Future<void> acceptWorkspaceInvitation(String id) async {
     calls.add('accept:$id');
     mine = const [];

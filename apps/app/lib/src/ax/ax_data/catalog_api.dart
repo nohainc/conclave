@@ -256,6 +256,10 @@ mixin _CatalogApi on _AxApiClientCore {
       'POST',
       '/workspace-invitations/${Uri.encodeComponent(invitationId)}/accept');
 
+  Future<void> declineWorkspaceInvitation(String invitationId) => _sharingSend(
+      'POST',
+      '/workspace-invitations/${Uri.encodeComponent(invitationId)}/decline');
+
   AxUserWorkflowConfiguration _configurationResponse(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException(

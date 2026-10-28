@@ -287,6 +287,7 @@ mixin _AxAppStateMixin on State<SyntilaAppShell> {
         unreadNotificationCount: unreadNotificationCount,
         unreadNotifications: store.unreadNotifications,
         invitationsListenable: store.invitations,
+        workspaceInvitationsListenable: store.workspaceInvitations,
         isDarkTheme: _themeMode == ThemeMode.dark ||
             (_themeMode == ThemeMode.system &&
                 Theme.of(context).brightness == Brightness.dark),

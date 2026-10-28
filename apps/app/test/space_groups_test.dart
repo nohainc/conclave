@@ -38,11 +38,11 @@ void main() {
         onCreateSpace: () {},
       ))));
       expect(
-          find.text('YOUR SPACES'),
+          find.text('your spaces'),
           spaces.contains(own) && spaces.contains(shared)
               ? findsOneWidget
               : findsNothing);
-      expect(find.text('SHARED WITH YOU'),
+      expect(find.text('shared with you'),
           spaces.contains(shared) ? findsOneWidget : findsNothing);
       if (spaces.length == 2) {
         expect(tester.getTopLeft(find.text(own.name)).dy,
@@ -62,14 +62,16 @@ void main() {
         onOpenAbout: () {},
         onOpenExternal: (_) {},
       ))));
-      expect(find.byTooltip('Spaces and Threads'),
-          spaces.isNotEmpty ? findsOneWidget : findsNothing);
+      expect(find.byTooltip('Your spaces'),
+          spaces.contains(own) ? findsOneWidget : findsNothing);
+      expect(find.byTooltip('Shared with you'),
+          spaces.contains(shared) ? findsOneWidget : findsNothing);
       expect(find.byTooltip('PINNED SPACES'), findsNothing);
       if (spaces.contains(shared)) {
-        await tester.tap(find.byTooltip('Spaces and Threads'));
+        await tester.tap(find.byTooltip('Shared with you'));
         await tester.pumpAndSettle();
-        expect(find.text(own.name),
-            spaces.contains(own) ? findsOneWidget : findsNothing);
+        // Each icon lists only its own group.
+        expect(find.text(own.name), findsNothing);
         await tester.tap(find.text(shared.name));
         await tester.pumpAndSettle();
         expect(selected?.spaceId, shared.id);

@@ -1,6 +1,12 @@
 import { loadSpacePermissions } from "./space-permissions.js";
 import { spaceWorkerExecutionOptions } from "../worker-execution-options.js";
-import { type Permission, type SecurityContext } from "@syntila/security";
+import {
+  AuthorizationError,
+  authorizeSpaceMembership,
+  type AuthenticatedUser,
+  type Permission,
+  type SecurityContext,
+} from "@syntila/security";
 import {
   validateWorkerExecutionSelection,
   canDiscussThread,
@@ -260,6 +266,30 @@ export function discussionReferences(value: unknown): readonly string[] {
 
 export type ThreadAccess = "view" | "discuss" | "execute" | "manage";
 
+async function loadThreadRow(env: SecurityEnv, threadId: string) {
+  const row = await env.SYNTILA_DB.prepare(
+    `SELECT id, space_id AS spaceId, name, status,
+            access_policy_json AS accessPolicyJson, lead_user_id AS leadUserId,
+            created_at AS createdAt, updated_at AS updatedAt
+     FROM threads WHERE id = ?1`,
+  )
+    .bind(threadId)
+    .first<Record<string, unknown>>();
+  if (!row) throw new HttpError(404, "Thread not found");
+  return row;
+}
+
+function threadAccessPermission(access: ThreadAccess): Permission {
+  return (
+    access === "view"
+      ? "spaces:read"
+      : access === "discuss"
+        ? "spaces:write"
+        : access === "execute"
+          ? "run.start"
+          : "spaces:write");
+}
+
 export async function authorizeThreadAccess(
   request: Request,
   env: SecurityEnv,
@@ -271,31 +301,68 @@ export async function authorizeThreadAccess(
   thread: Thread;
   spaceId: string;
 }> {
-  const row = await env.SYNTILA_DB.prepare(
-    `SELECT id, space_id AS spaceId, name, status,
-            access_policy_json AS accessPolicyJson, lead_user_id AS leadUserId,
-            created_at AS createdAt, updated_at AS updatedAt
-     FROM threads WHERE id = ?1`,
-  )
-    .bind(threadId)
-    .first<Record<string, unknown>>();
-  if (!row) throw new HttpError(404, "Thread not found");
-
-  const permission: Permission =
-    access === "view"
-      ? "spaces:read"
-      : access === "discuss"
-        ? "spaces:write"
-        : access === "execute"
-          ? "run.start"
-          : "spaces:write";
+  const row = await loadThreadRow(env, threadId);
   const context = await authorizeRequest(
     request,
     env,
-    permission,
+    threadAccessPermission(access),
     String(row.spaceId),
     accessContext,
   );
+  return threadAccessForContext(env, context, row, access);
+}
+
+/**
+ * Thread access for a person who is not making this HTTP request, such as
+ * the author of a queued request Cloud sends on their behalf. Checks the same
+ * account status, Space membership and Thread rules as a live request.
+ */
+export async function authorizeThreadAccessAsUser(
+  env: SecurityEnv,
+  userId: string,
+  threadId: string,
+  access: ThreadAccess,
+): Promise<{
+  context: SecurityContext;
+  thread: Thread;
+  spaceId: string;
+}> {
+  const row = await loadThreadRow(env, threadId);
+  const user = await env.SYNTILA_DB.prepare(
+    "SELECT id, email, display_name AS displayName, status FROM users WHERE id = ?1",
+  )
+    .bind(userId)
+    .first<AuthenticatedUser>();
+  if (!user) throw new HttpError(403, `Thread ${access} access is required`);
+  const spaceId = String(row.spaceId);
+  try {
+    const { role } = await authorizeSpaceMembership(
+      env.SYNTILA_DB,
+      { userId, user },
+      spaceId,
+      threadAccessPermission(access),
+    );
+    const context: SecurityContext = {
+      userId,
+      user,
+      spaceRoles: { [spaceId]: role },
+      sessionId: "thread-request-queue",
+      clientType: "web",
+    };
+    return await threadAccessForContext(env, context, row, access);
+  } catch (error) {
+    if (error instanceof AuthorizationError)
+      throw new HttpError(403, `Thread ${access} access is required`);
+    throw error;
+  }
+}
+
+async function threadAccessForContext(
+  env: SecurityEnv,
+  context: SecurityContext,
+  row: Record<string, unknown>,
+  access: ThreadAccess,
+) {
   const membership = await env.SYNTILA_DB.prepare(
     `SELECT id, space_id AS spaceId, user_id AS userId, role,
             created_at AS createdAt, updated_at AS updatedAt
@@ -475,8 +542,11 @@ export async function validateWorkflowWorkerEligibility(
            ON history.worker_type_id = i.worker_type_id
           AND history.revision = i.profile_release_version
          LEFT JOIN worker_scheduling vs ON vs.worker_id = i.worker_id
+         -- Revoked and expired grants stay as history; only a live grant
+         -- (active or suspended) may answer, never an older revoked row.
          LEFT JOIN workspace_space_grants g
            ON g.workspace_id = i.workspace_id AND g.space_id = ?2
+          AND g.status IN ('active','suspended')
          LEFT JOIN thread_execution_policies ep ON ep.thread_id = ?3
          LEFT JOIN execution_workspaces ew ON ew.id = i.workspace_id
          LEFT JOIN workspace_runtime_identities wri ON wri.workspace_id = i.workspace_id AND wri.revoked_at IS NULL

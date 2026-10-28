@@ -166,9 +166,6 @@ export async function handleCreateWorkRequest(
       "Restore the Thread before sending messages or requests",
     );
   const body = (await request.json()) as Record<string, unknown>;
-  const executionSelection = parseWorkflowExecutionSelection(
-    body.executionSelection,
-  );
   const receipt = await MutationIdempotency.from(
     request,
     env.SYNTILA_DB,
@@ -176,7 +173,50 @@ export async function handleCreateWorkRequest(
     `thread:${threadId}:create-work-request`,
     body,
   );
-  const replay = await receipt?.replay();
+  return createWorkRequestForUser(env, {
+    userId: context.userId,
+    spaceId,
+    threadId,
+    body,
+    receipt,
+    replay: (await receipt?.replay()) ?? null,
+    submissionId: request.headers.get("Idempotency-Key"),
+    startedAt: handlerStartedAt,
+  });
+}
+
+/**
+ * Validates and accepts a Work request authored by [userId], whose access the
+ * caller has already checked. Used by the composer's HTTP request and by the
+ * Thread request queue, which sends a queued request as its author.
+ */
+export async function createWorkRequestForUser(
+  env: SecurityEnv,
+  {
+    userId,
+    spaceId,
+    threadId,
+    body,
+    receipt = null,
+    replay = null,
+    submissionId = null,
+    startedAt = performance.now(),
+  }: {
+    userId: string;
+    spaceId: string;
+    threadId: string;
+    body: Record<string, unknown>;
+    receipt?: MutationIdempotency | null;
+    replay?: Response | null;
+    submissionId?: string | null;
+    startedAt?: number;
+  },
+): Promise<Response> {
+  const handlerStartedAt = startedAt;
+  const context = { userId };
+  const executionSelection = parseWorkflowExecutionSelection(
+    body.executionSelection,
+  );
   const requestedMode =
     body.mode === "stateful"
       ? "stateful"
@@ -689,9 +729,7 @@ export async function handleCreateWorkRequest(
         workRequestId: workRequest.id,
         threadId,
         status: "queued",
-        ...(request.headers.get("Idempotency-Key")
-          ? { submissionId: request.headers.get("Idempotency-Key")! }
-          : {}),
+        ...(submissionId ? { submissionId } : {}),
       },
     });
   } catch (error) {

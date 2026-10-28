@@ -62,7 +62,27 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
         ensure: false,
         builder: (context, state) {
           final settings = state.data;
-          if (settings == null) return const SizedBox.shrink();
+          if (settings == null) {
+            if (state.error == null) return const SizedBox.shrink();
+            // A failed read never hides the setting: say so and let the
+            // person try again.
+            final theme = Theme.of(context);
+            return Row(
+                key: const ValueKey('space-workspace-error'),
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Workspace could not be loaded',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.error)),
+                  const SizedBox(width: 8),
+                  TextButton(
+                      onPressed: () => unawaited(widget.configurations.engine
+                          .refresh(widget.configurations.workspaceQuery)
+                          .then<void>((_) {},
+                              onError: (Object _, StackTrace __) {})),
+                      child: const Text('Retry')),
+                ]);
+          }
           final name = settings.workspaces
               .where((workspace) => workspace.id == settings.workspaceId)
               .firstOrNull

@@ -14,7 +14,8 @@ extension _AxAppViews on _AxAppStateMixin {
   }
 
   Widget _homeView() => AxDeferredListenableBuilder(
-      listenable: store.homeChanges,
+      listenable:
+          Listenable.merge([store.homeChanges, store.workspaceInvitations]),
       builder: (context, _) => _HomeThreadCollection(
           spaces: store.spaces.items,
           spaceThreads: store.spaceThreads,
@@ -116,6 +117,11 @@ extension _AxAppViews on _AxAppStateMixin {
                     isOffline: store.lifecycle.isOffline,
                     onAcceptInvitation: _acceptInvitation,
                     onDeclineInvitation: _declineInvitation,
+                    workspaceInvitations: store.workspaceInvitations.value,
+                    onAcceptWorkspaceInvitation: (invite) =>
+                        unawaited(_acceptWorkspaceInvitation(invite)),
+                    onDeclineWorkspaceInvitation: (invite) =>
+                        unawaited(_declineWorkspaceInvitation(invite)),
                     run: executionSnapshot.run,
                     openFindingCount: executionSnapshot.findings
                         .where(
@@ -378,6 +384,26 @@ extension _AxAppViews on _AxAppStateMixin {
                     sharingSource:
                         widget.dataSource is AxWorkspaceSharingDataSource
                             ? widget.dataSource as AxWorkspaceSharingDataSource
+                            : null,
+                    onLeaveShared:
+                        widget.dataSource is AxWorkspaceSharingDataSource
+                            ? (workspace) async {
+                                try {
+                                  await (widget.dataSource
+                                          as AxWorkspaceSharingDataSource)
+                                      .revokePersonGrant(workspace.id, 'me');
+                                  await Future.wait([
+                                    store.workspaces.list(),
+                                    store.catalogs.refreshWorkers(),
+                                  ]);
+                                  if (mounted) {
+                                    _showSnackBar(
+                                        'Access to ${workspace.name} revoked.');
+                                  }
+                                } catch (error) {
+                                  if (mounted) _showSnackBar(error.toString());
+                                }
+                              }
                             : null,
                     onRevoke: (workspace) async {
                       try {

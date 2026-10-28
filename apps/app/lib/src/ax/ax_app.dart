@@ -21,6 +21,7 @@ import '../features/common/toast_overlay.dart';
 import '../features/common/diff_viewer.dart';
 import '../features/execution/task_pipeline_dag.dart';
 import '../features/home/home_page.dart';
+import '../features/invitations/invitation_card.dart';
 import '../features/navigation/ax_shell_context.dart';
 import '../features/navigation/ax_sidebar.dart';
 import '../features/navigation/resizable_sidebar.dart';

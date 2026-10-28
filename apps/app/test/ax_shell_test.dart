@@ -226,7 +226,7 @@ void main() {
             SyntilaColors.navigationBackground(dark));
         expect(anchor.style?.surfaceTintColor?.resolve({}), Colors.transparent);
       }
-      await tester.tap(find.byTooltip('Spaces and Threads'));
+      await tester.tap(find.byTooltip('Your spaces'));
       await tester.pumpAndSettle();
       final spaceColor =
           tester.widget<Text>(find.text('Menu Space')).style?.color;
@@ -1764,7 +1764,7 @@ void main() {
       expect(find.byTooltip('Search...'), findsOneWidget);
       expect(find.byTooltip('Add Space'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
-      expect(find.byTooltip('Spaces and Threads'), findsOneWidget);
+      expect(find.byTooltip('Your spaces'), findsOneWidget);
       expect(find.byType(CircleAvatar), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
 
@@ -1799,7 +1799,7 @@ void main() {
       expect(notificationsOpened, isTrue);
 
       // Tapping Spaces & Threads popup menu
-      await tester.tap(find.byTooltip('Spaces and Threads'));
+      await tester.tap(find.byTooltip('Your spaces'));
       await tester.pumpAndSettle();
       expect(find.byType(SyntilaFolderIcon), findsAtLeastNWidgets(1));
       expect(find.text(testSpace.name), findsOneWidget);
@@ -2960,8 +2960,7 @@ void main() {
       // Established Home is visible
       expect(find.text('Home'), findsOneWidget);
       expect(find.text('For you'), findsOneWidget);
-      expect(find.text('Vitalii Noha invited you to Joined AX Core'),
-          findsOneWidget);
+      expect(find.text('Joined AX Core'), findsOneWidget);
       expect(find.text('Pending invitations (1)'), findsOneWidget);
 
       // Tap Accept on Home invitation

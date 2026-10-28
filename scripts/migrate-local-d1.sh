@@ -12,6 +12,16 @@ fi
 
 cd "$repo_root"
 
+# The Syntila rename renamed the baseline migration. Local databases created
+# before it record the old name, so wrangler would re-run the baseline and fail
+# with "table users already exists". Rename the record; the schema is the same.
+if [[ -d apps/cloud/.wrangler/state/v3/d1 ]]; then
+  pnpm exec wrangler d1 execute "$database_name" \
+    --local --config "$wrangler_config" \
+    --command "UPDATE d1_migrations SET name = '0001_syntila_v8.sql' WHERE name = '0001_conclave_v8.sql' AND NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name = '0001_syntila_v8.sql');" \
+    > /dev/null 2>&1 || true
+fi
+
 echo "Inspecting local D1 schema before migration: $database_name"
 prepared_dir="$(mktemp -d "${TMPDIR:-/tmp}/syntila-local-d1-migration.XXXXXX")"
 trap 'rm -rf "$prepared_dir"' EXIT

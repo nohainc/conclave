@@ -588,109 +588,127 @@ class AppIconRail extends StatelessWidget {
 
           // Space & Thread Switcher MenuAnchor using matching popup style
           shellContext.watchSpacesAndThreads(() {
-            final pins = shellContext.spaces
-                .where((space) => space.isPinned)
-                .toList()
-              ..sort(compareAxPins);
-            final spaces = [
-              ...pins,
-              ...shellContext.ownedSpaces.where((space) => !space.isPinned),
-              ...shellContext.sharedSpaces.where((space) => !space.isPinned),
-            ];
-            if (spaces.isEmpty) return const SizedBox.shrink();
-            return MenuAnchor(
-              style: menuStyle,
-              builder: (context, controller, child) {
-                return _railIconButton(
-                  isDark: isDark,
-                  icon: Icons.folder_outlined,
-                  iconWidget: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(Icons.folder_outlined,
-                          size: 20,
-                          color: SyntilaColors.navigationTextMuted(isDark)),
-                      Positioned(
-                        right: -5,
-                        top: -5,
-                        child: SidebarActivityIndicators(
-                          key: const ValueKey('rail-activity-spaces'),
-                          running: spaces.any(_running),
-                          unread: spaces.any(_unread),
-                          gap: 2,
-                        ),
+            // Own and shared Spaces get separate rail icons, each listing its
+            // pinned Spaces first, mirroring the expanded sidebar's groups.
+            List<AxSpace> group(List<AxSpace> spaces) => [
+                  ...spaces.where((space) => space.isPinned).toList()
+                    ..sort(compareAxPins),
+                  ...spaces.where((space) => !space.isPinned),
+                ];
+            final owned = group(shellContext.ownedSpaces);
+            final shared = group(shellContext.sharedSpaces);
+            Widget spaceMenu(List<AxSpace> spaces,
+                    {required IconData icon,
+                    required String tooltip,
+                    required String key}) =>
+                MenuAnchor(
+                  style: menuStyle,
+                  builder: (context, controller, child) {
+                    return _railIconButton(
+                      isDark: isDark,
+                      icon: icon,
+                      iconWidget: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(icon,
+                              size: 20,
+                              color: SyntilaColors.navigationTextMuted(isDark)),
+                          Positioned(
+                            right: -5,
+                            top: -5,
+                            child: SidebarActivityIndicators(
+                              key: ValueKey(key),
+                              running: spaces.any(_running),
+                              unread: spaces.any(_unread),
+                              gap: 2,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  tooltip: 'Spaces and Threads',
-                  onPressed: () {
-                    if (controller.isOpen) {
-                      controller.close();
-                    } else {
-                      controller.open();
-                    }
+                      tooltip: tooltip,
+                      onPressed: () {
+                        if (controller.isOpen) {
+                          controller.close();
+                        } else {
+                          controller.open();
+                        }
+                      },
+                    );
                   },
-                );
-              },
-              menuChildren: [
-                for (final space in spaces) ...[
-                  MenuItemButton(
-                    style: itemStyle(),
-                    trailingIcon: SidebarActivityIndicators(
-                      key: ValueKey('rail-space-activity-${space.id}'),
-                      running: _running(space),
-                      unread: _unread(space),
-                    ),
-                    leadingIcon: SyntilaFolderIcon(
-                      isExpanded: true,
-                      size: 16,
-                      color: SyntilaColors.navigationTextMuted(isDark),
-                    ),
-                    onPressed: () => onNavigateTo(AxNavigation.space(space.id)),
-                    child: Text(
-                      space.name,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: shellContext
-                                .isNavActive(AxNavigation.space(space.id))
-                            ? FontWeight.bold
-                            : FontWeight.w600,
-                        color: SyntilaColors.navigationTextMuted(isDark),
-                      ),
-                    ),
-                  ),
-                  for (final thread in applyAxThreadPins(
-                          sortAxThreadsByLastUpdate(_threads(space)))
-                      .where((thread) =>
-                          !thread.archived &&
-                          thread.status.toLowerCase() != 'archived'))
-                    MenuItemButton(
-                      style: itemStyle(),
-                      trailingIcon: SidebarActivityIndicators(
-                        key: ValueKey('rail-thread-activity-${thread.id}'),
-                        running: thread.hasActiveWork,
-                        unread: thread.hasUnread,
-                      ),
-                      onPressed: () => onNavigateTo(
-                          AxNavigation.thread(space.id, thread.id)),
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 24),
+                  menuChildren: [
+                    for (final space in spaces) ...[
+                      MenuItemButton(
+                        style: itemStyle(),
+                        trailingIcon: SidebarActivityIndicators(
+                          key: ValueKey('rail-space-activity-${space.id}'),
+                          running: _running(space),
+                          unread: _unread(space),
+                        ),
+                        leadingIcon: SyntilaFolderIcon(
+                          isExpanded: true,
+                          size: 16,
+                          color: SyntilaColors.navigationTextMuted(isDark),
+                        ),
+                        onPressed: () =>
+                            onNavigateTo(AxNavigation.space(space.id)),
                         child: Text(
-                          thread.title,
+                          space.name,
                           style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: shellContext.isNavActive(
-                                    AxNavigation.thread(space.id, thread.id))
+                            fontSize: 13,
+                            fontWeight: shellContext
+                                    .isNavActive(AxNavigation.space(space.id))
                                 ? FontWeight.bold
-                                : FontWeight.normal,
+                                : FontWeight.w600,
                             color: SyntilaColors.navigationTextMuted(isDark),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ],
-            );
+                      for (final thread in applyAxThreadPins(
+                              sortAxThreadsByLastUpdate(_threads(space)))
+                          .where((thread) =>
+                              !thread.archived &&
+                              thread.status.toLowerCase() != 'archived'))
+                        MenuItemButton(
+                          style: itemStyle(),
+                          trailingIcon: SidebarActivityIndicators(
+                            key: ValueKey('rail-thread-activity-${thread.id}'),
+                            running: thread.hasActiveWork,
+                            unread: thread.hasUnread,
+                          ),
+                          onPressed: () => onNavigateTo(
+                              AxNavigation.thread(space.id, thread.id)),
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 24),
+                            child: Text(
+                              thread.title,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: shellContext.isNavActive(
+                                        AxNavigation.thread(
+                                            space.id, thread.id))
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color:
+                                    SyntilaColors.navigationTextMuted(isDark),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ],
+                );
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              if (owned.isNotEmpty)
+                spaceMenu(owned,
+                    icon: Icons.folder_outlined,
+                    tooltip: 'Your spaces',
+                    key: 'rail-activity-spaces'),
+              if (shared.isNotEmpty)
+                spaceMenu(shared,
+                    icon: Icons.folder_shared_outlined,
+                    tooltip: 'Shared with you',
+                    key: 'rail-activity-shared-spaces'),
+            ]);
           }),
 
           const Spacer(),

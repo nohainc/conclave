@@ -139,7 +139,7 @@ void main() {
       expect(find.text('Vitalii’s MacBook Pro'), findsWidgets);
       expect(find.text('macOS'), findsOneWidget);
       expect(find.textContaining('Apple Silicon'), findsNothing);
-      expect(find.text('Online'), findsOneWidget);
+      expect(find.byTooltip('Online'), findsOneWidget);
       expect(find.text('Connected · HTTPS fallback'), findsNothing);
       expect(find.text('1.4.2'), findsNothing);
       expect(find.text('dart · Up to 2 concurrent Workers'), findsNothing);
@@ -581,7 +581,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Not connected'), findsOneWidget);
+      expect(find.byTooltip('Not connected'), findsOneWidget);
       expect(find.text('Connect Machine'), findsNothing);
       expect(connectedWorkspace, isNull);
     });

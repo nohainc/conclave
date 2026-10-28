@@ -177,6 +177,8 @@ class _WorkComposer extends StatelessWidget {
     required this.onCancelRun,
     required this.onWorkflowChanged,
     required this.onRun,
+    this.selectionMissing = false,
+    this.onSelectionMissing,
     this.onHistoryNavigate,
     this.historyPrompts,
     this.historyOpenDirection = 1,
@@ -241,6 +243,11 @@ class _WorkComposer extends StatelessWidget {
   final ValueChanged<String> onWorkflowChanged;
 
   final Future<void> Function() onRun;
+
+  /// A send was blocked because the Worker, model or effort is not chosen;
+  /// the selector is outlined in red until the choice is complete.
+  final bool selectionMissing;
+  final ValueChanged<String>? onSelectionMissing;
   final bool Function(int direction)? onHistoryNavigate;
 
   /// Newest-first prompts shown in the history panel; null when closed.
@@ -404,8 +411,14 @@ class _WorkComposer extends StatelessWidget {
           issueReportError: issueReportErrors[request.id],
           onRetryStep:
               localWorkProgress.containsKey(request.id) ? null : onRetryStep,
-          onCancelRun:
-              localWorkProgress.containsKey(request.id) ? null : onCancelRun,
+          // Members cancel only their own requests.
+          onCancelRun: localWorkProgress.containsKey(request.id) ||
+                  (currentUserId != null &&
+                      request.requestedByUserId != null &&
+                      request.requestedByUserId!.isNotEmpty &&
+                      request.requestedByUserId != currentUserId)
+              ? null
+              : onCancelRun,
           onReply: localWorkProgress.containsKey(request.id) ||
                   request.id.startsWith('local-')
               ? null
@@ -440,6 +453,53 @@ class _WorkComposer extends StatelessWidget {
           : _stepBinding()['workerId'])
       ?.toString()
       .trim();
+
+  /// What still has to be chosen before a message can be sent: the Worker,
+  /// then a model when the Worker offers models, then an effort when the
+  /// chosen model offers efforts. Empty when the selection is complete.
+  List<String> _missingSelection() {
+    final workerId = _selectedWorkerId() ?? '';
+    // With no Worker to choose from, sending reports the Space setup problem
+    // from Cloud instead of asking for an impossible choice.
+    if (workerId.isEmpty) {
+      return eligibleWorkers.isEmpty && spaceWorkers.isEmpty
+          ? const []
+          : const ['Worker', 'model', 'effort'];
+    }
+    final binding = _stepBinding();
+    String chosen(String key) =>
+        (executionSelection.containsKey(key)
+                ? executionSelection[key]
+                : binding[key])
+            ?.toString()
+            .trim() ??
+        '';
+    final model = chosen('model');
+    final effort = chosen('reasoningEffort');
+    final options = [...eligibleWorkers, ...spaceWorkers]
+        .where((worker) => worker.id == workerId)
+        .firstOrNull
+        ?.executionOptions;
+    if (options == null) return const [];
+    final missing = <String>[];
+    if (options.models.isNotEmpty && model.isEmpty) missing.add('model');
+    final efforts = options.models
+            .where((option) => option.id == model)
+            .firstOrNull
+            ?.effort ??
+        options.effort;
+    if (efforts.supported && efforts.values.isNotEmpty && effort.isEmpty) {
+      missing.add('effort');
+    }
+    return missing;
+  }
+
+  static String _missingSelectionMessage(List<String> missing) {
+    final names = missing.length == 1
+        ? missing.single
+        : '${missing.sublist(0, missing.length - 1).join(', ')} and ${missing.last}';
+    return 'Select a $names before sending.';
+  }
 
   // Below this width (the space left for the controls beside the + and send
   // buttons, not the whole input) the Chat / Work / More rail plus the Worker
@@ -709,82 +769,93 @@ class _WorkComposer extends StatelessWidget {
               ]),
             ),
           ),
-          ModelEffortSelector(
-            scope: 'work-composer',
-            immediatePopup: true,
-            workerIconBuilder: (capability) {
-              final worker = eligibleWorkers
-                  .where((w) => w.id == capability.id)
-                  .firstOrNull;
-              final asset = WorkerPresentation.resolve(
-                      worker?.workerTypeId, capability.name)
-                  .iconAssetForBrightness(Theme.of(context).brightness);
-              return asset == null
-                  ? const Icon(Icons.smart_toy_outlined, size: 22)
-                  : Image.asset(asset, width: 22, height: 22);
-            },
-            modelIconBuilder: (capability, modelId, modelName) {
-              final worker = eligibleWorkers
-                  .where((w) => w.id == capability?.id)
-                  .firstOrNull;
-              final presentation = ModelPresentation.resolve(
-                modelId: modelId,
-                modelDisplayName: modelName,
-                fallbackWorkerTypeId: worker?.workerTypeId,
-                fallbackWorkerDisplayName: capability?.name,
-              );
-              final asset = presentation
-                  .iconAssetForBrightness(Theme.of(context).brightness);
-              return asset == null
-                  ? const Icon(Icons.smart_toy_outlined, size: 22)
-                  : Image.asset(asset, width: 22, height: 22);
-            },
-            compactModelLabelBuilder: (modelId, modelName) {
-              return ModelPresentation.stripIdentity(modelName ?? modelId);
-            },
-            helperMessage: eligibleWorkers
-                        .where((worker) => worker.id == selectedWorkerId)
-                        .firstOrNull
-                        ?.executionOptions
-                        ?.modelSwitchSupported ==
-                    false
-                ? 'Changing the model starts a new session with the conversation context. Effort changes that select another model follow the same rule.'
-                : null,
-            onShowUsage: usageController?.supported ?? false
-                ? () => _runComposerCommand(_usageCommand)
-                : null,
-            compact: true,
-            compactHeight: composerButtonSize,
-            compactIconSize: composerIconSize,
-            showWorkerInCompactSummary: false,
-            showWorker: true,
-            showModel: true,
-            showEffort: true,
-            showCatalog: false,
-            allowWorkerChange: policy.userSelectsWorker,
-            allowModelChange: policy.userSelectsModel,
-            allowEffortChange: policy.userSelectsEffort,
-            catalog: AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
-            value: ExecutionSelection(
-                worker: selectedWorkerId,
-                catalogRevision: (executionSelection['catalogRevision'] ??
-                    binding['catalogRevision']) as String?,
-                model: selectedModel.isEmpty ? null : selectedModel,
-                effort: selectedReasoningEffort.isEmpty
-                    ? null
-                    : selectedReasoningEffort),
-            readOnly: !canExecute ||
-                submitting ||
-                !(policy.userSelectsWorker ||
-                    policy.userSelectsModel ||
-                    policy.userSelectsEffort),
-            onChanged: (value) => onExecutionSelectionChanged({
-              'workerId': value.worker,
-              'model': value.model,
-              'reasoningEffort': value.effort,
-              if (value.catalogRevision != null)
-                'catalogRevision': value.catalogRevision,
-            }),
+          DecoratedBox(
+            key: const ValueKey('work-composer-selection'),
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.all(Radius.circular(6)),
+              border: Border.all(
+                  color: selectionMissing && _missingSelection().isNotEmpty
+                      ? colors.error
+                      : Colors.transparent),
+            ),
+            child: ModelEffortSelector(
+              scope: 'work-composer',
+              immediatePopup: true,
+              workerIconBuilder: (capability) {
+                final worker = eligibleWorkers
+                    .where((w) => w.id == capability.id)
+                    .firstOrNull;
+                final asset = WorkerPresentation.resolve(
+                        worker?.workerTypeId, capability.name)
+                    .iconAssetForBrightness(Theme.of(context).brightness);
+                return asset == null
+                    ? const Icon(Icons.smart_toy_outlined, size: 22)
+                    : Image.asset(asset, width: 22, height: 22);
+              },
+              modelIconBuilder: (capability, modelId, modelName) {
+                final worker = eligibleWorkers
+                    .where((w) => w.id == capability?.id)
+                    .firstOrNull;
+                final presentation = ModelPresentation.resolve(
+                  modelId: modelId,
+                  modelDisplayName: modelName,
+                  fallbackWorkerTypeId: worker?.workerTypeId,
+                  fallbackWorkerDisplayName: capability?.name,
+                );
+                final asset = presentation
+                    .iconAssetForBrightness(Theme.of(context).brightness);
+                return asset == null
+                    ? const Icon(Icons.smart_toy_outlined, size: 22)
+                    : Image.asset(asset, width: 22, height: 22);
+              },
+              compactModelLabelBuilder: (modelId, modelName) {
+                return ModelPresentation.stripIdentity(modelName ?? modelId);
+              },
+              helperMessage: eligibleWorkers
+                          .where((worker) => worker.id == selectedWorkerId)
+                          .firstOrNull
+                          ?.executionOptions
+                          ?.modelSwitchSupported ==
+                      false
+                  ? 'Changing the model starts a new session with the conversation context. Effort changes that select another model follow the same rule.'
+                  : null,
+              onShowUsage: usageController?.supported ?? false
+                  ? () => _runComposerCommand(_usageCommand)
+                  : null,
+              compact: true,
+              compactHeight: composerButtonSize,
+              compactIconSize: composerIconSize,
+              showWorkerInCompactSummary: false,
+              showWorker: true,
+              showModel: true,
+              showEffort: true,
+              showCatalog: false,
+              allowWorkerChange: policy.userSelectsWorker,
+              allowModelChange: policy.userSelectsModel,
+              allowEffortChange: policy.userSelectsEffort,
+              catalog:
+                  AxWorkflowSelectionOptions(eligibleWorkers).sharedCatalog,
+              value: ExecutionSelection(
+                  worker: selectedWorkerId,
+                  catalogRevision: (executionSelection['catalogRevision'] ??
+                      binding['catalogRevision']) as String?,
+                  model: selectedModel.isEmpty ? null : selectedModel,
+                  effort: selectedReasoningEffort.isEmpty
+                      ? null
+                      : selectedReasoningEffort),
+              readOnly: !canExecute ||
+                  submitting ||
+                  !(policy.userSelectsWorker ||
+                      policy.userSelectsModel ||
+                      policy.userSelectsEffort),
+              onChanged: (value) => onExecutionSelectionChanged({
+                'workerId': value.worker,
+                'model': value.model,
+                'reasoningEffort': value.effort,
+                if (value.catalogRevision != null)
+                  'catalogRevision': value.catalogRevision,
+              }),
+            ),
           ),
         ],
       ),
@@ -903,6 +974,11 @@ class _WorkComposer extends StatelessWidget {
             onHistoryNavigate: onHistoryNavigate,
             onSend: () {
               if (_tryRunSlashCommand()) return;
+              final missing = _missingSelection();
+              if (missing.isNotEmpty) {
+                onSelectionMissing?.call(_missingSelectionMessage(missing));
+                return;
+              }
               onRun();
             },
             sendTooltip: 'Send request',
@@ -3103,7 +3179,31 @@ class _QueuedWorkMessage {
     required this.executionSelection,
     required this.workflow,
     this.replyTo,
+    this.id,
+    this.authorName = '',
+    this.own = true,
   });
+
+  /// A request in the Thread's shared queue, which only its author changes.
+  factory _QueuedWorkMessage.fromQueueItem(AxThreadQueueItem item,
+          {required bool own}) =>
+      _QueuedWorkMessage(
+        id: item.id,
+        text: item.text,
+        attachments: item.attachments,
+        executionSelection: item.executionSelection,
+        workflow: '${item.workflowId}:v${item.workflowVersion}',
+        replyTo: item.replyTo,
+        authorName: item.authorName,
+        own: own,
+      );
+
+  /// The shared queue item; null for a message in the local queue.
+  final String? id;
+  final String authorName;
+
+  /// Whether the viewer queued it and so may edit, remove or send it now.
+  final bool own;
 
   final AxReplyReference? replyTo;
   final String text;
@@ -3210,12 +3310,16 @@ class _QueuedMessagesPanel extends StatelessWidget {
                 itemCount: messages.length,
                 itemBuilder: (context, index) {
                   final message = messages[index];
-                  final text = message.text.trim().isEmpty
+                  final body = message.text.trim().isEmpty
                       ? '${message.attachments.length} attachment(s)'
                       : message.text.trim();
+                  // Other members' requests are shown, never changed.
+                  final text = message.own || message.authorName.isEmpty
+                      ? body
+                      : '${message.authorName}: $body';
                   return InkWell(
                     key: ValueKey('work-queue-item-$index'),
-                    onTap: () => onEdit(message),
+                    onTap: message.own ? () => onEdit(message) : null,
                     child: Padding(
                       padding: const EdgeInsets.only(left: 12, right: 4),
                       child: Row(children: [
@@ -3227,30 +3331,32 @@ class _QueuedMessagesPanel extends StatelessWidget {
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
-                        IconButton(
-                          tooltip: 'Edit',
-                          iconSize: 16,
-                          constraints: iconConstraints,
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.edit_outlined),
-                          onPressed: () => onEdit(message),
-                        ),
-                        IconButton(
-                          tooltip: 'Send now',
-                          iconSize: 16,
-                          constraints: iconConstraints,
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.arrow_upward_rounded),
-                          onPressed: () => onSendNow(message),
-                        ),
-                        IconButton(
-                          tooltip: 'Remove from queue',
-                          iconSize: 16,
-                          constraints: iconConstraints,
-                          padding: EdgeInsets.zero,
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () => onRemove(message),
-                        ),
+                        if (message.own) ...[
+                          IconButton(
+                            tooltip: 'Edit',
+                            iconSize: 16,
+                            constraints: iconConstraints,
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: () => onEdit(message),
+                          ),
+                          IconButton(
+                            tooltip: 'Send now',
+                            iconSize: 16,
+                            constraints: iconConstraints,
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.arrow_upward_rounded),
+                            onPressed: () => onSendNow(message),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove from queue',
+                            iconSize: 16,
+                            constraints: iconConstraints,
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => onRemove(message),
+                          ),
+                        ],
                       ]),
                     ),
                   );

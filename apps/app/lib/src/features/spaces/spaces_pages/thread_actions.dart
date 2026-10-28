@@ -56,6 +56,10 @@ extension _ThreadActions on _ThreadPageState {
     // While a request is processing, or earlier messages are still waiting,
     // the message waits its turn; [_dispatchQueuedWork] sends it later.
     if (_activeWorkRequests.isNotEmpty || _workQueue.isNotEmpty) {
+      if (_sharedQueueSource != null) {
+        await _enqueueSharedWork(message);
+        return;
+      }
       _updateState(() {
         // A pause belongs to the messages it held; the first message of a
         // new queue always starts unpaused.
@@ -76,12 +80,79 @@ extension _ThreadActions on _ThreadPageState {
       .toList(growable: false);
 
   /// Messages waiting for this Thread's active request to finish.
-  List<_QueuedWorkMessage> get _workQueue =>
-      _ThreadPageState._queuedWorkByThread.putIfAbsent(_workQueueKey, () => []);
+  List<_QueuedWorkMessage> get _workQueue => _sharedQueueSource != null
+      ? [
+          for (final item in _sharedQueue.items)
+            _QueuedWorkMessage.fromQueueItem(item,
+                own: item.authorUserId == widget.currentUserId)
+        ]
+      : _ThreadPageState._queuedWorkByThread
+          .putIfAbsent(_workQueueKey, () => []);
+
+  /// Reloads the shared queue; a newer load or another Thread wins.
+  void _loadSharedQueue() {
+    final source = _sharedQueueSource;
+    if (source == null) return;
+    unawaited(_applySharedQueue(() => source.loadThreadQueue(widget.thread.id),
+        reportErrors: false));
+  }
+
+  /// Runs a shared-queue change and shows the queue it returns. Failures are
+  /// shown beside the composer and leave the last known queue in place.
+  Future<bool> _applySharedQueue(Future<AxThreadQueue> Function() change,
+      {bool reportErrors = true}) async {
+    final generation = ++_sharedQueueGeneration;
+    final threadId = widget.thread.id;
+    try {
+      final queue = await change();
+      if (!mounted ||
+          widget.thread.id != threadId ||
+          generation != _sharedQueueGeneration) {
+        return true;
+      }
+      _updateState(() => _sharedQueue = queue);
+      return true;
+    } catch (error) {
+      if (reportErrors && mounted && widget.thread.id == threadId) {
+        _updateState(() => _workSubmitError =
+            error is AxApiException ? error.message : error.toString());
+      }
+      return false;
+    }
+  }
+
+  /// Adds a message to the shared queue; on failure it returns to the
+  /// composer so nothing is lost.
+  Future<void> _enqueueSharedWork(_QueuedWorkMessage message) async {
+    final source = _sharedQueueSource!;
+    final added = await _applySharedQueue(() => source.enqueueThreadRequest(
+          threadId: widget.thread.id,
+          workflowId: message.workflow.split(':').first,
+          workflowVersion: int.tryParse(message.workflow.split(':v').last) ?? 1,
+          prompt: message.text,
+          attachments: message.attachments,
+          executionSelection: message.executionSelection,
+          replyTo: message.replyTo,
+        ));
+    if (added || !mounted) return;
+    _updateState(() {
+      if (_requestController.text.isEmpty) {
+        _requestController.text = message.text;
+      }
+      if (_workAttachments.isEmpty) _workAttachments = message.attachments;
+      _replyTarget ??= message.replyTo;
+    });
+  }
 
   /// Pauses or resumes sending queued messages. Resuming sends the next one
   /// as soon as nothing is processing.
   void _setWorkQueuePaused(bool paused) {
+    final shared = _sharedQueueSource;
+    if (shared != null) {
+      unawaited(_applySharedQueue(
+          () => shared.setThreadQueuePaused(widget.thread.id, paused)));
+      return;
+    }
     _updateState(() => _workQueuePause = paused ? _WorkQueuePause.user : null);
     if (!paused) _dispatchQueuedWork();
   }
@@ -89,7 +160,9 @@ extension _ThreadActions on _ThreadPageState {
   /// Sends the next queued message once nothing is processing. A failed send
   /// or a failed request pauses the queue until the user resumes it.
   void _dispatchQueuedWork() {
+    // Cloud sends the shared queue itself.
     if (widget.isDraft ||
+        _sharedQueueSource != null ||
         _dispatchingQueuedWork ||
         _workQueuePause != null ||
         _submittingWork ||
@@ -119,6 +192,7 @@ extension _ThreadActions on _ThreadPageState {
 
   /// Cancels the processing request(s) and sends the queued message now.
   Future<void> _sendQueuedWorkNow(_QueuedWorkMessage message) async {
+    if (_sharedQueueSource != null) return _sendSharedWorkNow(message);
     final active = _activeWorkRequests;
     if (active.isNotEmpty) {
       final confirmed = await showDialog<bool>(
@@ -174,12 +248,69 @@ extension _ThreadActions on _ThreadPageState {
     _jumpToLatest(_chatHistoryController);
   }
 
-  void _removeQueuedWork(_QueuedWorkMessage message) =>
-      _updateState(() => _workQueue.remove(message));
+  /// Moves your own shared request first. Your processing requests can be
+  /// cancelled for it; other members' requests always finish first.
+  Future<void> _sendSharedWorkNow(_QueuedWorkMessage message) async {
+    final source = _sharedQueueSource!;
+    final id = message.id;
+    if (id == null || !message.own) return;
+    final viewerId = widget.currentUserId;
+    final active = _activeWorkRequests;
+    final mine =
+        active.where((request) => request.requestedByUserId == viewerId);
+    final others = active.length - mine.length;
+    if (mine.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          constraints: SyntilaDialogStyle.small,
+          title: const Text('Cancel your previous request?'),
+          content: Text(others == 0
+              ? 'Your request is still processing. Cancel it and send this request instead?'
+              : 'Your request is still processing. Cancel it? Requests from other members finish first, then this request is sent.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Keep processing'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Cancel and send'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      for (final request in mine) {
+        final cancelled =
+            await _cancelWorkRequest(request.id, showFeedback: false);
+        if (!cancelled || !mounted) return;
+      }
+    }
+    await _applySharedQueue(
+        () => source.sendThreadQueueItemNow(widget.thread.id, id));
+    if (mounted) _followLatestWork();
+  }
+
+  void _removeQueuedWork(_QueuedWorkMessage message) {
+    final shared = _sharedQueueSource;
+    if (shared != null) {
+      final id = message.id;
+      if (id == null || !message.own) return;
+      unawaited(_applySharedQueue(
+          () => shared.removeThreadQueueItem(widget.thread.id, id)));
+      return;
+    }
+    _updateState(() => _workQueue.remove(message));
+  }
 
   /// Moves a queued message into the composer for editing. A draft already in
   /// the composer takes its place in the queue, so nothing is lost.
   void _editQueuedWork(_QueuedWorkMessage message) {
+    if (_sharedQueueSource != null) {
+      _editSharedWork(message);
+      return;
+    }
     final index = _workQueue.indexOf(message);
     if (index < 0) return;
     final draft = _requestController.text;
@@ -197,6 +328,40 @@ extension _ThreadActions on _ThreadPageState {
       } else {
         _workQueue.removeAt(index);
       }
+      _workAttachments = List.of(message.attachments);
+      _replyTarget = message.replyTo;
+    });
+    _requestController.value = TextEditingValue(
+      text: message.text,
+      selection: TextSelection.collapsed(offset: message.text.length),
+    );
+  }
+
+  /// Your own shared request moves into the composer. A draft already there
+  /// takes its place in the queue, so nothing is lost.
+  void _editSharedWork(_QueuedWorkMessage message) {
+    final source = _sharedQueueSource!;
+    final id = message.id;
+    if (id == null || !message.own) return;
+    final threadId = widget.thread.id;
+    final draft = _requestController.text;
+    final draftAttachments = _workAttachments;
+    unawaited(_applySharedQueue(
+        () => draft.trim().isNotEmpty || draftAttachments.isNotEmpty
+            ? source.updateThreadQueueItem(
+                threadId: threadId,
+                itemId: id,
+                workflowId: _effectiveWorkflow.split(':').first,
+                workflowVersion:
+                    int.tryParse(_effectiveWorkflow.split(':v').last) ?? 1,
+                prompt: draft,
+                attachments: draftAttachments,
+                executionSelection:
+                    Map<String, dynamic>.from(_workExecutionSelection),
+                replyTo: _replyTarget,
+              )
+            : source.removeThreadQueueItem(threadId, id)));
+    _updateState(() {
       _workAttachments = List.of(message.attachments);
       _replyTarget = message.replyTo;
     });
@@ -817,7 +982,8 @@ extension on _ThreadPageState {
 
   /// Hands [page]'s queue to the background sender as the page stops owning it.
   void _releaseWorkQueue(ThreadPage page) {
-    if (page.isDraft) return;
+    // Cloud keeps sending a shared queue; only a local queue needs a sender.
+    if (page.isDraft || page.dataSource is AxThreadQueueDataSource) return;
     _BackgroundWorkQueue.release(_queueKeyFor(page),
         threadId: page.thread.id,
         cache: page.workHistoryCache ?? _fallbackWorkHistoryCache,

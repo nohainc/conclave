@@ -53,6 +53,11 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
           ?.invitableSpaces
           .where((space) => space.id == _spaceId)
           .firstOrNull;
+
+  /// A background refresh (for example after a previous invitation) must not
+  /// lock the list; only a failed or still-empty load does.
+  bool _peopleUnavailable(AxQueryState<List<AxPerson>> state) =>
+      state.error != null || (state.isFetching && state.data == null);
   bool _pending(AxSpaceInvitation invitation) =>
       invitation.status == 'pending' &&
       (DateTime.tryParse(invitation.expiresAt)?.isAfter(DateTime.now()) ??
@@ -82,9 +87,7 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
     final people = state.data ?? const <AxPerson>[];
     final space = _space(people);
     if (space == null || _sending) return;
-    if (_selected.isNotEmpty && (state.error != null || state.isFetching)) {
-      return;
-    }
+    if (_selected.isNotEmpty && _peopleUnavailable(state)) return;
     final email = _email.trim().toLowerCase();
     if (_selected.isEmpty) {
       if (!email.contains('@') || email.contains(' ')) {
@@ -259,8 +262,7 @@ class _SpaceInvitationDialogState extends State<SpaceInvitationDialog> {
                         value: _selected.contains(person.userId),
                         onChanged: !_sending &&
                                 _email.trim().isEmpty &&
-                                state.error == null &&
-                                !state.isFetching &&
+                                !_peopleUnavailable(state) &&
                                 space != null &&
                                 _status(person, space, members, invitations) ==
                                     'Available to invite'

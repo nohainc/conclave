@@ -8,11 +8,13 @@ import { handleWorkspaceMemberAccess } from "./workspace-member-access.js";
 import { handlePeopleWithAccess } from "./workspace-people-with-access.js";
 import {
   handleAcceptWorkspaceInvitation,
+  handleDeclineWorkspaceInvitation,
   handleMyWorkspaceInvitations,
   handlePersonGrantQuota,
   handleRevokePersonGrant,
   handleWorkspaceInvitations,
 } from "./workspace-invitations.js";
+import { handleThreadRequestQueue } from "./thread-request-queue.js";
 import { conditionalJson } from "./conditional-read.js";
 import { BUILTIN_WORKFLOW_CATALOG, workflowCatalogEntry } from "@syntila/core";
 
@@ -364,6 +366,16 @@ export async function routeWorkerRequest(
         request,
         env,
         decodeURIComponent(workspaceInvitationAcceptMatch[1]!),
+        ctx,
+      );
+    const workspaceInvitationDeclineMatch = url.pathname.match(
+      /^\/api\/workspace-invitations\/([^/]+)\/decline$/,
+    );
+    if (workspaceInvitationDeclineMatch)
+      return await handleDeclineWorkspaceInvitation(
+        request,
+        env,
+        decodeURIComponent(workspaceInvitationDeclineMatch[1]!),
         ctx,
       );
     const workspaceSettingsMatch = url.pathname.match(
@@ -1012,6 +1024,18 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const threadQueueMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/queue(?:\/(pause|resume)|\/([^/]+)(?:\/(send-now))?)?$/,
+    );
+    if (threadQueueMatch)
+      return await handleThreadRequestQueue(
+        request,
+        env,
+        decodeURIComponent(threadQueueMatch[1]!),
+        threadQueueMatch[3] ? decodeURIComponent(threadQueueMatch[3]) : null,
+        threadQueueMatch[2] ?? threadQueueMatch[4] ?? null,
+        ctx,
+      );
     const createWorkRequestMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/work-requests$/,
     );

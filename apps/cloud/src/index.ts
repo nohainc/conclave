@@ -1,3 +1,5 @@
+import { sweepThreadRequestQueues } from "./routes/thread-request-queue.js";
+import type { SecurityEnv } from "./routes/http-security.js";
 export { SyntilaRunWorkflow } from "./workflow.js";
 export { WorkspaceGateway } from "./workspace-gateway.js";
 export { ThreadExecutionCoordinator } from "./thread-coordinator.js";
@@ -220,6 +222,10 @@ export default {
       attempted: 0,
       signaled: 0,
     }));
+    // Queued Thread requests whose turn came without a Workflow event.
+    await sweepThreadRequestQueues(env as SecurityEnv).catch((error) =>
+      console.error("Thread request queue sweep failed", error),
+    );
     if (controller.cron !== "17 3 * * *") {
       console.log(
         JSON.stringify({

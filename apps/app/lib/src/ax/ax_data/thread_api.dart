@@ -336,6 +336,111 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     }));
   }
 
+  // Shared Thread request queue.
+
+  Map<String, dynamic> _queuedRequestBody({
+    required String workflowId,
+    required int workflowVersion,
+    required String prompt,
+    required List<Map<String, dynamic>> attachments,
+    required Map<String, dynamic> executionSelection,
+    required AxReplyReference? replyTo,
+  }) =>
+      {
+        'workflowId': workflowId,
+        'workflowVersion': workflowVersion,
+        if (executionSelection.isNotEmpty)
+          'executionSelection': executionSelection,
+        'input': {
+          'originalRequest': prompt,
+          'attachments': _workRequestManifest(attachments),
+          if (replyTo != null) 'replyTo': replyTo.target,
+        },
+        // Display only: Cloud builds the reply snapshot from the target.
+        if (replyTo != null) 'replyReference': replyTo.toJson(),
+      };
+
+  Future<AxThreadQueue> _queueCall(String method, String threadId,
+      {String path = '', Map<String, dynamic>? body}) async {
+    final request = http.Request(method,
+        Uri.parse('$baseUrl/threads/${Uri.encodeComponent(threadId)}/queue$path'))
+      ..headers.addAll(_headers(
+          contentType: body == null ? null : 'application/json'));
+    if (body != null) request.body = jsonEncode(body);
+    final response = await http.Response.fromStream(await client.send(request));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      var detail = '';
+      try {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['error'] is String) {
+          detail = decoded['error'] as String;
+        }
+      } on FormatException {
+        /* Keep the status-only message. */
+      }
+      throw AxApiException(
+          detail.isEmpty
+              ? 'Request queue update failed (${response.statusCode})'
+              : detail,
+          statusCode: response.statusCode);
+    }
+    return AxThreadQueue.fromJson(
+        Map<String, dynamic>.from(jsonDecode(response.body) as Map));
+  }
+
+  Future<AxThreadQueue> loadThreadQueue(String threadId) =>
+      _queueCall('GET', threadId);
+
+  Future<AxThreadQueue> enqueueThreadRequest({
+    required String threadId,
+    required String workflowId,
+    required int workflowVersion,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    AxReplyReference? replyTo,
+  }) =>
+      _queueCall('POST', threadId, body: {
+        'request': _queuedRequestBody(
+            workflowId: workflowId,
+            workflowVersion: workflowVersion,
+            prompt: prompt,
+            attachments: attachments,
+            executionSelection: executionSelection,
+            replyTo: replyTo),
+      });
+
+  Future<AxThreadQueue> updateThreadQueueItem({
+    required String threadId,
+    required String itemId,
+    required String workflowId,
+    required int workflowVersion,
+    required String prompt,
+    List<Map<String, dynamic>> attachments = const [],
+    Map<String, dynamic> executionSelection = const {},
+    AxReplyReference? replyTo,
+  }) =>
+      _queueCall('PUT', threadId, path: '/${Uri.encodeComponent(itemId)}', body: {
+        'request': _queuedRequestBody(
+            workflowId: workflowId,
+            workflowVersion: workflowVersion,
+            prompt: prompt,
+            attachments: attachments,
+            executionSelection: executionSelection,
+            replyTo: replyTo),
+      });
+
+  Future<AxThreadQueue> removeThreadQueueItem(String threadId, String itemId) =>
+      _queueCall('DELETE', threadId, path: '/${Uri.encodeComponent(itemId)}');
+
+  Future<AxThreadQueue> sendThreadQueueItemNow(
+          String threadId, String itemId) =>
+      _queueCall('POST', threadId,
+          path: '/${Uri.encodeComponent(itemId)}/send-now');
+
+  Future<AxThreadQueue> setThreadQueuePaused(String threadId, bool paused) =>
+      _queueCall('POST', threadId, path: paused ? '/pause' : '/resume');
+
   /// Input Delivery v1 manifest entries: picked files are uploaded after the
   /// request is accepted, so only their metadata is submitted.
   static List<Map<String, dynamic>> _workRequestManifest(

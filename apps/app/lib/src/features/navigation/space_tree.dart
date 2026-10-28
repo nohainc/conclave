@@ -81,13 +81,14 @@ class SpaceTree extends StatelessWidget {
   Widget _buildContent(BuildContext context) {
     Widget content(BuildContext context) {
       final invitations = shellContext.invitationsListenable;
-      if (invitations != null) {
-        return ValueListenableBuilder<List<AxSpaceInvitation>>(
-          valueListenable: invitations,
-          builder: (context, _, __) => _tree(context),
-        );
-      }
-      return _tree(context);
+      final workspaceInvitations = shellContext.workspaceInvitationsListenable;
+      return ListenableBuilder(
+        listenable: Listenable.merge([
+          if (invitations != null) invitations,
+          if (workspaceInvitations != null) workspaceInvitations,
+        ]),
+        builder: (context, _) => _tree(context),
+      );
     }
 
     final spaces = shellContext.spaceListenable;
@@ -101,29 +102,27 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _tree(BuildContext context) {
-    final invitations =
-        spaceIdFilter == null ? shellContext.invitations : const [];
-    // Pinned Spaces lead the list; the rest keep their usual groups.
-    final pinnedSpaces = [
-      for (final space in shellContext.spaces)
-        if (space.isPinned &&
-            (spaceIdFilter == null || space.id == spaceIdFilter))
-          space
-    ]..sort(compareAxPins);
-    final ownedSpaces = shellContext.ownedSpaces
-        .where((space) =>
-            !space.isPinned &&
-            (spaceIdFilter == null || space.id == spaceIdFilter))
-        .toList();
-    final sharedSpaces = shellContext.sharedSpaces
-        .where((space) =>
-            !space.isPinned &&
-            (spaceIdFilter == null || space.id == spaceIdFilter))
-        .toList();
+    final invitationCount = spaceIdFilter == null
+        ? shellContext.invitations.length +
+            shellContext.workspaceInvitationCount
+        : 0;
+    // Each group lists its pinned Spaces first, then the rest.
+    List<AxSpace> group(List<AxSpace> spaces) {
+      final visible = spaces
+          .where((space) => spaceIdFilter == null || space.id == spaceIdFilter);
+      return [
+        ...visible.where((space) => space.isPinned).toList()
+          ..sort(compareAxPins),
+        ...visible.where((space) => !space.isPinned),
+      ];
+    }
+
+    final ownedSpaces = group(shellContext.ownedSpaces);
+    final sharedSpaces = group(shellContext.sharedSpaces);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (invitations.isNotEmpty) ...[
+        if (invitationCount > 0) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 6),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -148,7 +147,7 @@ class SpaceTree extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Pending invitations (${invitations.length})',
+                      'Pending invitations ($invitationCount)',
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
@@ -167,7 +166,7 @@ class SpaceTree extends StatelessWidget {
             ),
           ),
         ],
-        if (shellContext.spaces.isEmpty && invitations.isEmpty)
+        if (shellContext.spaces.isEmpty && invitationCount == 0)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Text(
@@ -179,14 +178,12 @@ class SpaceTree extends StatelessWidget {
               ),
             ),
           ),
-        // Pinned Spaces lead the list, without a group of their own.
-        ...pinnedSpaces.map((space) => _buildSpaceItem(context, space)),
         if (ownedSpaces.isNotEmpty) ...[
-          if (sharedSpaces.isNotEmpty) _groupLabel(context, 'YOUR SPACES'),
+          if (sharedSpaces.isNotEmpty) _groupLabel(context, 'your spaces'),
           ...ownedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
         if (sharedSpaces.isNotEmpty) ...[
-          _groupLabel(context, 'SHARED WITH YOU'),
+          _groupLabel(context, 'shared with you'),
           ...sharedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
       ],
@@ -199,7 +196,7 @@ class SpaceTree extends StatelessWidget {
           style: TextStyle(
               fontSize: 11.5,
               fontWeight: FontWeight.w600,
-              color: SyntilaColors.navigationTextMuted(
+              color: SyntilaColors.neutralText(
                   Theme.of(context).brightness == Brightness.dark))));
 
   Widget _buildSpaceItem(BuildContext context, AxSpace space) {

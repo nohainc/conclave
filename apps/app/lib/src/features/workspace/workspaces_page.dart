@@ -37,6 +37,7 @@ class WorkspacesPage extends StatefulWidget {
     this.people = const [],
     this.personAccessSource,
     this.onRevoke,
+    this.onLeaveShared,
     // Retained as optional compatibility inputs while callers are audited.
     VoidCallback? onAdd,
     ValueChanged<AxWorkspace>? onRename,
@@ -45,6 +46,9 @@ class WorkspacesPage extends StatefulWidget {
   });
 
   final ValueChanged<AxWorkspace>? onRevoke;
+
+  /// Ends the viewer's own access to a Workspace someone shared with them.
+  final ValueChanged<AxWorkspace>? onLeaveShared;
 
   /// Owner-only, Profile-defined usage commands; reports remain local view state.
   final AxWorkerUsageDataSource? workerUsageSource;
@@ -135,10 +139,6 @@ class _WorkspacesPageState extends State<WorkspacesPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (widget.sharingSource != null)
-          WorkspaceInvitationsBanner(
-              key: const ValueKey('workspace-invitations-banner'),
-              source: widget.sharingSource!),
         if (tabs == null)
           const _EmptyWorkspaces()
         else ...[
@@ -157,7 +157,11 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                 for (final workspace in widget.workspaces)
                   Tab(
                       key: Key('workspace-tab-${workspace.id}'),
-                      text: workspace.name),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        _StatusDot(status: _statusLabel(workspace)),
+                        const SizedBox(width: 6),
+                        Text(workspace.name),
+                      ])),
               ],
             ),
           ),
@@ -213,8 +217,6 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                   label: Text('Shared with you')),
               const SizedBox(width: 8),
             ],
-            const Spacer(),
-            _StatusPill(status: _statusLabel(workspace)),
           ],
         ),
         if (configurations != null &&
@@ -264,6 +266,52 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             workers: widget.workspaceWorkers,
             source: widget.memberAccessSource!,
             expandable: true,
+          ),
+        ],
+        if (workspace.shared && widget.onLeaveShared != null) ...[
+          const SizedBox(height: 32),
+          Divider(color: Theme.of(context).colorScheme.outlineVariant),
+          const SizedBox(height: 16),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              key: ValueKey('leave-shared-workspace-${workspace.id}'),
+              icon: const Icon(Icons.link_off, size: 18, color: Colors.red),
+              label: const Text(
+                'Revoke shared Workspace',
+                style: TextStyle(color: Colors.red),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.red),
+              ),
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    constraints: SyntilaDialogStyle.small,
+                    title: Text('Revoke ${workspace.name}?'),
+                    content: const Text(
+                      'You will no longer be able to run on this Workspace. Work already running finishes. The owner can invite you again.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        key: const ValueKey('confirm-leave-shared-workspace'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.red,
+                        ),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Revoke'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true) widget.onLeaveShared!(workspace);
+              },
+            ),
           ),
         ],
         if (!workspace.shared && widget.onRevoke != null) ...[
@@ -546,22 +594,22 @@ class _WorkerCard extends StatelessWidget {
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.status});
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.status});
   final String status;
 
   @override
   Widget build(BuildContext context) {
     final online = status.toLowerCase() == 'online';
-    return Chip(
-      visualDensity: VisualDensity.compact,
-      avatar: Icon(Icons.circle,
+    return Tooltip(
+      message: _display(status),
+      child: Icon(Icons.circle,
           size: 9,
+          semanticLabel: _display(status),
           color: online
               ? SyntilaColors.successText(
                   Theme.of(context).brightness == Brightness.dark)
               : SyntilaColors.neutral),
-      label: Text(_display(status)),
     );
   }
 }

@@ -526,11 +526,13 @@ extension _AxAppController on _AxAppStateMixin {
       if (type.startsWith('space.invitation.') ||
           type.startsWith('space.invitation.') ||
           type.startsWith('invitation.') ||
+          type.startsWith('workspace.invitation.') ||
           type.startsWith('space.') ||
           type == 'space_workspace_grant.updated') {
         await Future.wait([
           store.spaces.refresh(),
           store.invitations.refresh(),
+          store.refreshWorkspaceInvitations(),
         ]);
         if (!mounted) return;
         return;
@@ -688,6 +690,56 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
+  Future<void> _acceptWorkspaceInvitation(
+      AxMyWorkspaceInvitation invite) async {
+    try {
+      await store.acceptWorkspaceInvitation(invite);
+      await Future.wait([
+        store.workspaces.list(),
+        store.catalogs.refreshWorkers(),
+      ]);
+      if (!mounted) return;
+      _showSnackBar('You can now use ${invite.workspaceName}.');
+      _navigateTo(const AxNavigation.workspaces());
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Failed to accept invitation: $error',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  Future<void> _declineWorkspaceInvitation(
+      AxMyWorkspaceInvitation invite) async {
+    try {
+      await store.declineWorkspaceInvitation(invite);
+      if (mounted) _showSnackBar('Invitation declined.');
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar('Failed to decline invitation: $error',
+            type: ToastType.error);
+      }
+    }
+  }
+
+  Widget _invitationCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String badge,
+    required String invitedBy,
+    required VoidCallback onDecline,
+    required VoidCallback onAccept,
+  }) =>
+      AxInvitationCard(
+        icon: icon,
+        title: title,
+        badge: badge,
+        invitedBy: invitedBy,
+        onDecline: onDecline,
+        onAccept: onAccept,
+      );
+
   Future<void> _declineInvitation(AxSpaceInvitation invite) async {
     try {
       await store.declineInvitation(invite);
@@ -738,10 +790,14 @@ extension _AxAppController on _AxAppStateMixin {
     final isDesktop = SyntilaBrand.isDesktop(width);
     final sidebarWidth = _desktopSidebarCollapsed ? 50.0 : _desktopSidebarWidth;
     Widget buildInbox(BuildContext context) => ListenableBuilder(
-          listenable: store.invitations,
+          listenable:
+              Listenable.merge([store.invitations, store.workspaceInvitations]),
           builder: (context, _) {
             final pendingInvitations = store.invitations.items;
-            final isEmpty = pendingInvitations.isEmpty && notifications.isEmpty;
+            final workspaceInvitations = store.workspaceInvitations.value;
+            final isEmpty = pendingInvitations.isEmpty &&
+                workspaceInvitations.isEmpty &&
+                notifications.isEmpty;
             // Keep desktop notifications beside their sidebar entry point.
             return AlertDialog(
               alignment: isDesktop ? Alignment.topLeft : Alignment.topCenter,
@@ -813,7 +869,8 @@ extension _AxAppController on _AxAppStateMixin {
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (pendingInvitations.isNotEmpty) ...[
+                            if (pendingInvitations.isNotEmpty ||
+                                workspaceInvitations.isNotEmpty) ...[
                               Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: Text(
@@ -827,111 +884,43 @@ extension _AxAppController on _AxAppStateMixin {
                                   ),
                                 ),
                               ),
+                              for (final invite in workspaceInvitations)
+                                _invitationCard(
+                                  context,
+                                  icon: Icons.computer_outlined,
+                                  title: invite.workspaceName,
+                                  badge: 'WORKSPACE',
+                                  invitedBy: invite.ownerName,
+                                  onDecline: () => unawaited(
+                                      _declineWorkspaceInvitation(invite)),
+                                  onAccept: () {
+                                    Navigator.of(context).pop();
+                                    unawaited(
+                                        _acceptWorkspaceInvitation(invite));
+                                  },
+                                ),
                               for (final invite in pendingInvitations)
-                                Card(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            const Icon(Icons.mail_outline,
-                                                size: 18),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Text(
-                                                invite.spaceName.isNotEmpty
-                                                    ? invite.spaceName
-                                                    : 'Space Invitation',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .primary
-                                                    .withValues(alpha: 0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                invite.role.toUpperCase(),
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .primary,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          'Invited by ${invite.invitedByDisplay}',
-                                          style: TextStyle(
-                                            fontSize: 12.5,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurfaceVariant,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.end,
-                                          children: [
-                                            OutlinedButton(
-                                              onPressed: () => unawaited(
-                                                  _declineInvitation(invite)),
-                                              style: OutlinedButton.styleFrom(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 12),
-                                              ),
-                                              child: const Text('Decline'),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            FilledButton(
-                                              onPressed: () {
-                                                Navigator.of(context).pop();
-                                                unawaited(
-                                                    _acceptInvitation(invite));
-                                              },
-                                              style: FilledButton.styleFrom(
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 12),
-                                              ),
-                                              child: const Text('Accept'),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                _invitationCard(
+                                  context,
+                                  icon: Icons.folder_outlined,
+                                  title: invite.spaceName.isNotEmpty
+                                      ? invite.spaceName
+                                      : 'Space Invitation',
+                                  badge: 'SPACE',
+                                  invitedBy: invite.invitedByDisplay,
+                                  onDecline: () =>
+                                      unawaited(_declineInvitation(invite)),
+                                  onAccept: () {
+                                    Navigator.of(context).pop();
+                                    unawaited(_acceptInvitation(invite));
+                                  },
                                 ),
                               if (notifications.isNotEmpty)
                                 const Divider(height: 24),
                             ],
                             if (notifications.isNotEmpty) ...[
-                              if (pendingInvitations.isNotEmpty)
+                              if (pendingInvitations.isNotEmpty ||
+                                  workspaceInvitations.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 8),
                                   child: Text(
@@ -1477,6 +1466,7 @@ extension _AxAppController on _AxAppStateMixin {
           .ensure()
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
       unawaited(store.invitations.refresh());
+      unawaited(store.refreshWorkspaceInvitations());
       optimisticRunStatus = null;
       if (showSpinner) {
         _updateState(() {

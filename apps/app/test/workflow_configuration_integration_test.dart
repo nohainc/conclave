@@ -315,6 +315,8 @@ void main() {
                 }))));
     await tester.pumpAndSettle();
     await requestChoice(tester, 'Worker', 'Second');
+    await requestChoice(tester, 'Model', 'Other model');
+    await requestChoice(tester, 'Effort', 'Careful');
     await tester.tapAt(const Offset(790, 5));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Chat').last);
@@ -324,6 +326,78 @@ void main() {
     await tester.pumpAndSettle();
     expect(submittedWorkflow, startsWith('chat'));
     expect(submittedSelection?['workerId'], 'b');
+    await tester.pumpWidget(const SizedBox());
+  });
+  testWidgets('send is blocked until Worker, model and effort are chosen',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final source = IntegrationSource()
+      ..defaultWorkflow = 'direct'
+      ..workers = [worker('a'), worker('b')];
+    final engine = AxSyncEngine();
+    String? submittedWorkflow;
+    Map<String, dynamic>? submittedSelection;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: ThreadPage(
+                initialTab: 1,
+                space: const AxSpace(
+                    id: 's',
+                    name: 'Space',
+                    branch: '',
+                    lastActivity: '',
+                    role: 'owner'),
+                thread: const AxThread(
+                    id: 'keep',
+                    spaceId: 's',
+                    name: 'Thread',
+                    lead: '',
+                    status: 'active',
+                    brief: '',
+                    primaryWorkspace: '',
+                    queueStatus: '',
+                    canExecuteWork: true,
+                    workConfig: {'defaultWorkflowId': 'direct'}),
+                dataSource: source,
+                catalogs: AxSessionCatalogs(source, engine: engine),
+                workflowConfigurations:
+                    AxWorkflowConfigurations(source, engine: engine),
+                workHistoryCache: AxWorkHistoryCache(source, engine: engine),
+                onBackToSpace: () {},
+                onArchive: () {},
+                onRunWork: (prompt, workflow, attachments, key) async =>
+                    'accepted',
+                onRunWorkWithSelection:
+                    (prompt, workflow, attachments, key, selection) async {
+                  submittedWorkflow = workflow;
+                  submittedSelection = selection;
+                  return 'accepted';
+                }))));
+    await tester.pumpAndSettle();
+    await requestChoice(tester, 'Worker', 'Second');
+    await tester.tapAt(const Offset(790, 5));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Discuss');
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    expect(submittedWorkflow, isNull);
+    expect(find.textContaining('before sending.'), findsOneWidget);
+    final box = tester.widget<DecoratedBox>(
+        find.byKey(const ValueKey('work-composer-selection')));
+    expect(((box.decoration as BoxDecoration).border as Border).top.color,
+        isNot(Colors.transparent));
+    await requestChoice(tester, 'Model', 'Other model');
+    await requestChoice(tester, 'Effort', 'Careful');
+    expect(find.textContaining('before sending.'), findsNothing);
+    await tester.tapAt(const Offset(790, 5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('composer-send-Send request')));
+    await tester.pumpAndSettle();
+    expect(submittedWorkflow, isNotNull, reason: 'sent');
+    expect(submittedSelection?['model'], 'other');
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets('Thread Work tab has no thread execution settings',

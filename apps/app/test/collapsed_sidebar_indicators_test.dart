@@ -76,7 +76,7 @@ void main() {
           ]
         }),
         navigate: (value) => destination = value));
-    await tester.tap(find.byTooltip('Spaces and Threads'));
+    await tester.tap(find.byTooltip('Your spaces'));
     await tester.pumpAndSettle();
     final titles = ['First pin', 'Second pin', 'Recent', 'Older'];
     for (var i = 1; i < titles.length; i++) {
@@ -91,7 +91,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('collapsed Space pins share one ordered group and update live',
+  testWidgets('collapsed own and shared Spaces get separate icons with pins first',
       (tester) async {
     AxSpace item(String id, String role, {int? pin}) => AxSpace.fromJson({
           'id': id,
@@ -114,25 +114,30 @@ void main() {
             spaces: const [],
             spaceListenable: spaces),
         navigate: (value) => destination = value));
-    expect(find.byTooltip('Spaces and Threads'), findsOneWidget);
+    expect(find.byTooltip('Your spaces'), findsOneWidget);
     expect(find.byIcon(Icons.push_pin_outlined), findsNothing);
-    await tester.tap(find.byTooltip('Spaces and Threads'));
+    await tester.tap(find.byTooltip('Your spaces'));
     await tester.pumpAndSettle();
-    final order = ['Shared pin', 'Owned pin', 'My Space', 'Shared Space'];
-    for (var i = 1; i < order.length; i++) {
-      expect(tester.getTopLeft(find.text(order[i])).dy,
-          greaterThan(tester.getTopLeft(find.text(order[i - 1])).dy));
-    }
+    expect(tester.getTopLeft(find.text('My Space')).dy,
+        greaterThan(tester.getTopLeft(find.text('Owned pin')).dy));
+    expect(find.text('Shared pin'), findsNothing);
+    await tester.tapAt(Offset.zero);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Shared with you'));
+    await tester.pumpAndSettle();
+    expect(find.text('Owned pin'), findsNothing);
+    expect(tester.getTopLeft(find.text('Shared Space')).dy,
+        greaterThan(tester.getTopLeft(find.text('Shared pin')).dy));
     await tester.tap(find.text('Shared pin'));
     await tester.pumpAndSettle();
     expect(destination?.spaceId, 'Shared pin');
     spaces.value = [item('Owned pin', 'owner'), owned, shared];
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Spaces and Threads'), findsOneWidget);
-    await tester.tap(find.byTooltip('Spaces and Threads'));
+    expect(find.byTooltip('Your spaces'), findsOneWidget);
+    await tester.tap(find.byTooltip('Your spaces'));
     await tester.pumpAndSettle();
     expect(find.text('Owned pin'), findsOneWidget);
-    expect(find.text('Shared pin'), findsNothing);
+    expect(find.text('Shared Space'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -237,7 +242,7 @@ void main() {
         }),
         navigate: (value) => destination = value));
     await tester.pump();
-    await tester.tap(find.byTooltip('Spaces and Threads'));
+    await tester.tap(find.byTooltip('Your spaces'));
     await tester.pump(const Duration(milliseconds: 200));
     expect(marker('rail-space-activity-owned', 'running'), findsOneWidget);
     expect(marker('rail-thread-activity-thread', 'running'), findsOneWidget);

@@ -214,4 +214,5 @@ abstract interface class AxWorkspaceSharingDataSource {
       String workspaceId, String userId, int? seconds);
   Future<List<AxMyWorkspaceInvitation>> loadMyWorkspaceInvitations();
   Future<void> acceptWorkspaceInvitation(String invitationId);
+  Future<void> declineWorkspaceInvitation(String invitationId);
 }

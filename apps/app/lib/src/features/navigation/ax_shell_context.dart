@@ -45,6 +45,7 @@ class AxShellContext {
     int unreadNotificationCount = 0,
     this.unreadNotifications,
     this.invitationsListenable,
+    this.workspaceInvitationsListenable,
     this.isDarkTheme = true,
     this.themeMode = ThemeMode.system,
     bool realtimeStale = false,
@@ -82,6 +83,9 @@ class AxShellContext {
   final ValueListenable<List<AxSpaceInvitation>>? invitationsListenable;
   List<AxSpaceInvitation> get invitations =>
       invitationsListenable?.value ?? const [];
+  final ValueListenable<List<Object>>? workspaceInvitationsListenable;
+  int get workspaceInvitationCount =>
+      workspaceInvitationsListenable?.value.length ?? 0;
   int get unreadNotificationCount =>
       unreadNotifications?.value ?? _unreadNotificationCount;
   Widget watchNotifications(Widget Function() build) {
