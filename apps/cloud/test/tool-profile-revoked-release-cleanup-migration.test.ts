@@ -12,7 +12,7 @@ const migrationText = (name: string): string =>
 describe("revoked ChatGPT/Gemini release cleanup migration", () => {
   it("removes only revoked ChatGPT and Gemini releases and their references", () => {
     const db = new DatabaseSync(":memory:");
-    db.exec(migrationText("0001_conclave_v8.sql"));
+    db.exec(migrationText("0001_syntila_v8.sql"));
 
     const now = "2026-10-11T00:00:00Z";
     for (const workerTypeId of ["chatgpt", "gemini", "other"]) {
@@ -66,7 +66,7 @@ describe("revoked ChatGPT/Gemini release cleanup migration", () => {
         String(version).padStart(64, "0"),
         "signature",
         "key",
-        "conclave",
+        "syntila",
         now,
         now,
         now,

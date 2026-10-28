@@ -204,7 +204,7 @@ Profile Lab uses Syntila Cloud authentication via a browser-assisted desktop aut
 
 However, Profile Lab operates under a **dedicated administrative security audience**:
 ```text
-conclave.profile-lab.management
+syntila.profile-lab.management
 ```
 
 Syntila Cloud validates that the authenticated human holds explicit Profile administration privileges:
@@ -313,19 +313,19 @@ Dynamic Worker loading and Workspace readiness reconciliation are actively being
 
 Profile Lab reuses Syntila's browser-assisted human sign-in pattern (intents, approval URL, polling, claiming, session rotation, revocation), but enforces an explicit and distinct security boundary:
 
-1. **Dedicated Audience (`conclave.profile-lab.management`):**
-   - Profile Lab auth intents declare `audience: 'conclave.profile-lab.management'` and `clientName: 'Syntila Profile Lab'`.
+1. **Dedicated Audience (`syntila.profile-lab.management`):**
+   - Profile Lab auth intents declare `audience: 'syntila.profile-lab.management'` and `clientName: 'Syntila Profile Lab'`.
    - Resulting desktop sessions are permanently tagged with this audience.
-   - Normal Workspace sessions use `conclave.desktop.management`.
+   - Normal Workspace sessions use `syntila.desktop.management`.
 
 2. **Cloud Authorization Gates:**
    - Profile administrative endpoints (`/api/profile-admin/*`, `/api/profiles/*`, `/api/releases/*`) require permissions `profiles:admin` and `profiles:release:manage`.
-   - When accessed by a desktop client, `authorizeProfileAdmin` strictly requires `context.audience === 'conclave.profile-lab.management'`.
+   - When accessed by a desktop client, `authorizeProfileAdmin` strictly requires `context.audience === 'syntila.profile-lab.management'`.
    - Catalog and draft administration requires `SYNTILA_PROFILE_ADMIN_USER_IDS`; publication and rollout management requires the separate `SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS` allowlist.
 
 3. **Mutual Exclusion:**
-   - A normal Workspace session token (`conclave.desktop.management`) presented to Profile administrative endpoints is rejected with HTTP 403.
-   - A Profile Lab session token (`conclave.profile-lab.management`) presented to Workspace registration or runtime endpoints is rejected with HTTP 403.
+   - A normal Workspace session token (`syntila.desktop.management`) presented to Profile administrative endpoints is rejected with HTTP 403.
+   - A Profile Lab session token (`syntila.profile-lab.management`) presented to Workspace registration or runtime endpoints is rejected with HTTP 403.
    - Workspace credentials and Profile Lab credentials cannot be interchanged or accidentally escalated.
 
 4. **Isolated Local Credential Namespace:**
@@ -334,7 +334,7 @@ Profile Lab reuses Syntila's browser-assisted human sign-in pattern (intents, ap
    - Profile Lab never interacts with Workspace's Keychain namespace, installation IDs, or local database state.
 
 ### Cloud Origin Configuration:
-Profile Lab's build default is `https://app.conclaveax.com`; `SYNTILA_CLOUD_URL` can set an environment-specific build default. A local development build may use `http://localhost:8787`. The Cloud connection settings persist an origin override and can reset it to the build default. Every HTTP client requires an origin-only URL and permits plaintext HTTP only for loopback in non-release builds.
+Profile Lab's build default is `https://syntila.app`; `SYNTILA_CLOUD_URL` can set an environment-specific build default. A local development build may use `http://localhost:8787`. The Cloud connection settings persist an origin override and can reset it to the build default. Every HTTP client requires an origin-only URL and permits plaintext HTTP only for loopback in non-release builds.
 
 ---
 
@@ -345,7 +345,7 @@ Profile Lab interacts with Syntila Cloud exclusively via bounded HTTP/JSON endpo
 Every administrative endpoint is guarded by `authorizeToolProfileAdmin(request, env, ctx)`, which enforces:
 1. A valid authenticated user in the allowlist for the required permission: `SYNTILA_PROFILE_ADMIN_USER_IDS` for administration or `SYNTILA_PROFILE_RELEASE_MANAGER_USER_IDS` for release management.
 2. Required permissions (`profiles:admin` or `profiles:release:manage`).
-3. The dedicated desktop audience `conclave.profile-lab.management`.
+3. The dedicated desktop audience `syntila.profile-lab.management`.
 
 Stable promotion, Stable channel assignment, and channel rollback additionally require a fresh session-bound passkey step-up (five-minute maximum age). The desktop session binds a browser-completed passkey ceremony through `POST /api/desktop-auth/profile-lab/step-up/complete`; stale ceremonies are rejected. Missing or stale step-up proof returns HTTP 428. Release revocation requires `profiles:release:manage`, a mandatory reason, and explicit confirmation in Profile Lab; it does not require step-up. Publication and other release-manager actions require `profiles:release:manage` but do not require step-up.
 

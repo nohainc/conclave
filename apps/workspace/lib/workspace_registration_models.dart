@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-const syntilaProductionCloudUrl = 'https://app.conclaveax.com';
+const syntilaProductionCloudUrl = 'https://syntila.app';
 const syntilaLocalCloudUrl = 'http://localhost:8787';
 
 /// Build-time target environment, set by the build scripts with

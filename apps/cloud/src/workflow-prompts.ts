@@ -290,7 +290,7 @@ function attachmentReferences(inputs: WorkStepPromptInputs): string {
         return [`- ${name}: ${boundedText(attachment.url, 2048)}`];
       }
       if (attachment.kind === "file") {
-        const relativePath = `.conclave/inputs/${boundedText(inputs.workRequestId, 128)}/file-${String(index + 1).padStart(3, "0")}`;
+        const relativePath = `.syntila/inputs/${boundedText(inputs.workRequestId, 128)}/file-${String(index + 1).padStart(3, "0")}`;
         return [
           `- ${name}${mediaType ? ` (${mediaType})` : ""}: ${relativePath}`,
         ];

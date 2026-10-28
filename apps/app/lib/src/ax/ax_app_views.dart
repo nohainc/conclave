@@ -736,8 +736,8 @@ extension _AxAppViews on _AxAppStateMixin {
                                             .textTheme
                                             .bodySmall
                                             ?.copyWith(
-                                                color: SyntilaColors
-                                                    .textSecondary(
+                                                color:
+                                                    SyntilaColors.textSecondary(
                                                         Theme.of(context)
                                                                 .brightness ==
                                                             Brightness.dark))),

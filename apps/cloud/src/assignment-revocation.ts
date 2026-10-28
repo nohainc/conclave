@@ -362,6 +362,51 @@ export async function escalateUnconfirmedRevocations(
   return (results ?? []).map((row) => row.id);
 }
 
+/**
+ * Finalizes revocations whose owning Workspace runtime identity has been
+ * revoked (for example by `workspace.recovered` re-registering the Workspace).
+ *
+ * The Service only acts on commands addressed to its own runtime identity, so
+ * a cancel for an assignment owned by a replaced identity can never be
+ * acknowledged. Waiting for that acknowledgement would hold the capacity slot,
+ * the Thread lease and the Work Request forever and make Stop appear broken.
+ * The replaced runtime can no longer authenticate or report results, and the
+ * new Service reclaims orphaned engine processes on start, so the intended
+ * terminal outcome is written without Service confirmation.
+ * Returns the IDs finalized.
+ */
+export async function finalizeRevocationsOfRevokedRuntimes(
+  db: D1Database,
+  executionWorkspaceId?: string,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT wa.id AS id, wa.attempt_id AS attemptId
+         FROM worker_assignments wa
+         JOIN workspace_runtime_identities ri ON ri.id = wa.runtime_identity_id
+        WHERE wa.status IN ('revocation_pending', 'reconciling')
+          AND ri.revoked_at IS NOT NULL
+          AND (?1 IS NULL OR wa.execution_workspace_id = ?1)
+        LIMIT 100`,
+    )
+    .bind(executionWorkspaceId ?? null)
+    .all<{ id: string; attemptId: string | null }>();
+  const finalized: string[] = [];
+  for (const row of results ?? []) {
+    try {
+      const outcome = await finalizeAssignmentRevocation(
+        db,
+        row.id,
+        row.attemptId ?? undefined,
+      );
+      if (outcome === "finalized") finalized.push(row.id);
+    } catch {
+      // Best effort: the next recovery pass retries.
+    }
+  }
+  return finalized;
+}
+
 export interface RevocationEnv {
   readonly SYNTILA_DB: D1Database;
   readonly SYNTILA_WORKSPACE_GATEWAY?: DurableObjectNamespace;
@@ -400,6 +445,13 @@ export async function deliverRevocation(
       .bind(assignmentId)
       .first<RevokingAssignment>();
     if (!row) return false;
+    // A replaced runtime identity can never acknowledge: finalize instead of
+    // sending a command that the current Service ignores.
+    const finalizedIds = await finalizeRevocationsOfRevokedRuntimes(
+      env.SYNTILA_DB,
+      row.execution_workspace_id,
+    );
+    if (finalizedIds.includes(assignmentId)) return true;
     const stored = parseStored(row.error_json);
     const payload: AssignmentCancelPayload = {
       assignmentId,

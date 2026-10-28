@@ -40,7 +40,7 @@ void main() {
 
   test('rejects release builds and non-loopback Cloud connections', () {
     for (final url in [
-      'https://app.conclaveax.com',
+      'https://syntila.app',
       'http://localhost.example.com',
       'http://user@localhost'
     ]) {

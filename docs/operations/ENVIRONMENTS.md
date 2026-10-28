@@ -4,11 +4,11 @@ Syntila has two environments. They never share a database, Cloud URL or Workspac
 
 | | Local | Production |
 |---|---|---|
-| Cloud API | `wrangler dev` on `http://localhost:8787` (`apps/cloud/wrangler.jsonc`) | Worker `conclave-ax-app` (`infra/cloudflare/app.wrangler.jsonc`) |
-| Database | Local D1 `conclave-development` in `apps/cloud/.wrangler/state` | Remote D1 `conclave-v8-production` |
-| Web app | Flutter `run` on `http://localhost:3000` | `https://app.conclaveax.com` |
+| Cloud API | `wrangler dev` on `http://localhost:8787` (`apps/cloud/wrangler.jsonc`) | Worker `syntila-app` (`infra/cloudflare/app.wrangler.jsonc`) |
+| Database | Local D1 `syntila-development` in `apps/cloud/.wrangler/state` | Remote D1 `syntila` |
+| Web app | Flutter `run` on `http://localhost:3000` | `https://syntila.app` |
 | Workspace binary | `syntila-workspace-local` (built with `--local`) | `syntila-workspace` |
-| Workspace state (macOS) | `~/Library/Application Support/Conclave Local/Workspace/State` | `~/Library/Application Support/Conclave/Workspace/State` |
+| Workspace state (macOS) | `~/Library/Application Support/Syntila Local/Workspace/State` | `~/Library/Application Support/Syntila/Workspace/State` |
 
 The Workspace environment is chosen at build time (`SYNTILA_WORKSPACE_ENVIRONMENT`). A local build uses the separate `Syntila Local` state folder and, when `workspace.nano` is created (`config init`, first run, or after `reset`), writes `cloud.url http://localhost:8787`. After that the service always connects to whatever `cloud.url` says, so check it with `syntila-workspace-local config show`. If the file was created by a different build, edit `cloud.url` or run `reset`.
 

@@ -125,7 +125,7 @@ else
 fi
 
 # 1. Runner Script for Backend API
-RUNNER_API="/tmp/conclave-api-dev-${PORT}.sh"
+RUNNER_API="/tmp/syntila-api-dev-${PORT}.sh"
 cat << EOF > "${RUNNER_API}"
 #!/usr/bin/env bash
 set -euo pipefail
@@ -137,7 +137,7 @@ exec pnpm exec wrangler dev \\
   --ip "${IP}" \\
   --var "BETTER_AUTH_URL:${API_URL}" \\
   --var "SYNTILA_APP_URL:${WEB_URL}" \\
-  --var "BETTER_AUTH_TRUSTED_ORIGINS:${API_URL},${WEB_URL},http://localhost:${PORT},http://127.0.0.1:${PORT},https://app.conclaveax.com"
+  --var "BETTER_AUTH_TRUSTED_ORIGINS:${API_URL},${WEB_URL},http://localhost:${PORT},http://127.0.0.1:${PORT},https://syntila.app"
 EOF
 chmod +x "${RUNNER_API}"
 

@@ -57,7 +57,7 @@ jobs:
           case "${{ github.event.inputs.component }}" in
             "AX Web App")
               pnpm validate:app
-              cd apps/app && flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+              cd apps/app && flutter build web --release --dart-define=SYNTILA_API_URL=/api
               ;;
             "Cloud & TypeScript")
               pnpm validate:cloud

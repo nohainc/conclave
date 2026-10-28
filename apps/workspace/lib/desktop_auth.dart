@@ -84,7 +84,7 @@ class DesktopHumanSession {
   final DateTime? issuedAt;
 
   factory DesktopHumanSession.fromJson(Map<String, dynamic> json) {
-    if (json['audience'] != 'conclave.desktop.management') {
+    if (json['audience'] != 'syntila.desktop.management') {
       throw const FormatException(
           'Desktop session has an unsupported audience');
     }
@@ -422,7 +422,7 @@ class DesktopAuthClient {
     );
     final user = result['user'];
     if (result['sessionId'] != session.sessionId ||
-        result['audience'] != 'conclave.desktop.management' ||
+        result['audience'] != 'syntila.desktop.management' ||
         user is! Map ||
         user['userId'] != session.userId) {
       throw const FormatException(

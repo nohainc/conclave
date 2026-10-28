@@ -190,10 +190,7 @@ Future<List<DiscoveredModel>> discoverCodexAppServerModels({
       'id': 1,
       'method': 'initialize',
       'params': {
-        'clientInfo': {
-          'name': 'syntila-cli-worker-engine',
-          'version': '1.2.0',
-        },
+        'clientInfo': {'name': 'syntila-cli-worker-engine', 'version': '1.2.0'},
         'capabilities': null,
       },
     });

@@ -2676,8 +2676,9 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                                     child: widget.item.isAiAnswer
                                         ? Icon(Icons.auto_awesome_rounded,
                                             size: 13,
-                                            color: SyntilaColors
-                                                .primaryForeground(isDark))
+                                            color:
+                                                SyntilaColors.primaryForeground(
+                                                    isDark))
                                         : Text(
                                             initials,
                                             style: TextStyle(

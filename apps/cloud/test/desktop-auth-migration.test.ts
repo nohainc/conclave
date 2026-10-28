@@ -96,7 +96,7 @@ function orderedMigrationFiles(): string[] {
 }
 
 function legacyProductionBaseline(): string {
-  const cleanBaseline = migrationSql("0001_conclave_v8.sql");
+  const cleanBaseline = migrationSql("0001_syntila_v8.sql");
   const authStart = cleanBaseline.indexOf(
     "CREATE TABLE desktop_auth_intents (",
   );
@@ -137,7 +137,7 @@ describe("desktop auth multi-audience migration", () => {
       )
       .get() as { sql: string };
     expect(legacySessionDefinition.sql).toContain(
-      "CHECK (audience = 'conclave.desktop.management')",
+      "CHECK (audience = 'syntila.desktop.management')",
     );
     database.exec(`
       INSERT INTO users
@@ -157,9 +157,9 @@ describe("desktop auth multi-audience migration", () => {
         (id, user_id, token_hash, audience, created_at, last_used_at,
          expires_at, revoked_at)
       VALUES
-        ('active-session', 'owner', 'active-hash', 'conclave.desktop.management',
+        ('active-session', 'owner', 'active-hash', 'syntila.desktop.management',
          'created', 'last-used', 'expires', NULL),
-        ('revoked-session', 'owner', 'revoked-hash', 'conclave.desktop.management',
+        ('revoked-session', 'owner', 'revoked-hash', 'syntila.desktop.management',
          'created-2', 'last-used-2', 'expires-2', 'revoked');
     `);
 
@@ -193,7 +193,7 @@ describe("desktop auth multi-audience migration", () => {
     expect(intentsAfter).toEqual(
       intentsBefore.map((row) => ({
         ...(row as Record<string, unknown>),
-        audience: "conclave.desktop.management",
+        audience: "syntila.desktop.management",
       })),
     );
 
@@ -334,7 +334,7 @@ describe("desktop auth multi-audience migration", () => {
     });
     const profileLabSession = await createAndClaim({
       clientName: "Syntila Profile Lab",
-      audience: "conclave.profile-lab.management",
+      audience: "syntila.profile-lab.management",
     });
 
     const registrationBody = {
@@ -377,7 +377,7 @@ describe("desktop auth multi-audience migration", () => {
       ),
     ).resolves.toMatchObject({
       userId: "owner",
-      audience: "conclave.profile-lab.management",
+      audience: "syntila.profile-lab.management",
     });
 
     await expect(
@@ -391,20 +391,17 @@ describe("desktop auth multi-audience migration", () => {
 
     await expect(
       handleRegisterWorkspaceFromDesktop(
-        new Request(
-          "https://app.syntila.test/api/workspace-runtime/register",
-          {
-            method: "POST",
-            headers: {
-              authorization: `Bearer ${profileLabSession.credential}`,
-              "content-type": "application/json",
-            },
-            body: JSON.stringify({
-              ...registrationBody,
-              installationId: "install_22345678-1234-4234-8234-123456789abc",
-            }),
+        new Request("https://app.syntila.test/api/workspace-runtime/register", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${profileLabSession.credential}`,
+            "content-type": "application/json",
           },
-        ),
+          body: JSON.stringify({
+            ...registrationBody,
+            installationId: "install_22345678-1234-4234-8234-123456789abc",
+          }),
+        }),
         env,
       ),
     ).rejects.toMatchObject({ status: 403 });
@@ -434,7 +431,7 @@ describe("desktop auth multi-audience migration", () => {
 describe("Workspace installation ownership migration", () => {
   it("preserves active ownership across rotated runtime identities and restores released ownership from audit history", () => {
     const database = createDatabase();
-    database.exec(migrationSql("0001_conclave_v8.sql"));
+    database.exec(migrationSql("0001_syntila_v8.sql"));
     database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
     database.exec(`
       INSERT INTO users
@@ -502,7 +499,7 @@ describe("Workspace installation ownership migration", () => {
 
   it("preserves same-owner bindings when every historical Workspace is revoked", () => {
     const database = createDatabase();
-    database.exec(migrationSql("0001_conclave_v8.sql"));
+    database.exec(migrationSql("0001_syntila_v8.sql"));
     database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
     database.exec(`
       INSERT INTO users
@@ -548,7 +545,7 @@ describe("Workspace installation ownership migration", () => {
 
   it("fails closed when multiple non-revoked Workspaces share an installation", () => {
     const database = createDatabase();
-    database.exec(migrationSql("0001_conclave_v8.sql"));
+    database.exec(migrationSql("0001_syntila_v8.sql"));
     database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
     database.exec(`
       INSERT INTO users
@@ -573,7 +570,7 @@ describe("Workspace installation ownership migration", () => {
 
   it("fails closed when revoked installation history has different owners", () => {
     const database = createDatabase();
-    database.exec(migrationSql("0001_conclave_v8.sql"));
+    database.exec(migrationSql("0001_syntila_v8.sql"));
     database.exec(migrationSql("0002_desktop_auth_multi_audience.sql"));
     database.exec(`
       INSERT INTO users
@@ -603,7 +600,7 @@ describe("Workspace runtime identity uniqueness migration", () => {
   function databaseBeforeMigration4(): DatabaseSync {
     const database = createDatabase();
     for (const migration of [
-      "0001_conclave_v8.sql",
+      "0001_syntila_v8.sql",
       "0002_desktop_auth_multi_audience.sql",
       "0003_workspace_installations.sql",
     ]) {

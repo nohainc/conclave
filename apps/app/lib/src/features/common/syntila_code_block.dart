@@ -146,9 +146,8 @@ class SyntilaCodeBlock extends StatelessWidget {
         SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(12),
-            child: Text.rich(
-                SyntilaSyntaxHighlighter(theme, language: language)
-                    .format(code))),
+            child: Text.rich(SyntilaSyntaxHighlighter(theme, language: language)
+                .format(code))),
       ]),
     );
   }

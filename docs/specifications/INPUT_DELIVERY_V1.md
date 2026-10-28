@@ -82,7 +82,7 @@ and are merged into dispatch (`withInputFacts`) and history reads.
    on cancellation. Retries (`retryStepKind`) skip the gate.
 6. **Run.** Dispatch is unchanged. Attachments carry `fileId` and
    `contentDigest`; the Service copies each verified file to
-   `.conclave/inputs/<workRequestId>/file-NNN`. A copy missing from the store
+   `.syntila/inputs/<workRequestId>/file-NNN`. A copy missing from the store
    (retention, later retry) is downloaded again before the provider starts.
 
 Downloaded files are kept 7 days and serve every step of the request.

@@ -81,7 +81,7 @@ for (const content of requiredHomepageContent) {
   if (!home.includes(content))
     errors.push(`homepage: missing release content: ${content}`);
 }
-if ((home.match(/href="https:\/\/app\.syntila\.com/g) ?? []).length < 3) {
+if ((home.match(/href="https:\/\/syntila\.app/g) ?? []).length < 3) {
   errors.push("homepage: expected direct app CTA links");
 }
 for (const link of ["/privacy/", "/terms/", "/security/", "/use-cases/"]) {

@@ -489,8 +489,7 @@ class _JoinSpacePriorityCard extends StatelessWidget {
       color: SyntilaColors.primarySoftColor(isDark),
       shape: RoundedRectangleBorder(
         side: BorderSide(
-          color:
-              SyntilaColors.primaryForeground(isDark).withValues(alpha: 0.3),
+          color: SyntilaColors.primaryForeground(isDark).withValues(alpha: 0.3),
           width: 1.5,
         ),
         borderRadius: BorderRadius.circular(12),

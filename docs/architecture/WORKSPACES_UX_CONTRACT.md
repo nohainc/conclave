@@ -19,8 +19,8 @@ Filesystem terminology is explicit: a Workspace is the execution environment,
 the Application Data Root is private application-managed state, the Work Root
 is user-owned working data, and each Space Work Directory is a directory under
 the Work Root. Neither the Workspace CLI nor `workspace.nano` asks users to choose the Application
-Data Root (`folders.state` only documents the bootstrap location). On macOS the family root is `~/Library/Application Support/Conclave/`
-and the default Work Root is `~/Documents/Conclave`.
+Data Root (`folders.state` only documents the bootstrap location). On macOS the family root is `~/Library/Application Support/Syntila/`
+and the default Work Root is `~/Documents/Syntila`.
 Space directories are bound to immutable Space IDs through private registry
 metadata and an identity marker. Threads share their Space directory and do
 not receive directories by default.

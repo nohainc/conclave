@@ -98,7 +98,7 @@ describe("Work v1 prompt profiles", () => {
       "Run-specific user request:\nPlease implement **this change**.",
     );
     expect(prompt).toContain(
-      "notes.md (text/markdown): .conclave/inputs/request-chat/file-001",
+      "notes.md (text/markdown): .syntila/inputs/request-chat/file-001",
     );
     expect(prompt).toContain("Reference: https://example.com/docs");
     expect(prompt).not.toContain("Not inlined.");

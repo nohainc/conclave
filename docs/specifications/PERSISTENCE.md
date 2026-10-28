@@ -2,7 +2,7 @@
 
 Cloud owns server-side persistence and accesses D1 from its route and service
 modules. The v8 schema in
-[0001_conclave_v8.sql](../../apps/cloud/migrations-v8/0001_conclave_v8.sql) is
+[0001_syntila_v8.sql](../../apps/cloud/migrations-v8/0001_syntila_v8.sql) is
 the clean development baseline. Workspace owns its local registry, Profiles,
 Engines, session state, logs, and Work Root in the local data directory.
 
@@ -26,7 +26,7 @@ See the Phase 4 lifecycle and release requirements in the continuity contract.
 
 ## D1 schema lifecycle
 
-`0001_conclave_v8.sql` has been applied to production and is now immutable,
+`0001_syntila_v8.sql` has been applied to production and is now immutable,
 even though the v8 release declaration remains withheld. Its contents must not
 be edited to repair production. All schema changes use new, ordered forward
 migrations (for example, `0002_<purpose>.sql`) and the normal production

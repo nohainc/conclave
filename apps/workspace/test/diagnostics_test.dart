@@ -74,7 +74,7 @@ void main() {
     const runtimeSecret = 'workspace-runtime-secret-never-export';
     final connection = WorkspaceCloudConnection(
       uri: Uri.parse(
-        'wss://app.conclaveax.com/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1&authToken=must-not-leak',
+        'wss://syntila.app/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1&authToken=must-not-leak',
       ),
       workspaceRuntimeId: 'runtime-1',
       workspaceId: 'workspace-1',
@@ -106,9 +106,9 @@ void main() {
     expect(connectionInfo['protocolHello'], 'not started');
     expect(connectionInfo['runtimeCredential'],
         'available_locally_value_withheld');
-    expect(connectionInfo['cloudOrigin'], 'https://app.conclaveax.com');
+    expect(connectionInfo['cloudOrigin'], 'https://syntila.app');
     expect(connectionInfo['webSocketEndpoint'],
-        'wss://app.conclaveax.com/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1');
+        'wss://syntila.app/api/workspace-gateway/connect?workspaceRuntimeId=runtime-1');
     expect(text, isNot(contains(runtimeSecret)));
     expect(text, isNot(contains('must-not-leak')));
     expect(text, isNot(contains('must-not-leak')));

@@ -1,4 +1,4 @@
--- `0001_conclave_v8.sql` was already applied in production before the
+-- `0001_syntila_v8.sql` was already applied in production before the
 -- Profile Lab audience was added to its desktop auth tables. Rebuild both
 -- tables so the deployed database receives the same constraints as a clean
 -- database, while preserving every existing intent and session row.
@@ -24,10 +24,10 @@ CREATE TABLE desktop_auth_intents__multi_audience (
   id TEXT PRIMARY KEY,
   poll_token_hash TEXT NOT NULL,
   client_name TEXT NOT NULL,
-  audience TEXT NOT NULL DEFAULT 'conclave.desktop.management'
+  audience TEXT NOT NULL DEFAULT 'syntila.desktop.management'
     CHECK (audience IN (
-      'conclave.desktop.management',
-      'conclave.profile-lab.management'
+      'syntila.desktop.management',
+      'syntila.profile-lab.management'
     )),
   created_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
@@ -78,8 +78,8 @@ CREATE TABLE desktop_human_sessions__multi_audience (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
   audience TEXT NOT NULL CHECK (audience IN (
-    'conclave.desktop.management',
-    'conclave.profile-lab.management'
+    'syntila.desktop.management',
+    'syntila.profile-lab.management'
   )),
   created_at TEXT NOT NULL,
   last_used_at TEXT NOT NULL,

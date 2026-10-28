@@ -199,7 +199,7 @@ describe("IdentityService", () => {
       freshAge: 0,
       cookieCache: { enabled: false },
     });
-    expect(options.trustedOrigins).toContain("https://app.conclaveax.com");
+    expect(options.trustedOrigins).toContain("https://syntila.app");
     expect(options.advanced).toMatchObject({
       useSecureCookies: false,
       defaultCookieAttributes: {
@@ -212,7 +212,7 @@ describe("IdentityService", () => {
       SYNTILA_DB: {} as D1Database,
       SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-      BETTER_AUTH_URL: "https://app.conclaveax.com",
+      BETTER_AUTH_URL: "https://syntila.app",
     });
     expect(productionOptions.advanced?.useSecureCookies).toBe(true);
     expect(options.socialProviders).toMatchObject({
@@ -773,7 +773,7 @@ describe("IdentityService", () => {
       }));
 
       const response = await handleBetterAuthRequest(
-        new Request("https://app.conclaveax.com/api/auth/sign-up/send-code", {
+        new Request("https://syntila.app/api/auth/sign-up/send-code", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -785,7 +785,7 @@ describe("IdentityService", () => {
           SYNTILA_DB: db,
           SYNTILA_ENVIRONMENT: "production",
           BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-          BETTER_AUTH_URL: "https://app.conclaveax.com",
+          BETTER_AUTH_URL: "https://syntila.app",
           SYNTILA_EMAIL: { send },
         },
       );
@@ -820,7 +820,7 @@ describe("IdentityService", () => {
       const send = vi.fn();
 
       const response = await handleBetterAuthRequest(
-        new Request("https://app.conclaveax.com/api/auth/sign-up/send-code", {
+        new Request("https://syntila.app/api/auth/sign-up/send-code", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -832,7 +832,7 @@ describe("IdentityService", () => {
           SYNTILA_DB: db,
           SYNTILA_ENVIRONMENT: "production",
           BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-          BETTER_AUTH_URL: "https://app.conclaveax.com",
+          BETTER_AUTH_URL: "https://syntila.app",
           SYNTILA_EMAIL: { send },
         },
       );
@@ -854,7 +854,7 @@ describe("IdentityService", () => {
       });
 
       const response = await handleBetterAuthRequest(
-        new Request("https://app.conclaveax.com/api/auth/sign-up/email", {
+        new Request("https://syntila.app/api/auth/sign-up/email", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -868,7 +868,7 @@ describe("IdentityService", () => {
           SYNTILA_DB: db,
           SYNTILA_ENVIRONMENT: "production",
           BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-          BETTER_AUTH_URL: "https://app.conclaveax.com",
+          BETTER_AUTH_URL: "https://syntila.app",
         },
       );
 

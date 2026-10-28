@@ -57,15 +57,15 @@ void main() {
     expect(
         WorkRootResolver(platform: FakePlatform('macos', '/home/tester'))
             .defaultPath,
-        '/home/tester/Documents/Conclave');
+        '/home/tester/Documents/Syntila');
     expect(
         WorkRootResolver(platform: FakePlatform('linux', '/home/tester'))
             .defaultPath,
-        '/home/tester/Documents/Conclave');
+        '/home/tester/Documents/Syntila');
     expect(
         WorkRootResolver(platform: FakePlatform('windows', 'C:\\Users\\tester'))
             .defaultPath,
-        'C:\\Users\\tester\\Documents\\Conclave');
+        'C:\\Users\\tester\\Documents\\Syntila');
   });
 
   test('creates and canonicalizes a custom root with hardened permissions',

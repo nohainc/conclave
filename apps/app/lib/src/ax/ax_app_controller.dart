@@ -1090,7 +1090,7 @@ extension _AxAppController on _AxAppStateMixin {
     final run = executionSnapshot.run;
     if (run == null) return;
     final diagnostics = <String, Object?>{
-      'format': 'conclave-run-diagnostics-v1',
+      'format': 'syntila-run-diagnostics-v1',
       'diagnosticSchemaVersion': 1,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'workspaceId': executionSnapshot.workspaceId,

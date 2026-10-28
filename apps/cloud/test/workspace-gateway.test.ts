@@ -149,7 +149,7 @@ describe("Workspace runtime Gateway", () => {
       new Request("https://gateway.internal/runtime/sessions", {
         method: "POST",
         headers: {
-          authorization: "Bearer conclave_dhs_human-session",
+          authorization: "Bearer syntila_dhs_human-session",
           "content-type": "application/json",
         },
         body: JSON.stringify({

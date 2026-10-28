@@ -44,6 +44,7 @@ import { grantStartPermit } from "./assignment-start-permit.js";
 import {
   escalateUnconfirmedRevocations,
   finalizeAssignmentRevocation,
+  finalizeRevocationsOfRevokedRuntimes,
 } from "./assignment-revocation.js";
 import {
   ACTIVE_ASSIGNMENT_STATUS_SQL,
@@ -1789,6 +1790,10 @@ export class WorkspaceGateway implements DurableObject {
   private async resendPendingRevocations(): Promise<void> {
     const workspaceId = this.executionWorkspaceId;
     if (!workspaceId) return;
+    await finalizeRevocationsOfRevokedRuntimes(
+      this.env.SYNTILA_DB,
+      workspaceId,
+    );
     await escalateUnconfirmedRevocations(
       this.env.SYNTILA_DB,
       ASSIGNMENT_REVOCATION_CONFIRMATION_MS,

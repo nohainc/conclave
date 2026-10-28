@@ -102,8 +102,7 @@ void main() {
     expect(find.text('Heading', findRichText: true), findsOneWidget);
     expect(find.text('Item', findRichText: true), findsOneWidget);
     expect(find.text('Tail', findRichText: true), findsOneWidget);
-    expect(
-        tester.widget<SyntilaCodeBlock>(find.byType(SyntilaCodeBlock)).code,
+    expect(tester.widget<SyntilaCodeBlock>(find.byType(SyntilaCodeBlock)).code,
         contains('one\n\nthree'));
     expect(tester.takeException(), isNull);
   });

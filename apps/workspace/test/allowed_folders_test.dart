@@ -27,7 +27,7 @@ void main() {
         (await Directory.systemTemp.createTemp('allowed-folders-'))
             .resolveSymbolicLinksSync());
     home = await Directory('${sandbox.path}/home').create();
-    workRoot = await Directory('${home.path}/Documents/Conclave')
+    workRoot = await Directory('${home.path}/Documents/Syntila')
         .create(recursive: true);
     appData = await Directory('${home.path}/Library/Application Support')
         .create(recursive: true);

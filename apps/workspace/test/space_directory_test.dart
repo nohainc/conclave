@@ -24,7 +24,7 @@ void main() {
     );
 
     expect(second.path, first.path);
-    expect(File('${first.path}/.conclave-space.json').existsSync(), isTrue);
+    expect(File('${first.path}/.syntila-space.json').existsSync(), isTrue);
   });
 
   test('adopts a marked manual move', () async {
@@ -72,7 +72,7 @@ void main() {
     expect(second.path, first.path);
     expect(File('${first.path}/user.txt').readAsStringSync(), 'keep');
     expect(
-        jsonDecode(File('${first.path}/.conclave-space.json')
+        jsonDecode(File('${first.path}/.syntila-space.json')
             .readAsStringSync())['spaceId'],
         'space-b');
   });
@@ -94,7 +94,7 @@ void main() {
     );
     expect(Directory('${work.path}/Space (2)').existsSync(), isFalse);
     expect(
-        File('${work.path}/Space/.conclave-space.json').existsSync(), isFalse);
+        File('${work.path}/Space/.syntila-space.json').existsSync(), isFalse);
 
     final adopted = await resolver.resolve(
       spaceId: 'space-a',
@@ -168,9 +168,7 @@ void main() {
     expect(
         File('${state.path}/space-fences/space-a/thread-a.json').existsSync(),
         isTrue);
-    expect(
-        File('${work.path}/Syntila/.conclave-space-fence.json')
-            .existsSync(),
+    expect(File('${work.path}/Syntila/.syntila-space-fence.json').existsSync(),
         isFalse);
   });
 
@@ -282,7 +280,7 @@ void main() {
         await resolver.resolve(spaceId: 'space-a', spaceName: 'Plan');
     File('${folder.path}/notes.txt').writeAsStringSync('keep');
     // Another environment sharing the work root claims the folder.
-    File('${folder.path}/.conclave-space.json').writeAsStringSync(
+    File('${folder.path}/.syntila-space.json').writeAsStringSync(
       jsonEncode({'schemaVersion': 1, 'spaceId': 'space-b'}),
     );
 
@@ -303,7 +301,7 @@ void main() {
     expect(adopted.path, folder.path);
     expect(File('${folder.path}/notes.txt').readAsStringSync(), 'keep');
     final marker = jsonDecode(
-      File('${folder.path}/.conclave-space.json').readAsStringSync(),
+      File('${folder.path}/.syntila-space.json').readAsStringSync(),
     ) as Map;
     expect(marker['spaceId'], 'space-a');
   });
@@ -339,7 +337,7 @@ void main() {
 
       expect(mine.path, '${work.path}/user-1/Website');
       expect(theirs.path, '${work.path}/user-2/Website');
-      expect(File('${mine.path}/.conclave-space.json').existsSync(), isTrue);
+      expect(File('${mine.path}/.syntila-space.json').existsSync(), isTrue);
     });
 
     test('keeps the folder when the Space is renamed', () async {

@@ -74,9 +74,8 @@ class ToastOverlay extends StatelessWidget {
                 break;
               case ToastType.info:
                 accentColor = SyntilaBrand.info;
-                bgColor = isDark
-                    ? SyntilaBrand.infoWashDark
-                    : SyntilaBrand.infoWash;
+                bgColor =
+                    isDark ? SyntilaBrand.infoWashDark : SyntilaBrand.infoWash;
                 icon = Icons.info_outline_rounded;
                 break;
             }

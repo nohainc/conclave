@@ -51,25 +51,25 @@ describe("email template architecture", () => {
     const cases = [
       renderEmailTemplate("auth.verify-email.v1", {
         recipientName: "Ada",
-        verificationUrl: "https://app.conclaveax.com/verify?token=abc",
+        verificationUrl: "https://syntila.app/verify?token=abc",
         expiresInMinutes: 60,
       }),
       renderEmailTemplate("auth.reset-password.v1", {
         recipientName: "Ada",
-        resetUrl: "https://app.conclaveax.com/reset?token=abc",
+        resetUrl: "https://syntila.app/reset?token=abc",
         expiresInMinutes: 60,
       }),
       renderEmailTemplate("auth.confirm-email-change.v1", {
         recipientName: "Ada",
         newEmail: "ada@example.com",
-        confirmationUrl: "https://app.conclaveax.com/change?token=abc",
+        confirmationUrl: "https://syntila.app/change?token=abc",
         expiresInMinutes: 60,
       }),
       renderEmailTemplate("space.invitation.v1", {
         inviterName: "Grace",
         spaceName: "Research",
         role: "member",
-        invitationUrl: "https://app.conclaveax.com/?invitation=abc",
+        invitationUrl: "https://syntila.app/?invitation=abc",
         recipientEmail: "ada@example.com",
       }),
       renderEmailTemplate("space.invitation-accepted.v1", {
@@ -90,7 +90,7 @@ describe("email template architecture", () => {
       expect(rendered.html).toContain("<!doctype html>");
       expect(rendered.html).toContain("Syntila");
       expect(rendered.html).toContain(
-        "https://app.conclaveax.com/assets/assets/branding/syntila_email_logo.png",
+        "https://syntila.app/assets/assets/branding/syntila_email_logo.png",
       );
       expect(rendered.html).toContain(
         "@media only screen and (max-width:620px)",
@@ -115,7 +115,7 @@ describe("email template architecture", () => {
       inviterName: "<script>alert(1)</script>",
       spaceName: 'R&D "private"',
       role: "member",
-      invitationUrl: "https://app.conclaveax.com/?invitation=abc",
+      invitationUrl: "https://syntila.app/?invitation=abc",
       recipientEmail: "person@example.com",
     });
 
@@ -133,7 +133,7 @@ describe("email template architecture", () => {
   it("does not invent a sender or delivery behavior", () => {
     const rendered = renderEmailTemplate("auth.welcome.v1", {
       recipientName: "Ada",
-      appUrl: "https://app.conclaveax.com",
+      appUrl: "https://syntila.app",
     });
     expect(rendered.html).not.toContain("auth@auth.earthuc.com");
     expect(rendered.html).not.toContain("SYNTILA_EMAIL");
@@ -142,7 +142,7 @@ describe("email template architecture", () => {
   it("returns a versioned result with safe metadata and deterministic content", () => {
     const input = {
       recipientName: "Ada",
-      verificationUrl: "https://app.conclaveax.com/verify?token=abc",
+      verificationUrl: "https://syntila.app/verify?token=abc",
       expiresInMinutes: 60,
     } as const;
     const first = renderEmail("auth.verify-email.v1", input);
@@ -155,7 +155,7 @@ describe("email template architecture", () => {
       category: "essential",
     });
     expect(JSON.stringify(first.metadata)).not.toContain("token");
-    expect(JSON.stringify(first.metadata)).not.toContain("app.conclaveax.com");
+    expect(JSON.stringify(first.metadata)).not.toContain("syntila.app");
   });
 
   it("requires an approved application origin for action URLs", () => {
@@ -166,7 +166,7 @@ describe("email template architecture", () => {
           verificationUrl: "https://evil.example/verify",
           expiresInMinutes: 60,
         },
-        { approvedOrigins: ["https://app.conclaveax.com"] },
+        { approvedOrigins: ["https://syntila.app"] },
       ),
     ).toThrow("origin is not approved");
   });
@@ -177,7 +177,7 @@ describe("email template architecture", () => {
         inviterName: "Grace",
         spaceName: "",
         role: "member",
-        invitationUrl: "https://app.conclaveax.com/?invitation=abc",
+        invitationUrl: "https://syntila.app/?invitation=abc",
         recipientEmail: "person@example.com",
       }),
     ).toThrow("spaceName is required");
@@ -210,7 +210,7 @@ describe("email template architecture", () => {
       to: "person@example.com",
       templateId: "auth.verify-email.v1",
       input: {
-        verificationUrl: "https://app.conclaveax.com/verify",
+        verificationUrl: "https://syntila.app/verify",
         expiresInMinutes: 60,
       },
     });
@@ -222,7 +222,7 @@ describe("email template architecture", () => {
     const transport = createMockEmailTransport();
     const rendered = renderEmail("auth.welcome.v1", {
       recipientName: "Ada",
-      appUrl: "https://app.conclaveax.com",
+      appUrl: "https://syntila.app",
     });
 
     await sendRenderedEmail(
@@ -247,31 +247,29 @@ describe("email template architecture", () => {
     });
     const action = renderEmailTemplate("auth.verify-email.v1", {
       recipientName: "Ada",
-      verificationUrl: "https://app.conclaveax.com/verify?token=a&next=/home",
+      verificationUrl: "https://syntila.app/verify?token=a&next=/home",
       expiresInMinutes: 60,
     });
 
     expect(security.html).toContain("#fff8eb");
     expect(action.html).toContain("If the button does not work");
     expect(action.text).toContain(
-      "https://app.conclaveax.com/verify?token=a&next=/home",
+      "https://syntila.app/verify?token=a&next=/home",
     );
-    expect(action.text).toContain(
-      "If you did not create a Syntila account",
-    );
+    expect(action.text).toContain("If you did not create a Syntila account");
     expect(action.text).toContain("This link is valid for 60 minutes.");
   });
 
   it("requires an accurate positive validity period for action links", () => {
     expect(() =>
       renderEmailTemplate("auth.verify-email.v1", {
-        verificationUrl: "https://app.conclaveax.com/verify",
+        verificationUrl: "https://syntila.app/verify",
         expiresInMinutes: 0,
       }),
     ).toThrow("positive whole number of minutes");
     expect(() =>
       renderEmailTemplate("auth.reset-password.v1", {
-        resetUrl: "https://app.conclaveax.com/reset",
+        resetUrl: "https://syntila.app/reset",
         expiresInMinutes: 1.5,
       }),
     ).toThrow("positive whole number of minutes");
@@ -283,7 +281,7 @@ describe("email template architecture", () => {
         inviterName: "A".repeat(4097),
         spaceName: "Research",
         role: "member",
-        invitationUrl: "https://app.conclaveax.com/?invitation=preview",
+        invitationUrl: "https://syntila.app/?invitation=preview",
         recipientEmail: "ada@example.com",
       }),
     ).toThrow("at most 4096 characters");
@@ -293,7 +291,7 @@ describe("email template architecture", () => {
     const longName = "A".repeat(600);
     const rendered = renderEmailTemplate("auth.welcome.v1", {
       recipientName: longName,
-      appUrl: "https://app.conclaveax.com",
+      appUrl: "https://syntila.app",
     });
 
     expect(rendered.text).toContain(longName);
@@ -305,7 +303,7 @@ describe("email template architecture", () => {
       inviterName: "Grace Hopper",
       spaceName: "Research ".repeat(120),
       role: "collaborator",
-      invitationUrl: "https://app.conclaveax.com/?invitation=preview",
+      invitationUrl: "https://syntila.app/?invitation=preview",
       recipientEmail: "ada@example.com",
     });
     expect(rendered.html).toContain("max-width:600px");

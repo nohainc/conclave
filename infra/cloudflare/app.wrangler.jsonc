@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "conclave-ax-app",
+  "name": "syntila-app",
   "main": "../../apps/cloud/src/index.ts",
   "compatibility_date": "2026-09-21",
   "compatibility_flags": ["nodejs_compat"],
@@ -25,8 +25,8 @@
   "vars": {
     "SYNTILA_PROFILE_LAB_OWNER_EMAIL": "vitalii@nohainc.com",
     "SYNTILA_ENVIRONMENT": "production",
-    "BETTER_AUTH_URL": "https://app.conclaveax.com",
-    "SYNTILA_APP_URL": "https://app.conclaveax.com",
+    "BETTER_AUTH_URL": "https://syntila.app",
+    "SYNTILA_APP_URL": "https://syntila.app",
     "SYNTILA_EMAIL_FROM": "syntila@conclaveax.com",
     "SYNTILA_EMAIL_FALLBACK_FROM": "vitalii@conclaveax.com",
     "SYNTILA_EMAIL_FROM_NAME": "Syntila",
@@ -37,20 +37,20 @@
   "d1_databases": [
     {
       "binding": "SYNTILA_DB",
-      "database_name": "conclave-v8-production",
-      "database_id": "50a2b0dd-5f3d-4fab-af12-93cd96831701",
+      "database_name": "syntila",
+      "database_id": "6130c425-59e2-4ec7-b7bd-d3fe8a8ea6a7",
       "migrations_dir": "../../apps/cloud/migrations-v8",
     },
   ],
   "r2_buckets": [
     {
       "binding": "SYNTILA_ARTIFACTS",
-      "bucket_name": "conclave-artifacts-production",
+      "bucket_name": "syntila-artifacts-production",
     },
   ],
   "workflows": [
     {
-      "name": "conclave-run",
+      "name": "syntila-run",
       "binding": "SYNTILA_RUN_WORKFLOW",
       "class_name": "SyntilaRunWorkflow",
     },
@@ -103,7 +103,7 @@
   ],
   "routes": [
     {
-      "pattern": "app.conclaveax.com",
+      "pattern": "syntila.app",
       "custom_domain": true,
     },
   ],

@@ -356,7 +356,7 @@ describe("Cloud event publisher", () => {
     const database = new DatabaseSync(":memory:");
     database.exec(
       readFileSync(
-        new URL("../migrations-v8/0001_conclave_v8.sql", import.meta.url),
+        new URL("../migrations-v8/0001_syntila_v8.sql", import.meta.url),
         "utf8",
       ),
     );

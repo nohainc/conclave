@@ -3,7 +3,7 @@
 ## Confirmed production fault
 
 Before editing admission, the Cloudflare script-content API confirmed production
-`conclave-ax-app` version `63aefd33-830b-4be0-8370-6a73eb64faa2` contained the
+`syntila-app` version `63aefd33-830b-4be0-8370-6a73eb64faa2` contained the
 same dispatcher as the branch:
 
 ```ts

@@ -1,4 +1,4 @@
-name: Clean up Conclave AX Public Site Preview
+name: Clean up Syntila AX Public Site Preview
 
 on:
   pull_request:
@@ -32,6 +32,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: >-
           ../../node_modules/.bin/wrangler delete
-          conclave-ax-site-pr-${{ github.event.pull_request.number }}
+          syntila-ax-site-pr-${{ github.event.pull_request.number }}
           --config wrangler.jsonc
           --force

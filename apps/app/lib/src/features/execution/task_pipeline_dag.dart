@@ -191,8 +191,7 @@ class _TaskNodeCard extends StatelessWidget {
     } else {
       statusColor =
           isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
-      statusBgColor =
-          isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper;
+      statusBgColor = isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper;
       statusIcon = Icons.schedule_rounded;
       borderColor = isSelected
           ? SyntilaBrand.accent

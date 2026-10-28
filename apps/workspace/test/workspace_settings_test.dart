@@ -17,7 +17,7 @@ void main() {
 
   WorkspaceSettings settings({int slots = 6}) => WorkspaceSettings(
         serviceEnabled: true,
-        cloudUrl: 'https://app.conclaveax.com',
+        cloudUrl: 'https://syntila.app',
         connectOnStart: true,
         workspaceName: 'GMKtec',
         parallelSlots: slots,
@@ -96,7 +96,7 @@ void main() {
       final store = WorkspaceSettingsStore(state);
       final generated = await store.ensureDefaults();
 
-      expect(generated.cloudUrl, 'https://app.conclaveax.com');
+      expect(generated.cloudUrl, 'https://syntila.app');
       // A new file is named after this machine and starts with 3 slots.
       expect(generated.workspaceName, isNotEmpty);
       expect(generated.workspaceName.length, lessThanOrEqualTo(120));

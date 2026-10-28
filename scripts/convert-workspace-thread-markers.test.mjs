@@ -34,9 +34,7 @@ test("preview and conversion preserve IDs, timestamp, files and backup; rerun is
   assert.ok(existsSync(f.source));
   convertWorkspaceThreadMarkers(f.root, { apply: true });
   assert.deepEqual(
-    JSON.parse(
-      readFileSync(join(f.directory, ".conclave-thread.json"), "utf8"),
-    ),
+    JSON.parse(readFileSync(join(f.directory, ".syntila-thread.json"), "utf8")),
     {
       schemaVersion: 1,
       spaceId: "space-1",
@@ -58,16 +56,16 @@ test("rejects mismatched identities without adopting user data", (t) => {
     () => convertWorkspaceThreadMarkers(f.root, { apply: true }),
     /identity/,
   );
-  assert.ok(!existsSync(join(f.directory, ".conclave-thread.json")));
+  assert.ok(!existsSync(join(f.directory, ".syntila-thread.json")));
 });
 test("rejects symlink marker and existing current marker", (t) => {
   const f = fixture(t);
-  writeFileSync(join(f.directory, ".conclave-thread.json"), "{}");
+  writeFileSync(join(f.directory, ".syntila-thread.json"), "{}");
   assert.throws(
     () => convertWorkspaceThreadMarkers(f.root, { apply: true }),
     /already exists/,
   );
-  rmSync(join(f.directory, ".conclave-thread.json"));
+  rmSync(join(f.directory, ".syntila-thread.json"));
   renameFixture();
   function renameFixture() {
     rmSync(f.source);

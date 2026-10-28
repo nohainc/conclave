@@ -19,7 +19,7 @@ if [[ ! -f apps/app/build/web/index.html ]]; then
   exit 1
 fi
 
-echo "Deploying Syntila Cloud API Worker (conclave-ax-app)..."
+echo "Deploying Syntila Cloud API Worker (syntila-app)..."
 pnpm exec wrangler deploy --config "$wrangler_config" "$@"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then

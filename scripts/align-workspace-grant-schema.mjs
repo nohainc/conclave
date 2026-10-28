@@ -20,7 +20,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     new URL(".development/align-workspace-grant-schema.sql", root),
     workspaceGrantScopeAlignmentSql(
       readFileSync(
-        new URL("apps/cloud/migrations-v8/0001_conclave_v8.sql", root),
+        new URL("apps/cloud/migrations-v8/0001_syntila_v8.sql", root),
         "utf8",
       ),
     ),

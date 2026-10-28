@@ -6,10 +6,7 @@ import { workerAssignmentAlignmentSql } from "./align-worker-assignment-schema.m
 it("aligns the empty historical table and preserves inbound references and indexes", () => {
   const db = new DatabaseSync(":memory:");
   const baseline = readFileSync(
-    new URL(
-      "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
-      import.meta.url,
-    ),
+    new URL("../apps/cloud/migrations-v8/0001_syntila_v8.sql", import.meta.url),
     "utf8",
   );
   try {

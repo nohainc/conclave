@@ -48,7 +48,7 @@ keys or provider credentials are needed by CI.
   Only ciphertext is written under `Credentials` in private Workspace state.
   State uses `%LOCALAPPDATA%\Syntila\Workspace`; user work defaults to
   `%USERPROFILE%\Documents\Syntila`, independently of application files.
-- Legacy `~/.conclave-workspace` state stops default activation with a
+- Legacy `~/.syntila-workspace` state stops default activation with a
   recoverable error. Registries may hold absolute paths, so the application does
   not move files or guess which root is authoritative. Select the existing root
   with `SYNTILA_WORKSPACE_DATA_DIR` (or the service's `--data-dir`) to retain its

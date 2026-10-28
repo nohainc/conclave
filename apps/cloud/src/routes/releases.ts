@@ -93,7 +93,7 @@ export async function handleGetLatestWorkspaceRelease(
       // Workspace releases use the Cloud-managed signing identity. Keep the
       // publisher explicit so Workspace can apply its trust policy rather than
       // treating a missing publisher as an unsigned release.
-      publisher: "conclave",
+      publisher: "syntila",
       signature: latest.signature,
       releaseNotes: latest.releaseNotes,
       createdAt: latest.createdAt,
@@ -352,7 +352,7 @@ export async function handlePublishWorkspaceRelease(
   }
   const digest = computedDigest;
 
-  const publisher = env.SYNTILA_RELEASE_PUBLISHER ?? "conclave";
+  const publisher = env.SYNTILA_RELEASE_PUBLISHER ?? "syntila";
   if (!signingKeyId || !providedSignature) {
     return json(
       { error: "signingKeyId and signature are required" },

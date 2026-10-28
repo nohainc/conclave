@@ -26,7 +26,7 @@ function context(
     prompt: "Make the requested change",
     workingDirectory: "/workspace/repo",
     home: "/home/tester",
-    workerStateDirectory: "/home/tester/.conclave/worker",
+    workerStateDirectory: "/home/tester/.syntila/worker",
     assignmentTimeoutMs: 30_000,
     executionPolicy: "restricted",
     sessionPolicy: "stateless",

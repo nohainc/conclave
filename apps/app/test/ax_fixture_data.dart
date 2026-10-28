@@ -388,7 +388,7 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
       const AxDesktopAuthIntentStatus(
         status: 'pending',
         clientName: 'Syntila Workspace',
-        audience: 'conclave.desktop.management',
+        audience: 'syntila.desktop.management',
       );
 
   @override

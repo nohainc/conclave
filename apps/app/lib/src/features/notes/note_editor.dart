@@ -429,8 +429,8 @@ class _NoteEditorState extends State<NoteEditor> {
             key: const ValueKey('note-preview'),
             // Free space between the toolbar and the formatted note.
             padding: const EdgeInsets.only(top: 16),
-            child: SyntilaMarkdownBody(
-                data: _body.text, preserveBlankLines: true),
+            child:
+                SyntilaMarkdownBody(data: _body.text, preserveBlankLines: true),
           ),
         ),
       );

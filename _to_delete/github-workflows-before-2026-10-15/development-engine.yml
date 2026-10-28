@@ -5,18 +5,18 @@ on:
     branches: [main]
     paths:
       - "engines/cli_worker/**"
-      - "packages/conclave_worker_protocol/**"
+      - "packages/syntila_worker_protocol/**"
       - "packages/tool_profile_v1/**"
-      - "packages/conclave_cli_worker_runtime/**"
+      - "packages/syntila_cli_worker_runtime/**"
       - "scripts/validate-engine.sh"
       - "scripts/build-cli-worker-engine.sh"
       - ".github/workflows/development-engine.yml"
   pull_request:
     paths:
       - "engines/cli_worker/**"
-      - "packages/conclave_worker_protocol/**"
+      - "packages/syntila_worker_protocol/**"
       - "packages/tool_profile_v1/**"
-      - "packages/conclave_cli_worker_runtime/**"
+      - "packages/syntila_cli_worker_runtime/**"
       - "scripts/validate-engine.sh"
       - "scripts/build-cli-worker-engine.sh"
       - ".github/workflows/development-engine.yml"

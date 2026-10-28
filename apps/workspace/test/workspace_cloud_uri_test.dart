@@ -22,10 +22,10 @@ void main() {
       )!;
 
   test('HTTPS origin becomes WSS with a materialized default port', () {
-    final uri = configFor('https://app.conclaveax.com/#discard-me');
+    final uri = configFor('https://syntila.app/#discard-me');
 
     expect(uri.scheme, 'wss');
-    expect(uri.host, 'app.conclaveax.com');
+    expect(uri.host, 'syntila.app');
     expect(uri.port, 443);
     expect(uri.path, '/api/workspace-gateway/connect');
     expect(uri.queryParameters['workspaceRuntimeId'], 'runtime-test');

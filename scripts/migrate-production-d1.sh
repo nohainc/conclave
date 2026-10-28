@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-database_name="${SYNTILA_PRODUCTION_D1_NAME:-conclave-v8-production}"
+database_name="${SYNTILA_PRODUCTION_D1_NAME:-syntila}"
 wrangler_config="${SYNTILA_WRANGLER_CONFIG:-${repo_root}/infra/cloudflare/app.wrangler.jsonc}"
 
 if [[ "${CONFIRM_PRODUCTION_MIGRATION:-}" != "YES" ]]; then

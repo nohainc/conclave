@@ -153,7 +153,7 @@ export interface ContextHistoryFact {
   readonly contextRevision: number;
   readonly kind: ConversationHistoryKind;
   readonly eventType: string;
-  readonly actorType: "user" | "worker" | "conclave";
+  readonly actorType: "user" | "worker" | "syntila";
   readonly actorId: string | null;
   readonly text: string | null;
   readonly sourceId?: string;
@@ -235,7 +235,7 @@ export function projectContextState(
     }
     if (
       entry.kind !== "context_event" ||
-      entry.actorType !== "conclave" ||
+      entry.actorType !== "syntila" ||
       entry.eventType !== "context.fact_updated"
     )
       continue;

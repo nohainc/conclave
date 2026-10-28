@@ -32,10 +32,10 @@ Cloudflare operator account (`pnpm exec wrangler login`). The app uses that
 account's D1 permissions. It has no separate app login and must only be installed
 for trusted database operators. No API key is collected or persisted by the app.
 
-Local selects `conclave-development` through `apps/cloud/wrangler.jsonc` and
+Local selects `syntila-development` through `apps/cloud/wrangler.jsonc` and
 Wrangler's local persistence directory associated with that config. Run the
 existing local migration/startup scripts first. Production selects
-`conclave-v8-production` through `infra/cloudflare/app.wrangler.jsonc`, with
+`syntila` through `infra/cloudflare/app.wrangler.jsonc`, with
 explicit `--remote`. Neither target can be supplied by user-controlled input.
 Switching environments clears the selected account and reloads data. Searches
 return at most 200 displayed accounts; refine the search when the limit is reached.

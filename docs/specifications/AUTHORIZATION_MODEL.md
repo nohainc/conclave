@@ -81,7 +81,7 @@ The reconciliation is audited; ambiguous state requires operator investigation.
 `POST /api/desktop-auth/password` supports headless Workspace setup with an
 existing account's email/password. It delegates verification and rate limiting
 to the same Better Auth sign-in route as AX, refuses incomplete/MFA challenges,
-then issues only a `conclave.desktop.management` session using the existing
+then issues only a `syntila.desktop.management` session using the existing
 single-use claim mechanism. Its temporary authentication cookie is not returned
 to the caller and the temporary web session is signed out. Passwords are never
 persisted by Workspace or Syntila application tables. Responses are no-store.

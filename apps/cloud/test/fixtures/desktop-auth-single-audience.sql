@@ -23,7 +23,7 @@ CREATE TABLE desktop_human_sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash TEXT NOT NULL UNIQUE,
-  audience TEXT NOT NULL CHECK (audience = 'conclave.desktop.management'),
+  audience TEXT NOT NULL CHECK (audience = 'syntila.desktop.management'),
   created_at TEXT NOT NULL,
   last_used_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,

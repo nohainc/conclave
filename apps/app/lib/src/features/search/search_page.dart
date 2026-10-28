@@ -224,8 +224,7 @@ class SearchPage extends StatelessWidget {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: SyntilaColors.primarySoftColor(isDark),
-                          borderRadius:
-                              BorderRadius.circular(SyntilaRadius.sm),
+                          borderRadius: BorderRadius.circular(SyntilaRadius.sm),
                         ),
                         child: Icon(
                           Icons.search_rounded,
@@ -267,13 +266,11 @@ class SearchPage extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 24),
             decoration: BoxDecoration(
-              color: isDark
-                  ? SyntilaBrand.darkSurface
-                  : SyntilaBrand.lightSurface,
+              color:
+                  isDark ? SyntilaBrand.darkSurface : SyntilaBrand.lightSurface,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color:
-                    isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine,
+                color: isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine,
               ),
             ),
             child: Column(

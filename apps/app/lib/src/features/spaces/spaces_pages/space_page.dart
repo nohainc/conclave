@@ -374,8 +374,8 @@ class _SpaceWorkspaceState extends State<_SpaceWorkspace> {
                                               SizedBox(width: 8),
                                               Text('Delete',
                                                   style: TextStyle(
-                                                      color: SyntilaColors
-                                                          .error)),
+                                                      color:
+                                                          SyntilaColors.error)),
                                             ],
                                           ),
                                         ),

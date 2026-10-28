@@ -27,4 +27,4 @@ Claude outputs/
 apps/account_manager/.build/
 
 # Work Request inputs the Workspace copies into a Space folder (user files).
-.conclave/inputs/
+.syntila/inputs/

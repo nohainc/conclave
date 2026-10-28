@@ -22,7 +22,7 @@ function database() {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
   for (const name of [
-    "0001_conclave_v8.sql",
+    "0001_syntila_v8.sql",
     "0002_desktop_auth_multi_audience.sql",
     "0003_workspace_installations.sql",
     "0004_workspace_runtime_identity_uniqueness.sql",

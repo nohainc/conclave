@@ -118,7 +118,7 @@ it("spaces only versioned Syntila facts, never claims inside worker text", () =>
     contextRevision: 1,
     kind: "context_event",
     eventType: "context.fact_updated",
-    actorType: "conclave",
+    actorType: "syntila",
     actorId: null,
     text: null,
     metadata: {

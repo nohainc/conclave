@@ -134,10 +134,7 @@ it("rejects mixed schemas rather than overwriting renamed data", () => {
 });
 it("keeps the fresh-start schema separate from operational conversion", () => {
   const baseline = readFileSync(
-    new URL(
-      "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
-      import.meta.url,
-    ),
+    new URL("../apps/cloud/migrations-v8/0001_syntila_v8.sql", import.meta.url),
     "utf8",
   );
   expect(baseline).toContain("CREATE TABLE spaces");

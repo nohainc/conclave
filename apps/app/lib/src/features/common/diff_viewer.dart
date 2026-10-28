@@ -24,8 +24,7 @@ class DiffViewer extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surfaceColor =
         isDark ? SyntilaBrand.darkSurface : SyntilaBrand.lightSurface;
-    final borderColor =
-        isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
+    final borderColor = isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
     final inkColor = isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk;
     final mutedInk =
         isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;
@@ -46,8 +45,7 @@ class DiffViewer extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color:
-                  isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper,
+              color: isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper,
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(

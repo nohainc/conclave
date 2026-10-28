@@ -25,7 +25,7 @@ it("forwards authentication, raw bodies and queries to the fixed hosted Cloud", 
     ),
     async (request) => {
       expect(request.url).toBe(
-        "https://app.conclaveax.com/api/auth/sign-in/email?test=1",
+        "https://syntila.app/api/auth/sign-in/email?test=1",
       );
       expect(await request.text()).toBe(source);
       expect(request.headers.get("origin")).toBe("http://localhost:3000");
@@ -35,7 +35,7 @@ it("forwards authentication, raw bodies and queries to the fixed hosted Cloud", 
       return new Response("ok", {
         headers: {
           "set-cookie":
-            "__Secure-better-auth.session_token=fixture; Secure; Domain=app.conclaveax.com; SameSite=None; HttpOnly; Path=/",
+            "__Secure-better-auth.session_token=fixture; Secure; Domain=syntila.app; SameSite=None; HttpOnly; Path=/",
         },
       });
     },

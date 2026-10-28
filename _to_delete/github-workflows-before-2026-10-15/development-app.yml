@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/app/**"
-      - "packages/conclave_design/**"
+      - "packages/syntila_design/**"
       - "packages/dart/protocol/**"
       - "packages/protocol/**"
       - "scripts/check-flutter-app.sh"
@@ -13,7 +13,7 @@ on:
   pull_request:
     paths:
       - "apps/app/**"
-      - "packages/conclave_design/**"
+      - "packages/syntila_design/**"
       - "packages/dart/protocol/**"
       - "packages/protocol/**"
       - "scripts/check-flutter-app.sh"
@@ -47,5 +47,5 @@ jobs:
       - name: Validate AX Flutter App
         run: bash scripts/check-flutter-app.sh app
       - name: Build Web Client Bundle
-        run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+        run: flutter build web --release --dart-define=SYNTILA_API_URL=/api
         working-directory: apps/app

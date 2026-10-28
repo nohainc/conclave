@@ -46,8 +46,7 @@ class IndexedDbAxReadCacheBackend implements AxReadCacheBackend {
   }
 
   Future<web.IDBDatabase> _database() => _opening ??= () async {
-        final request =
-            web.window.indexedDB.open('syntila-read-cache-v1', 1);
+        final request = web.window.indexedDB.open('syntila-read-cache-v1', 1);
         request.addEventListener(
             'upgradeneeded',
             ((web.Event _) {

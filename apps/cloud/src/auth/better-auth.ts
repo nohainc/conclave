@@ -204,7 +204,7 @@ async function sendWelcomeEmail(
           }
         })()
       : undefined) ??
-    "https://app.conclaveax.com";
+    "https://syntila.app";
 
   try {
     await sendTemplateEmail(env, {
@@ -291,7 +291,7 @@ export function buildBetterAuthOptions(
     ["email", "profile"],
   );
   const trustedOrigins = [
-    "https://app.conclaveax.com",
+    "https://syntila.app",
     "http://localhost:3000",
     "http://localhost:8080",
     "http://localhost:8787",
@@ -869,9 +869,7 @@ async function handleSignUpSendCode(
       verificationCode,
     );
   } catch (error) {
-    await env.SYNTILA_DB.prepare(
-      "DELETE FROM auth_verifications WHERE id = ?1",
-    )
+    await env.SYNTILA_DB.prepare("DELETE FROM auth_verifications WHERE id = ?1")
       .bind(verificationId)
       .run();
     const failure = classifyEmailDeliveryFailure(error);
@@ -953,9 +951,7 @@ async function verifySignUpOtpIfProvided(
 
   const expiresAtMs = Date.parse(record.expires_at);
   if (Number.isNaN(expiresAtMs) || expiresAtMs < Date.now()) {
-    await env.SYNTILA_DB.prepare(
-      "DELETE FROM auth_verifications WHERE id = ?1",
-    )
+    await env.SYNTILA_DB.prepare("DELETE FROM auth_verifications WHERE id = ?1")
       .bind(record.id)
       .run();
     return jsonAuthError(
@@ -967,9 +963,7 @@ async function verifySignUpOtpIfProvided(
 
   const parsed = parseStoredOtpValue(record.value);
   if (!parsed || parsed.attempts >= SIGNUP_OTP_MAX_ATTEMPTS) {
-    await env.SYNTILA_DB.prepare(
-      "DELETE FROM auth_verifications WHERE id = ?1",
-    )
+    await env.SYNTILA_DB.prepare("DELETE FROM auth_verifications WHERE id = ?1")
       .bind(record.id)
       .run();
     return jsonAuthError(
@@ -1162,9 +1156,7 @@ async function deliverEmailChangeCode(
     await sendSignUpVerificationCodeEmail(env, recipient, code, "email-change");
     return undefined;
   } catch (error) {
-    await env.SYNTILA_DB.prepare(
-      "DELETE FROM auth_verifications WHERE id = ?1",
-    )
+    await env.SYNTILA_DB.prepare("DELETE FROM auth_verifications WHERE id = ?1")
       .bind(verificationId)
       .run();
     const failure = classifyEmailDeliveryFailure(error);

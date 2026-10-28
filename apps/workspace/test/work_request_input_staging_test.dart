@@ -289,7 +289,7 @@ void main() {
           content: _chunks(bytes));
       final scope =
           await handler().prepareAssignmentScope(context(attachment(bytes)));
-      final file = File('${scope.workingDirectory.path}/.conclave/inputs/'
+      final file = File('${scope.workingDirectory.path}/.syntila/inputs/'
           '$_requestId/file-001');
       expect(await file.readAsBytes(), bytes);
     });
@@ -308,7 +308,7 @@ void main() {
       }).prepareAssignmentScope(context(attachment(bytes)));
       expect(fetched, [_fileA]);
       expect(
-          await File('${scope.workingDirectory.path}/.conclave/inputs/'
+          await File('${scope.workingDirectory.path}/.syntila/inputs/'
                   '$_requestId/file-001')
               .readAsBytes(),
           bytes);

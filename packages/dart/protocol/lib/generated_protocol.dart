@@ -36,8 +36,7 @@ const executionErrorMessages = <String, String>{
       'This conversation exceeds the supported context limit. Clear AI History and retry; the latest answer is kept as context.',
 };
 
-const workspaceRuntimeProtocolSchemaName =
-    'syntila.workspace-runtime-protocol';
+const workspaceRuntimeProtocolSchemaName = 'syntila.workspace-runtime-protocol';
 const workspaceRuntimeProtocolSchemaVersion = '5.1';
 const workspaceRuntimeProtocolSchemaMaxMessageSizeBytes = 4194304;
 const workspaceRuntimeProtocolSchemaMessageTypes = <String>{

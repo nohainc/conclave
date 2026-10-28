@@ -13,16 +13,16 @@ Apple network-client entitlement.
 The default layout is:
 
 ```text
-~/Library/Application Support/Conclave/Workspace/
+~/Library/Application Support/Syntila/Workspace/
     State/       runtime identity, Workspace registration, local Worker
                  registry, and assignment journal
     Profiles/    verified Tool Profiles and cached logical Worker catalog
     Engines/     generic CLI Worker Engine
     Workers/     per-Worker state, sessions, and diagnostics
     Updates/     staged Workspace updates
-~/Library/Logs/Conclave Workspace/
+~/Library/Logs/Syntila Workspace/
     workspace.log
-~/Documents/Conclave/
+~/Documents/Syntila/
     <Space>/     user-owned Space Work Directories and Thread files
 ```
 
@@ -49,7 +49,7 @@ they never contain bearer credentials.
 Workspace initializes fresh local runtime state under the Workspace-owned state
 directory. It does not import pre-Workspace registration, Worker registry, or
 update files. The former application-managed Work Root is moved to the default
-user Work Root (`~/Documents/Conclave`) only when that destination is absent; if
+user Work Root (`~/Documents/Syntila`) only when that destination is absent; if
 both locations exist, both remain untouched. Workspace never deletes Work Root.
 Workers use one stable, human-readable directory per Space under that root.
 The private registry and directory marker bind the path to the immutable
@@ -61,12 +61,12 @@ The ownership boundary is explicit:
 
 ```text
 USER-OWNED
-~/Documents/Conclave/<Space>/projects/files
+~/Documents/Syntila/<Space>/projects/files
 
 SYNTILA-OWNED
-~/Library/Application Support/Conclave/Workspace/
+~/Library/Application Support/Syntila/Workspace/
   profiles/ engines/ sessions/ logs/ runtime/
-~/Library/Application Support/Conclave/Profile Lab/
+~/Library/Application Support/Syntila/Profile Lab/
 ```
 
 Changing Work Root only changes where future Space directories resolve. It does

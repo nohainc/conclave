@@ -3,7 +3,7 @@
 **Status:** Superseded historical Architecture v8 Profile Lifecycle Contract
 **Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-syntila-profile-lab.md)  
 **Profile Schema:** [Tool Profile v1](TOOL_PROFILE_V1.md)  
-**Authority:** Syntila Cloud Registry (`apps/cloud/src/tool-profile-registry.ts`) and D1 Schema (`apps/cloud/migrations-v8/0001_conclave_v8.sql`)
+**Authority:** Syntila Cloud Registry (`apps/cloud/src/tool-profile-registry.ts`) and D1 Schema (`apps/cloud/migrations-v8/0001_syntila_v8.sql`)
 
 V9 replacement: [WORKER_PROFILE_V9.md](WORKER_PROFILE_V9.md). This document is
 retained to explain the historical V8 release lifecycle and is not a supported

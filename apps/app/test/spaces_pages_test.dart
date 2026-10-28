@@ -220,8 +220,7 @@ void main() {
           findsWidgets);
       expect(
           tester
-              .widgetList<SyntilaMarkdownBody>(
-                  find.byType(SyntilaMarkdownBody))
+              .widgetList<SyntilaMarkdownBody>(find.byType(SyntilaMarkdownBody))
               .map((body) => body.data),
           contains('**Recorded answer**'));
       for (final label in [
@@ -3258,11 +3257,8 @@ void main() {
           tester.getBottomLeft(bubbleFinder).dy);
       final decoration = bubble.decoration as BoxDecoration;
       expect(decoration.border, isNull);
-      expect(
-          decoration.color,
-          own
-              ? SyntilaColors.ownMessageBackground(false)
-              : Colors.transparent);
+      expect(decoration.color,
+          own ? SyntilaColors.ownMessageBackground(false) : Colors.transparent);
       expect(dateX, lessThan(menuX));
       final trigger = find.byTooltip('Message actions');
       expect(tester.getSize(trigger), Size(touch ? 48 : 32, touch ? 48 : 32));

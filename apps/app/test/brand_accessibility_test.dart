@@ -24,8 +24,7 @@ void main() {
         greaterThanOrEqualTo(4.5));
     expect(_contrastRatio(SyntilaBrand.darkInk, SyntilaBrand.darkSurface),
         greaterThanOrEqualTo(4.5));
-    expect(
-        _contrastRatio(SyntilaBrand.darkInkMuted, SyntilaBrand.darkSurface),
+    expect(_contrastRatio(SyntilaBrand.darkInkMuted, SyntilaBrand.darkSurface),
         greaterThanOrEqualTo(4.5));
   });
 

@@ -42,7 +42,7 @@ export function convertWorkspaceThreadMarkers(root, { apply = false } = {}) {
         Number.isNaN(Date.parse(old.createdAt))
       )
         throw new Error("Source marker does not match directory identity");
-      const target = join(directory, ".conclave-thread.json");
+      const target = join(directory, ".syntila-thread.json");
       const backup = `${source}.pre-thread-cutover`;
       if (
         entries.includes(basename(target)) ||

@@ -28,7 +28,7 @@ describe("observability", () => {
   });
 
   it("never emits human or runtime credentials from credential-shaped fields", () => {
-    const humanCredential = "conclave_dhs_human-secret";
+    const humanCredential = "syntila_dhs_human-secret";
     const runtimeCredential = "syntila_workspace_tok_runtime-secret";
     const record = structuredLogRecord(
       "info",

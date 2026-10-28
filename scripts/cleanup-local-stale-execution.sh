@@ -4,7 +4,7 @@
 # Stop `pnpm app:run:local` first. Never touches production.
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-database_name="${SYNTILA_LOCAL_D1_NAME:-conclave-development}"
+database_name="${SYNTILA_LOCAL_D1_NAME:-syntila-development}"
 wrangler_config="${SYNTILA_WRANGLER_CONFIG:-${repo_root}/apps/cloud/wrangler.jsonc}"
 cd "$repo_root"
 pnpm exec wrangler d1 execute "$database_name" --local \

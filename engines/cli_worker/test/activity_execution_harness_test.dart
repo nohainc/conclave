@@ -23,9 +23,7 @@ final class _FixtureEngine {
   final StringBuffer stderr;
 
   static Future<_FixtureEngine> start(String repository) async {
-    final root = await Directory.systemTemp.createTemp(
-      'syntila-activity-e2e-',
-    );
+    final root = await Directory.systemTemp.createTemp('syntila-activity-e2e-');
     final profile =
         jsonDecode(
               await File(

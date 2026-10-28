@@ -49,20 +49,20 @@ void main() {
     final paths = WorkspacePaths(state, platform: runtime);
 
     expect(state.path,
-        '${home.path}/Library/Application Support/Conclave/Workspace/State');
+        '${home.path}/Library/Application Support/Syntila/Workspace/State');
     expect(paths.applicationDataRoot.path,
-        '${home.path}/Library/Application Support/Conclave');
+        '${home.path}/Library/Application Support/Syntila');
     expect(paths.applicationSupportDirectory.path,
-        '${home.path}/Library/Application Support/Conclave/Workspace');
+        '${home.path}/Library/Application Support/Syntila/Workspace');
     expect(paths.profilesDirectory.path,
-        '${home.path}/Library/Application Support/Conclave/Workspace/Profiles');
+        '${home.path}/Library/Application Support/Syntila/Workspace/Profiles');
     expect(paths.updatesDirectory.path,
-        '${home.path}/Library/Application Support/Conclave/Workspace/Updates');
+        '${home.path}/Library/Application Support/Syntila/Workspace/Updates');
     expect(paths.logsFile.path,
-        '${home.path}/Library/Logs/Conclave Workspace/workspace.log');
+        '${home.path}/Library/Logs/Syntila Workspace/workspace.log');
     expect(
         () => paths.validateWorkRootSeparation(
-              Directory('${home.path}/Documents/Conclave'),
+              Directory('${home.path}/Documents/Syntila'),
             ),
         returnsNormally);
   });
@@ -72,13 +72,13 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
     final runtime = _FakeMacRuntime(home.path);
     final paths = WorkspacePaths(
-      Directory('${home.path}/Documents/Conclave/.runtime'),
+      Directory('${home.path}/Documents/Syntila/.runtime'),
       platform: runtime,
     );
 
     expect(
       () => paths.validateWorkRootSeparation(
-        Directory('${home.path}/Documents/Conclave'),
+        Directory('${home.path}/Documents/Syntila'),
       ),
       throwsA(isA<StateError>()),
     );
@@ -89,7 +89,7 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
     final runtime = _FakeMacRuntime(home.path);
     final oldWork = Directory(
-        '${home.path}/Library/Application Support/Conclave/Workspace/Work');
+        '${home.path}/Library/Application Support/Syntila/Workspace/Work');
     final oldWorkFile = File('${oldWork.path}/thread/state.txt');
     await oldWorkFile.create(recursive: true);
     oldWorkFile.writeAsStringSync('preserve work');
@@ -97,7 +97,7 @@ void main() {
     await WorkspacePaths.preserveMacWorkRoot(platform: runtime);
 
     final target = File(
-      '${home.path}/Documents/Conclave/thread/state.txt',
+      '${home.path}/Documents/Syntila/thread/state.txt',
     );
     expect(target.readAsStringSync(), 'preserve work');
     expect(oldWork.existsSync(), isFalse);
@@ -109,7 +109,7 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
     final runtime = _FakeMacRuntime(home.path);
     final oldWork = Directory(
-        '${home.path}/Library/Application Support/Conclave/Workspace/Work');
+        '${home.path}/Library/Application Support/Syntila/Workspace/Work');
     await File('${oldWork.path}/existing.txt').create(recursive: true);
     await WorkspacePaths.preserveMacWorkRoot(
       platform: runtime,
@@ -117,7 +117,7 @@ void main() {
     );
 
     expect(oldWork.existsSync(), isTrue);
-    expect(Directory('${home.path}/Documents/Conclave').existsSync(), isFalse);
+    expect(Directory('${home.path}/Documents/Syntila').existsSync(), isFalse);
   });
 
   test('migration conflict preserves both Work Roots', () async {
@@ -125,8 +125,8 @@ void main() {
     addTearDown(() => home.delete(recursive: true));
     final runtime = _FakeMacRuntime(home.path);
     final oldWork = Directory(
-        '${home.path}/Library/Application Support/Conclave/Workspace/Work');
-    final target = Directory('${home.path}/Documents/Conclave');
+        '${home.path}/Library/Application Support/Syntila/Workspace/Work');
+    final target = Directory('${home.path}/Documents/Syntila');
     await File('${oldWork.path}/old.txt').create(recursive: true);
     await File('${target.path}/new.txt').create(recursive: true);
 
@@ -140,14 +140,14 @@ void main() {
     final home = await Directory.systemTemp.createTemp('workspace-recovery-');
     addTearDown(() => home.delete(recursive: true));
     final runtime = _FakeMacRuntime(home.path);
-    final oldWork = File(
-        '${home.path}/Library/Application Support/Conclave/Workspace/Work');
+    final oldWork =
+        File('${home.path}/Library/Application Support/Syntila/Workspace/Work');
     await oldWork.create(recursive: true);
 
     await WorkspacePaths.preserveMacWorkRoot(platform: runtime);
 
     expect(oldWork.existsSync(), isTrue);
-    expect(Directory('${home.path}/Documents/Conclave').existsSync(), isFalse);
+    expect(Directory('${home.path}/Documents/Syntila').existsSync(), isFalse);
   });
 
   test('local directories are created and write checked before Cloud startup',

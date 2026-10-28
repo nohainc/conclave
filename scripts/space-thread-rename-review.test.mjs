@@ -70,7 +70,7 @@ describe("Space/Thread rename follow-up", () => {
   it("accepts the fresh-start baseline and rejects missing identity columns", () => {
     const baseline = readFileSync(
       new URL(
-        "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+        "../apps/cloud/migrations-v8/0001_syntila_v8.sql",
         import.meta.url,
       ),
       "utf8",

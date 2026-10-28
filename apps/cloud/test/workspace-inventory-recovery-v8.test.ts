@@ -51,7 +51,7 @@ describe("v8 Workspace inventory recovery", () => {
     database.exec(
       readFileSync(
         fileURLToPath(
-          new URL("../migrations-v8/0001_conclave_v8.sql", import.meta.url),
+          new URL("../migrations-v8/0001_syntila_v8.sql", import.meta.url),
         ),
         "utf8",
       ),
@@ -237,7 +237,7 @@ describe("v8 Workspace inventory recovery", () => {
     const database = new DatabaseSync(":memory:");
     database.exec("PRAGMA foreign_keys = ON");
     for (const migration of [
-      "0001_conclave_v8.sql",
+      "0001_syntila_v8.sql",
       "0018_user_workflow_configurations.sql",
       "0020_space_workflow_configurations.sql",
       "0022_workflow_workspace_selection.sql",

@@ -15,7 +15,7 @@ import {
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const wrangler = join(repositoryRoot, "node_modules/.bin/wrangler");
 const config = join(repositoryRoot, "infra/cloudflare/app.wrangler.jsonc");
-const hostname = "app.conclaveax.com";
+const hostname = "syntila.app";
 const runId = process.env.GITHUB_RUN_ID
   ? `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}`
   : (process.env.SYNTILA_SMOKE_RUN_ID ?? randomUUID());
@@ -49,7 +49,7 @@ function executeD1(sql) {
     [
       "d1",
       "execute",
-      "conclave-v8-production",
+      "syntila",
       "--remote",
       "--yes",
       "--config",
@@ -416,7 +416,7 @@ async function verifyWorkspaceAuth() {
       body: JSON.stringify({
         clientName: workspaceClientName,
         contractVersion: "1.1",
-        audience: "conclave.desktop.management",
+        audience: "syntila.desktop.management",
       }),
     },
   );
@@ -426,7 +426,7 @@ async function verifyWorkspaceAuth() {
     !intent ||
     typeof intent.intentId !== "string" ||
     typeof intent.pollToken !== "string" ||
-    intent.audience !== "conclave.desktop.management"
+    intent.audience !== "syntila.desktop.management"
   ) {
     throw new Error(
       `Production Workspace auth intent failed with HTTP ${intentResponse.status}${typeof intent?.error === "string" ? `: ${intent.error}` : ""}`,
@@ -439,7 +439,7 @@ async function verifyWorkspaceAuth() {
     ),
   )[0];
   if (
-    storedIntent?.audience !== "conclave.desktop.management" ||
+    storedIntent?.audience !== "syntila.desktop.management" ||
     storedIntent?.approved_user_id !== null ||
     storedIntent?.claimed_at !== null
   ) {
@@ -482,11 +482,11 @@ async function verifyWorkspaceAuth() {
   const claimed = await claimResponse.json().catch(() => null);
   if (
     claimResponse.status !== 200 ||
-    claimed?.audience !== "conclave.desktop.management" ||
+    claimed?.audience !== "syntila.desktop.management" ||
     claimed?.user?.userId !== ownerId ||
     typeof claimed?.sessionId !== "string" ||
     typeof claimed?.credential !== "string" ||
-    !claimed.credential.startsWith("conclave_dhs_")
+    !claimed.credential.startsWith("syntila_dhs_")
   ) {
     throw new Error(
       `Production Workspace auth claim failed with HTTP ${claimResponse.status}${typeof claimed?.error === "string" ? `: ${claimed.error}` : ""}`,
@@ -509,12 +509,12 @@ async function verifyWorkspaceAuth() {
     .update(claimed.credential)
     .digest("hex");
   if (
-    claimedIntent?.audience !== "conclave.desktop.management" ||
+    claimedIntent?.audience !== "syntila.desktop.management" ||
     claimedIntent?.approved_user_id !== ownerId ||
     typeof claimedIntent?.claimed_at !== "string" ||
     claimedIntent?.claimed_session_id !== claimed.sessionId ||
     storedSession?.user_id !== ownerId ||
-    storedSession?.audience !== "conclave.desktop.management" ||
+    storedSession?.audience !== "syntila.desktop.management" ||
     storedSession?.token_hash !== claimedTokenHash ||
     storedSession?.revoked_at !== null
   ) {
@@ -530,7 +530,7 @@ async function verifyWorkspaceAuth() {
   const session = await sessionResponse.json().catch(() => null);
   if (
     sessionResponse.status !== 200 ||
-    session?.audience !== "conclave.desktop.management" ||
+    session?.audience !== "syntila.desktop.management" ||
     session?.user?.userId !== ownerId ||
     session?.sessionId !== claimed.sessionId
   ) {
@@ -554,7 +554,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
       body: JSON.stringify({
         clientName: profileLabClientName,
         contractVersion: "1.1",
-        audience: "conclave.profile-lab.management",
+        audience: "syntila.profile-lab.management",
       }),
     },
   );
@@ -564,7 +564,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
     !intent ||
     typeof intent.intentId !== "string" ||
     typeof intent.pollToken !== "string" ||
-    intent.audience !== "conclave.profile-lab.management"
+    intent.audience !== "syntila.profile-lab.management"
   ) {
     throw new Error(
       `Production Profile Lab auth intent failed with HTTP ${intentResponse.status}${typeof intent?.error === "string" ? `: ${intent.error}` : ""}`,
@@ -577,7 +577,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
     ),
   )[0];
   if (
-    storedIntent?.audience !== "conclave.profile-lab.management" ||
+    storedIntent?.audience !== "syntila.profile-lab.management" ||
     storedIntent?.approved_user_id !== null ||
     storedIntent?.claimed_at !== null
   ) {
@@ -663,7 +663,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
     ),
   )[0];
   if (
-    approvedIntent?.audience !== "conclave.profile-lab.management" ||
+    approvedIntent?.audience !== "syntila.profile-lab.management" ||
     approvedIntent?.approved_user_id !== ownerId ||
     typeof approvedIntent?.approved_at !== "string" ||
     approvedIntent?.claimed_at !== null
@@ -684,11 +684,11 @@ async function verifyProfileLabAuth(workspaceCredential) {
   const claimed = await claimResponse.json().catch(() => null);
   if (
     claimResponse.status !== 200 ||
-    claimed?.audience !== "conclave.profile-lab.management" ||
+    claimed?.audience !== "syntila.profile-lab.management" ||
     claimed?.user?.userId !== ownerId ||
     typeof claimed?.sessionId !== "string" ||
     typeof claimed?.credential !== "string" ||
-    !claimed.credential.startsWith("conclave_dhs_")
+    !claimed.credential.startsWith("syntila_dhs_")
   ) {
     throw new Error(
       `Production Profile Lab auth claim failed with HTTP ${claimResponse.status}${typeof claimed?.error === "string" ? `: ${claimed.error}` : ""}`,
@@ -711,12 +711,12 @@ async function verifyProfileLabAuth(workspaceCredential) {
     .update(claimed.credential)
     .digest("hex");
   if (
-    claimedIntent?.audience !== "conclave.profile-lab.management" ||
+    claimedIntent?.audience !== "syntila.profile-lab.management" ||
     claimedIntent?.approved_user_id !== ownerId ||
     typeof claimedIntent?.claimed_at !== "string" ||
     claimedIntent?.claimed_session_id !== claimed.sessionId ||
     storedSession?.user_id !== ownerId ||
-    storedSession?.audience !== "conclave.profile-lab.management" ||
+    storedSession?.audience !== "syntila.profile-lab.management" ||
     storedSession?.token_hash !== claimedTokenHash ||
     storedSession?.revoked_at !== null
   ) {
@@ -732,7 +732,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
   const session = await sessionResponse.json().catch(() => null);
   if (
     sessionResponse.status !== 200 ||
-    session?.audience !== "conclave.profile-lab.management" ||
+    session?.audience !== "syntila.profile-lab.management" ||
     session?.user?.userId !== ownerId ||
     session?.sessionId !== claimed.sessionId
   ) {
@@ -789,7 +789,7 @@ async function verifyProfileLabAuth(workspaceCredential) {
   if (
     workspaceRegistrationResponse.status !== 403 ||
     typeof workspaceRegistration?.error !== "string" ||
-    !workspaceRegistration.error.includes("conclave.profile-lab.management")
+    !workspaceRegistration.error.includes("syntila.profile-lab.management")
   ) {
     throw new Error(
       `Production Profile Lab session was not rejected by Workspace registration audience isolation (HTTP ${workspaceRegistrationResponse.status})`,

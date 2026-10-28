@@ -1,4 +1,4 @@
-name: Deploy Conclave AX Public Site Preview
+name: Deploy Syntila AX Public Site Preview
 
 on:
   pull_request:
@@ -39,4 +39,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: >-
           ../../node_modules/.bin/wrangler deploy --config wrangler.jsonc
-          --name conclave-ax-site-pr-${{ github.event.pull_request.number || github.run_id }}
+          --name syntila-ax-site-pr-${{ github.event.pull_request.number || github.run_id }}

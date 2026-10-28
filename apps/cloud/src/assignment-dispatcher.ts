@@ -33,6 +33,7 @@ import {
   beginAssignmentRevocation,
   deliverRevocation,
   escalateUnconfirmedRevocations,
+  finalizeRevocationsOfRevokedRuntimes,
   revokeAssignment,
   type RevocationEnv,
   type RevocationIntent,
@@ -1138,6 +1139,7 @@ export async function recoverStaleAssignments(
   env?: RevocationEnv,
 ): Promise<number> {
   const nowMs = now.getTime();
+  await finalizeRevocationsOfRevokedRuntimes(db);
   await escalateUnconfirmedRevocations(
     db,
     ASSIGNMENT_REVOCATION_CONFIRMATION_MS,

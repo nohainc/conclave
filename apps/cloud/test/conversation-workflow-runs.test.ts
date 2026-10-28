@@ -98,7 +98,7 @@ it("backfills WorkflowRun ownership without rewriting historical turn evidence",
   const db = new DatabaseSync(":memory:");
   try {
     for (const file of [
-      "0001_conclave_v8.sql",
+      "0001_syntila_v8.sql",
       "0006_chat_workflow_admission.sql",
       "0009_realtime_stream_alignment.sql",
       "0010_conversation_workflows.sql",

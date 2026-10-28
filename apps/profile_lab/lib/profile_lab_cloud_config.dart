@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-const profileLabProductionCloudOrigin = 'https://app.conclaveax.com';
+const profileLabProductionCloudOrigin = 'https://syntila.app';
 const profileLabLocalCloudOrigin = 'http://localhost:8787';
 
 /// Environment-derived Cloud default and the origin policy shared by clients.

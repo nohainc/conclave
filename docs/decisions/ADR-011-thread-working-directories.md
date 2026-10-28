@@ -160,7 +160,7 @@ The directory then persists across Work Requests.
 Each Thread directory contains an internal metadata marker such as:
 
 ~~~text
-.conclave-thread.json
+.syntila-thread.json
 ~~~
 
 The marker contains only stable non-secret identity metadata, for example:
@@ -211,7 +211,7 @@ Example:
 <work-root>/
   <space-id>/
     <thread-id>/
-      .conclave-thread.json
+      .syntila-thread.json
       syntila/
       backend/
       notes/

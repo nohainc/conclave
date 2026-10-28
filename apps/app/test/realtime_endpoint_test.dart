@@ -20,18 +20,14 @@ void main() {
     });
   }
   test('production and nested API bases preserve secure scheme and path', () {
-    final endpoint =
-        realtimeEndpointForApi('https://app.conclaveax.com/team/api#');
+    final endpoint = realtimeEndpointForApi('https://syntila.app/team/api#');
     expect(endpoint.hasFragment, isFalse);
     expect(endpoint.scheme, 'wss');
-    expect(endpoint.host, 'app.conclaveax.com');
+    expect(endpoint.host, 'syntila.app');
     expect(endpoint.path, '/team/api/realtime');
   });
   test('origin base and trailing slash resolve to the realtime route', () {
-    for (final source in [
-      'https://app.conclaveax.com',
-      'https://app.conclaveax.com/'
-    ]) {
+    for (final source in ['https://syntila.app', 'https://syntila.app/']) {
       final endpoint = realtimeEndpointForApi(source);
       expect(endpoint.hasFragment, isFalse);
       expect(endpoint.path, '/api/realtime');

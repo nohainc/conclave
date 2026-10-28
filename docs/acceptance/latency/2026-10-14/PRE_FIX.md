@@ -3,8 +3,8 @@
 This is failure-path evidence, not a successful-execution baseline. The Phase 1
 gate remains open. Do not combine it with post-correctness-fix measurements.
 
-- Captured 2026-10-14 against production `https://app.conclaveax.com` and D1
-  `conclave-v8-production`; no local database or migrations.
+- Captured 2026-10-14 against production `https://syntila.app` and D1
+  `syntila`; no local database or migrations.
 - Cloud version: `63aefd33-830b-4be0-8370-6a73eb64faa2`, based on `e542e191`
   plus the telemetry clock fix committed with this report.
 - Service: branch source running headlessly with the existing registration;

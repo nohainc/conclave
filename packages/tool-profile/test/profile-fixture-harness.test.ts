@@ -142,7 +142,7 @@ describe("offline Tool Profile release fixtures", () => {
             prompt: "fixture prompt",
             workingDirectory: "/workspace/repo",
             home: "/home/tester",
-            workerStateDirectory: "/home/tester/.conclave/worker",
+            workerStateDirectory: "/home/tester/.syntila/worker",
             assignmentTimeoutMs: 30_000,
             executionPolicy: "restricted",
             sessionPolicy: fixture.sessionPolicy,

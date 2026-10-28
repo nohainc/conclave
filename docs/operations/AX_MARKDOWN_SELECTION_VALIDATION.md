@@ -40,14 +40,14 @@ for iteration; release mode is required to check the production web rendering
 path.
 
 ```bash
-cd /Users/vitaliinoha/Documents/Conclave/Syntila
+cd /Users/vitaliinoha/Documents/Syntila/Syntila
 ./scripts/start-local.sh
 ```
 
 For a release-mode browser check:
 
 ```bash
-cd /Users/vitaliinoha/Documents/Conclave/Syntila
+cd /Users/vitaliinoha/Documents/Syntila/Syntila
 ./scripts/start-local.sh --web-release
 ```
 

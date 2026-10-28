@@ -24,7 +24,7 @@ The checks cover generated routes and assets, metadata, application links,
 accessibility structure, responsive behavior, security headers, analytics
 privacy, and performance budgets. Confirm `www.conclaveax.com` redirects to
 `https://conclaveax.com` and the primary action opens
-`https://app.conclaveax.com`.
+`https://syntila.app`.
 
 ## Human review
 

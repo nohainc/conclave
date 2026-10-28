@@ -99,8 +99,7 @@ class _AppTopHudState extends State<AppTopHud> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor =
-        isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
+    final borderColor = isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
     final inkColor = isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk;
     final mutedInk =
         isDark ? SyntilaBrand.darkInkMuted : SyntilaBrand.lightInkMuted;

@@ -28,7 +28,7 @@ class _CanceledDesktopAuthFixture extends _SignedInDesktopAuthFixture {
       const AxDesktopAuthIntentStatus(
         status: 'denied',
         clientName: 'Syntila Workspace',
-        audience: 'conclave.desktop.management',
+        audience: 'syntila.desktop.management',
       );
 }
 
@@ -41,7 +41,7 @@ class _ProfileLabDesktopAuthFixture extends _SignedInDesktopAuthFixture {
       const AxDesktopAuthIntentStatus(
         status: 'pending',
         clientName: 'untrusted caller label',
-        audience: 'conclave.profile-lab.management',
+        audience: 'syntila.profile-lab.management',
       );
 }
 

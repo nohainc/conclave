@@ -13,7 +13,7 @@ File threadMutationLockFile({
   required String spaceId,
   required String threadId,
 }) =>
-    File('${workRoot.path}${Platform.pathSeparator}.conclave-mutation-locks'
+    File('${workRoot.path}${Platform.pathSeparator}.syntila-mutation-locks'
         '${Platform.pathSeparator}$spaceId${Platform.pathSeparator}'
         '$threadId.lock');
 
@@ -217,8 +217,7 @@ class ThreadMutationCoordinator {
     required String leaseId,
     required int fencingToken,
   }) async {
-    final fenceFile =
-        File(_join(directory.path, '.syntila-thread-fence.json'));
+    final fenceFile = File(_join(directory.path, '.syntila-thread-fence.json'));
     Map<String, Object?>? previous;
     if (await fenceFile.exists()) {
       try {

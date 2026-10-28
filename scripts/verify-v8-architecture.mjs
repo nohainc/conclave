@@ -27,7 +27,7 @@ const workspaceRegistration = readRequired(
 );
 const architecture = readRequired("ARCHITECTURE.md");
 const architectureV8 = readRequired("docs/architecture/ARCHITECTURE_V8.md");
-const schema = readRequired("apps/cloud/migrations-v8/0001_conclave_v8.sql");
+const schema = readRequired("apps/cloud/migrations-v8/0001_syntila_v8.sql");
 const appRouter = readRequired("apps/cloud/src/routes/router.ts");
 const axData = readRequired("apps/app/lib/src/ax/ax_data.dart");
 const cloudWrangler = readRequired("apps/cloud/wrangler.jsonc");

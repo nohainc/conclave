@@ -67,7 +67,7 @@ void main() {
           },
         );
     final scope = await handler.prepareAssignmentScope(context(size));
-    final file = File('${scope.workingDirectory.path}/.conclave/inputs/'
+    final file = File('${scope.workingDirectory.path}/.syntila/inputs/'
         'work-request-11111111-2222-3333-4444-555555555555/file-001');
     expect(await file.length(), size);
     await expectLater(
@@ -355,8 +355,8 @@ void main() {
     );
     expect(first.workingDirectory.path, second.workingDirectory.path);
     expect(first.workingDirectory.path, endsWith('Syntila'));
-    expect(Directory('${root.path}/work/Syntila/thread-1').existsSync(),
-        isFalse);
+    expect(
+        Directory('${root.path}/work/Syntila/thread-1').existsSync(), isFalse);
   });
 
   test('persists a repository checkout across runtime recreation', () async {
@@ -393,8 +393,7 @@ void main() {
       spaceDirectoryLifecycle: lifecycle(),
       resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
     );
-    final first =
-        await firstHandler.prepareAssignmentScope(context('Syntila'));
+    final first = await firstHandler.prepareAssignmentScope(context('Syntila'));
     final repository = Directory(
         '${first.workingDirectory.path}${Platform.pathSeparator}checkout');
     await repository.create();

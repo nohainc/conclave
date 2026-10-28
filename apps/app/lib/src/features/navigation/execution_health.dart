@@ -23,8 +23,7 @@ class ExecutionStatusPopover extends StatelessWidget {
 
   Widget _body(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final borderColor =
-        isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
+    final borderColor = isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine;
     final cardBg = isDark ? SyntilaBrand.darkPaper : SyntilaBrand.lightPaper;
     final inkColor = isDark ? SyntilaBrand.darkInk : SyntilaBrand.lightInk;
     final mutedInk =

@@ -11,8 +11,8 @@ import 'profile_lab_paths.dart';
 /// Stores the Profile Lab bearer session in the macOS login Keychain.
 class ProfileLabSessionStore {
   ProfileLabSessionStore(this.paths, {MethodChannel? channel})
-      : _channel = channel ??
-            const MethodChannel('com.syntila.profile-lab/keychain'),
+      : _channel =
+            channel ?? const MethodChannel('com.syntila.profile-lab/keychain'),
         _isMacOS = Platform.isMacOS,
         _inMemoryForTesting = false;
 

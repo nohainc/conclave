@@ -42,7 +42,7 @@ event. No credential is a substitute for another.
 3. The desktop polls the intent status using the poll token and claims an
    approved intent exactly once using `DesktopAuthIntentClaimRequest`.
 4. The claim returns `DesktopHumanSessionIssue`. The credential is opaque,
-   audience-bound to `conclave.desktop.management`, and independently
+   audience-bound to `syntila.desktop.management`, and independently
    revocable from browser sessions and runtime credentials. The authenticated
    `GET /api/desktop-auth/session` endpoint checks the desktop audience; session
    rotation and revocation use the desktop session bearer and session ID.

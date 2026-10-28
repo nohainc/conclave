@@ -5,7 +5,7 @@ Syntila runs five workflows. Everything that gates a merge, a deploy, or a relea
 | Workflow | Runs when | Purpose |
 | --- | --- | --- |
 | `ci.yml` | Pull requests, pushes to `main`, manual runs | Static guard, then only the domains a change touches. `CI passed` is the required check. |
-| `deploy-cloud.yml` | Manual, from `main` only | Deploys the Cloud Worker to app.conclaveax.com. Requires passing CI for the commit. Environment `production`. |
+| `deploy-cloud.yml` | Manual, from `main` only | Deploys the Cloud Worker to syntila.app. Requires passing CI for the commit. Environment `production`. |
 | `deploy-site.yml` | Site pull requests, site pushes to `main`, manual | Preview Worker per pull request, deleted when it closes. Production site on `main`. |
 | `release-macos.yml` | Manual, from `main` only | Signed and notarized Workspace, or an internal Profile Lab build. Requires passing CI. |
 | `nightly.yml` | Daily 02:00 UTC, manual | Native macOS builds that are too slow for every pull request. |

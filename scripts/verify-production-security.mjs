@@ -5,7 +5,7 @@ const config = await readFile(configPath, "utf8");
 
 const required = [
   ["production environment", /"SYNTILA_ENVIRONMENT"\s*:\s*"production"/],
-  ["AX custom domain", /"pattern"\s*:\s*"app\.syntila\.com"/],
+  ["AX custom domain", /"pattern"\s*:\s*"syntila\.app"/],
   ["D1 binding", /"binding"\s*:\s*"SYNTILA_DB"/],
   ["R2 artifact binding", /"binding"\s*:\s*"SYNTILA_ARTIFACTS"/],
   ["Workflow binding", /"binding"\s*:\s*"SYNTILA_RUN_WORKFLOW"/],

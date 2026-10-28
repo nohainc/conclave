@@ -99,7 +99,7 @@ registration; existing installations needing recovery must use the desktop
 recovery flow. A fresh registration does not connect Cloud until `connect`.
 
 The service uses the Work Root in `<state>/workspace.nano` (initially
-`~/Documents/Conclave`). Edit the configuration while the service is stopped,
+`~/Documents/Syntila`). Edit the configuration while the service is stopped,
 then restart it; there is no live settings mutation or command-line Work Root
 override.
 Pass `--data-dir DIR` on **every** CLI command when using a custom state root.
@@ -187,8 +187,8 @@ can use these commands without systemd; its supervisor owns process lifecycle.
 
 ## Platform behavior
 
-- **State root:** `$XDG_STATE_HOME/conclave/workspace` (default
-  `~/.local/state/conclave/workspace`). If a legacy `~/.conclave-workspace` root
+- **State root:** `$XDG_STATE_HOME/syntila/workspace` (default
+  `~/.local/state/syntila/workspace`). If a legacy `~/.syntila-workspace` root
   exists it remains authoritative in place; nothing is moved or re-registered.
   `SYNTILA_WORKSPACE_DATA_DIR` / `--data-dir` override as on other platforms.
 - **IPC:** Unix-domain socket `runtime/manager.sock` under the `0700` state

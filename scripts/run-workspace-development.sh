@@ -6,8 +6,8 @@ DEV_DRAFT_ROOT="${SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY:-}"
 PUBLIC_ROOTS="${SYNTILA_RELEASE_TRUST_KEYS_JSON:-{}}"
 # Same state directory a --local build (syntila-workspace-local) uses, so the
 # local CLI can talk to this service. It is kept apart from production state.
-LOCAL_STATE_ROOT="$HOME/Library/Application Support/Conclave Local/Workspace/State"
-LEGACY_STATE_ROOT="$HOME/Library/Application Support/Conclave/Workspace/DevelopmentState"
+LOCAL_STATE_ROOT="$HOME/Library/Application Support/Syntila Local/Workspace/State"
+LEGACY_STATE_ROOT="$HOME/Library/Application Support/Syntila/Workspace/DevelopmentState"
 if [[ -n "${SYNTILA_WORKSPACE_DEVELOPMENT_DATA_DIR:-}" ]]; then
   DEV_STATE_ROOT="$SYNTILA_WORKSPACE_DEVELOPMENT_DATA_DIR"
 elif [[ -d "$LEGACY_STATE_ROOT" && ! -d "$LOCAL_STATE_ROOT" ]]; then

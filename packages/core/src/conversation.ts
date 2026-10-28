@@ -206,7 +206,7 @@ export interface ConversationHistoryEntry {
   readonly schemaVersion: 1;
   readonly kind: ConversationHistoryKind;
   readonly eventType: string;
-  readonly actorType: "user" | "worker" | "conclave";
+  readonly actorType: "user" | "worker" | "syntila";
   readonly actorId: string | null;
   readonly workRequestId: string | null;
   readonly turnId: string | null;

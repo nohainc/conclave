@@ -8,14 +8,14 @@ Operational guidance for signed Workspace and Tool Profile releases is in [Works
 
 - `conclaveax.com` — public Astro/static-first website.
 - `www.conclaveax.com` — permanent redirect to `conclaveax.com`.
-- `app.conclaveax.com` — Syntila / Syntila Cloud web application.
-- `api.conclaveax.com` — reserved for a separately exposed API when production authentication and API separation are complete.
+- `syntila.app` — Syntila / Syntila Cloud web application.
+- `syntila.app/api` — same-origin Cloud API.
 - `docs.conclaveax.com` — documentation later.
 - `status.conclaveax.com` — status page later.
 
 The public site is deployed independently from the authenticated application.
 Its production Worker owns only `conclaveax.com` and `www.conclaveax.com`.
-It does not handle `/api/*`, `app.conclaveax.com`, Workspace Gateway traffic, or
+It does not handle `/api/*`, `syntila.app`, Workspace Gateway traffic, or
 Better Auth callbacks. PR previews use a separate temporary Workers name with
 no production custom-domain routes; merging to `main` deploys the production
 site through `.github/workflows/deploy-site.yml`.
@@ -28,7 +28,7 @@ immutable for one year. These rules apply only to the public-site Worker.
 
 ## Current deployment
 
-`app.conclaveax.com` is the Syntila/Cloud application. It runs the real
+`syntila.app` is the Syntila/Cloud application. It runs the real
 application; there is no demo-mode runtime branch. Production Syntila is a
 public login application whose human sessions are handled by Better Auth.
 Cloudflare Access is optional for staging, administrative, debug, and other
@@ -37,7 +37,7 @@ internal environments; it is not an application authentication dependency.
 The deployment builds Flutter Web with the planned same-origin API endpoint:
 
 ```
-flutter build web --release --dart-define=SYNTILA_API_URL=https://app.conclaveax.com/api
+flutter build web --release --dart-define=SYNTILA_API_URL=https://syntila.app/api
 ```
 
 Syntila uses its normal connection-error state when the API is unavailable. This
@@ -52,8 +52,8 @@ The static application is deployed with Cloudflare Workers Static Assets. SPA fa
 
 Configure the OAuth applications with these callback URLs:
 
-- `https://app.conclaveax.com/api/auth/callback/github`
-- `https://app.conclaveax.com/api/auth/callback/google`
+- `https://syntila.app/api/auth/callback/github`
+- `https://syntila.app/api/auth/callback/google`
 
 The GitHub application must allow the `user:email` scope. Syntila requests
 only identity scopes for sign-in; signing in with GitHub does not grant GitHub
@@ -61,9 +61,9 @@ repository access. Repository authorization is a separate future integration.
 
 Set these values in the Worker environment:
 
-- `BETTER_AUTH_URL` — application origin, such as `https://app.conclaveax.com`;
+- `BETTER_AUTH_URL` — application origin, such as `https://syntila.app`;
 - `SYNTILA_APP_URL` — browser application origin used for desktop Workspace
-  approval pages, such as `https://app.conclaveax.com`. Set this separately
+  approval pages, such as `https://syntila.app`. Set this separately
   when the Cloud API and browser application use different origins or local
   development ports.
 - `SYNTILA_AUTH_GITHUB_CLIENT_ID` — GitHub OAuth client ID;
@@ -123,7 +123,7 @@ with "Sign-in with this provider is not set up on this server yet."
 
    | Environment | Homepage URL | Authorization callback URL |
    | --- | --- | --- |
-   | Production | `https://app.conclaveax.com` | `https://app.conclaveax.com/api/auth/callback/github` |
+   | Production | `https://syntila.app` | `https://syntila.app/api/auth/callback/github` |
    | Local (isolated mode) | `http://localhost:3000` | `http://localhost:8787/api/auth/callback/github` |
 
    The callback URL is the Cloud API origin (`BETTER_AUTH_URL`), not the
@@ -170,7 +170,7 @@ with "Sign-in with this provider is not set up on this server yet."
 
    | Environment | Authorized JavaScript origin | Authorized redirect URI |
    | --- | --- | --- |
-   | Production | `https://app.conclaveax.com` | `https://app.conclaveax.com/api/auth/callback/google` |
+   | Production | `https://syntila.app` | `https://syntila.app/api/auth/callback/google` |
    | Local (isolated mode) | `http://localhost:8787` | `http://localhost:8787/api/auth/callback/google` |
 
    The redirect URI is the Cloud API origin (`BETTER_AUTH_URL`), not the Flutter
@@ -204,7 +204,7 @@ Store `SYNTILA_AUTH_GITHUB_CLIENT_SECRET`,
 `BETTER_AUTH_SECRET` only with Cloudflare Worker secrets (for example,
 `wrangler secret put`). Do not commit values to source, Wrangler configuration,
 CI files, or browser bundles. These are ultimately secrets on the
-`conclave-ax-app` Worker. The production deployment workflow accepts the same
+`syntila-app` Worker. The production deployment workflow accepts the same
 names as GitHub Actions secrets and copies them to the Worker before
 deployment. Client IDs may be ordinary environment configuration, but should
 still be managed per deployment.
@@ -223,7 +223,7 @@ All environments support Profile publication and rollout; there is no release
 mode switch. The access endpoint reports effective permissions. macOS Developer
 ID signing does not gate the internal lifecycle.
 
-Profile Lab builds default to `https://app.conclaveax.com`. Development builds
+Profile Lab builds default to `https://syntila.app`. Development builds
 can select local Cloud with
 `--dart-define=SYNTILA_CLOUD_URL=http://localhost:8787`; the Cloud connection
 settings also allow a local origin override and can reset to the build default.
@@ -257,7 +257,7 @@ the v8 runtime and Work v1 end-to-end suites. Failures stop the production
 deployment.
 
 After applying production D1 migrations and before deploying
-`app.conclaveax.com`, the workflow runs
+`syntila.app`, the workflow runs
 `scripts/production-workspace-gateway-smoke.mjs --schema-only`. It compares the
 stored `CREATE TABLE` definitions and columns for the Workspace and desktop
 auth tables with the versioned migration contract. It explicitly requires
@@ -266,10 +266,10 @@ single-audience constraint with an instruction to apply pending migrations.
 The workflow fails on any missing, unexpected, or drifted contract. This check
 only reads schema metadata; it never repairs table definitions.
 
-After deploying `app.conclaveax.com`, the same script runs as a production
+After deploying `syntila.app`, the same script runs as a production
 acceptance gate. It creates one disposable AX browser session and exercises the
 Workspace desktop-auth lifecycle: create an intent, approve it in the browser
-session, claim it, and validate the resulting `conclave.desktop.management`
+session, claim it, and validate the resulting `syntila.desktop.management`
 session. For Profile Lab, it creates an intent and requires browser approval to
 reject the disposable non-owner identity. The rejected intent must remain
 unapproved and unclaimable; Workspace credentials must also be rejected by Lab
@@ -284,7 +284,7 @@ disposable Workspace and user rows in `finally` cleanup. No Profile release
 operation is part of this smoke.
 
 The GitHub Actions secret `BETTER_AUTH_SECRET` must match the
-`conclave-ax-app` Cloudflare Worker secret. The workflow uses it only to sign
+`syntila-app` Cloudflare Worker secret. The workflow uses it only to sign
 the temporary browser approval cookie for the disposable auth identity; it
 does not print the secret or cookie. The runtime credential and Profile Lab
 session credential are generated for that run and are never written to workflow
@@ -300,7 +300,7 @@ the production scenarios in the
 CLI and service, such as restart persistence and reauthentication). The runbook distinguishes automated CI evidence from
 required production-device evidence.
 
-The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `app.conclaveax.com`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
+The custom-domain route in `infra/cloudflare/app.wrangler.jsonc` targets `syntila.app`. Because `conclaveax.com` is already on Cloudflare, the Worker custom domain can create/manage the required DNS routing and certificate during deployment.
 
 ## Durable Objects & Database Migrations
 
@@ -316,10 +316,10 @@ New development databases use the clean v8 schema from
 `apps/cloud/migrations-v8`. Apply every ordered migration when initializing
 the local database:
 ```bash
-pnpm exec wrangler d1 migrations apply conclave-development --local --config apps/cloud/wrangler.jsonc
+pnpm exec wrangler d1 migrations apply syntila-development --local --config apps/cloud/wrangler.jsonc
 ```
 
-Production now targets the separately provisioned `conclave-v8-production`
+Production now targets the separately provisioned `syntila`
 database. It was initialized from the clean v8 baseline, then populated from a
 private export of the existing production database. Aggregate row counts and
 key parent-child relationships were checked after import. The old
@@ -328,7 +328,7 @@ Worker deployment and production checks pass. The v8 migration is a clean
 baseline, not an in-place upgrade for a database initialized from an earlier
 migration chain. Do not apply it to the old database.
 
-`0001_conclave_v8.sql` has already been applied in production and is immutable.
+`0001_syntila_v8.sql` has already been applied in production and is immutable.
 Schema changes use new ordered forward migrations; the production deployment
 workflow applies pending migrations before deploying the Worker. Migration
 `0002_desktop_auth_multi_audience.sql` rebuilds the two desktop auth tables,
@@ -391,7 +391,7 @@ Public production deployment remains gated by the
 Before production backend deployment:
 
 1. provision production D1/R2 resources; the deployment workflow applies the
-   checked-in D1 migrations to `conclave-v8-production`;
+   checked-in D1 migrations to `syntila`;
 2. configure required application-release, callback, and other production secrets;
 3. run Workspace lifecycle and Cloud runtime release validations;
 4. run the external-user security gate, including tenant isolation and
@@ -403,8 +403,8 @@ outbound runtime channel; the generic Engine invokes the provider CLI locally.
 
 At that point the preferred topology is either:
 
-- same origin: `app.conclaveax.com/api/*`, avoiding browser CORS complexity; or
-- separated API: `api.conclaveax.com`, with explicit authenticated CORS and CSRF/session design.
+- same origin: `syntila.app/api/*`, avoiding browser CORS complexity; or
+- separated API: `syntila.app`, with explicit authenticated CORS and CSRF/session design.
 
 The same-origin option should be preferred for the first production release unless there is a concrete reason to separate the API hostname.
 
@@ -487,3 +487,18 @@ Production Durable Object migration history retains the applied
 `v9-thread-coordinator-rename` migration renames that existing namespace to
 `ThreadExecutionCoordinator`; do not rewrite applied history or create a new
 coordinator namespace. The isolated local configuration remains a fresh start.
+
+## Syntila domain cutover (2026-10-28)
+
+The app Worker is `syntila-app`, with a Cloudflare-managed custom domain at
+`syntila.app`. Its `SYNTILA_DB` binding points to the fresh `syntila` D1
+database (`6130c425-59e2-4ec7-b7bd-d3fe8a8ea6a7`), and its artifact bucket is
+`syntila-artifacts-production`. The public site retains `conclaveax.com` and
+`www.conclaveax.com`; its app links use `https://syntila.app`.
+
+No previous users, sessions, or Workspace registrations were migrated. Recreate
+accounts and reconnect desktop clients to the new origin. Local application
+paths, marker filenames, token prefixes and auth audiences now use Syntila.
+The former database and app deployment remain intact. Existing email sender
+addresses on `conclaveax.com` remain configured. OAuth providers need credentials
+and callbacks registered for the new origin before they can be enabled.

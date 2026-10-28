@@ -32,7 +32,7 @@ RestartApplications=no
 UninstallDisplayIcon={app}\syntila-workspace.exe
 SetupLogging=yes
 #ifdef SignInstaller
-; Signs Setup.exe and the embedded uninstaller with the "conclave" sign tool
+; Signs Setup.exe and the embedded uninstaller with the "syntila" sign tool
 ; passed by scripts/package-workspace-windows.ps1 -Sign.
 SignTool=syntila
 SignedUninstaller=yes

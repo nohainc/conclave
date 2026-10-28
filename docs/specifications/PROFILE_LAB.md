@@ -92,7 +92,7 @@ The Create Worker form starts new catalog entries in the `testing` release stage
 
 Profile Lab executable discovery follows the same rule: it gathers executable names from the loaded Worker catalog's `providerToolName` and from Tool Profile `providerTool.name` and `providerTool.executableCandidates`. Profile-declared `standardLocations` are used for those candidates. Diagnostics list only the names found in loaded Worker/Profile data; the application does not maintain a built-in provider inventory. Session formats and resume arguments remain Profile data, and a failed session diagnostic does not let repair logic infer them from a provider name.
 
-Profile Lab builds default to `https://app.conclaveax.com`. Development builds can set `SYNTILA_CLOUD_URL=http://localhost:8787` with a Dart define or choose an origin in the Cloud connection settings. The settings override persists locally and can be reset to the build default. Cloud origins must be HTTPS except for loopback HTTP in development builds; URLs with credentials, paths, queries, or fragments are rejected. Saved Keychain sessions are bound to their Cloud origin and are cleared when the origin changes. Legacy sessions without origin binding are discarded.
+Profile Lab builds default to `https://syntila.app`. Development builds can set `SYNTILA_CLOUD_URL=http://localhost:8787` with a Dart define or choose an origin in the Cloud connection settings. The settings override persists locally and can be reset to the build default. Cloud origins must be HTTPS except for loopback HTTP in development builds; URLs with credentials, paths, queries, or fragments are rejected. Saved Keychain sessions are bound to their Cloud origin and are cleared when the origin changes. Legacy sessions without origin binding are discarded.
 
 ### Profile Lab application boundaries
 
@@ -191,7 +191,7 @@ signing flow.
 
 Profile Lab allows engineers to author and iteratively refine Draft Profiles before requesting a signed release:
 
-- **Local Draft Store (`DraftProfileStore`):** Persists draft configurations locally under Profile Lab's dedicated application support directory (`~/Library/Application Support/conclave_profile_lab/drafts/`).
+- **Local Draft Store (`DraftProfileStore`):** Persists draft configurations locally under Profile Lab's dedicated application support directory (`~/Library/Application Support/syntila_profile_lab/drafts/`).
 - **Unsigned Draft Candidate (`LocalDraftProfileCandidate`):** Implements `ToolProfileCandidate` with `isSigned => false`. Unsigned drafts are strictly barred from entering Workspace's trusted profile store (`ToolProfileReleaseStore`).
 - **Sandbox Test Supervisor:** Uses `PlatformProcessSupervisor` from `syntila_cli_worker_runtime` to run tests out of process with hard execution deadlines, process tree cleanup, and secret redaction (`SafeProviderDiagnostics`).
 - **Progressive Test Ladder:** Keeps schema, Engine compatibility, executable discovery, version, passive probe, and live probe as preflight stages. It then submits actual assignments through the generic CLI Worker Engine, including a file write verified inside the isolated sandbox. Session create/resume and model selection each submit real Engine assignments when the Profile contract supports them; unsupported or untestable scenarios are shown as skipped, never passed.
@@ -394,7 +394,7 @@ The local stack launcher prepares this configuration before starting Wrangler.
 `--hosted` prepares a separate development signer and public roots for the current
 hosted development deployment; upload its ignored secret JSON with Wrangler
 `secret bulk` only to the intended Worker. Launch both apps with
-`SYNTILA_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` to use the corresponding
+`SYNTILA_DEVELOPMENT_CLOUD_URL=https://syntila.app` to use the corresponding
 hosted public roots. Customer build scripts never automatically load development
 roots or private material; provision independent production keys before customer rollout.
 

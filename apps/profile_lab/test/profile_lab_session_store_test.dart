@@ -40,7 +40,7 @@ void main() {
           .setMockMethodCallHandler(channel, null));
       final store = ProfileLabSessionStore.forTesting(paths, channel: channel);
       final session = ProfileLabSession(
-        credential: 'conclave_dhs_sample_cred',
+        credential: 'syntila_dhs_sample_cred',
         sessionId: 'session-sample-1',
         userId: 'admin-1',
         displayName: 'Security Admin',
@@ -48,16 +48,16 @@ void main() {
         expiresAt: DateTime.now().toUtc().add(const Duration(days: 30)),
       );
 
-      const cloudOrigin = 'https://app.conclaveax.com';
+      const cloudOrigin = 'https://syntila.app';
       await store.save(session, cloudOrigin: cloudOrigin);
       expect(paths.sessionFile.existsSync(), isFalse);
 
       final loaded = await store.load(cloudOrigin: cloudOrigin);
       expect(loaded, isNotNull);
-      expect(loaded!.credential, 'conclave_dhs_sample_cred');
+      expect(loaded!.credential, 'syntila_dhs_sample_cred');
       expect(loaded.sessionId, 'session-sample-1');
       expect(loaded.userId, 'admin-1');
-      expect(loaded.audience, 'conclave.profile-lab.management');
+      expect(loaded.audience, 'syntila.profile-lab.management');
 
       final wrongOrigin =
           await store.load(cloudOrigin: 'http://localhost:8787');
@@ -82,7 +82,7 @@ void main() {
         'userId': 'admin-1',
         'displayName': 'Legacy Admin',
         'email': 'admin@syntila.test',
-        'audience': 'conclave.profile-lab.management',
+        'audience': 'syntila.profile-lab.management',
         'expiresAt': DateTime.now()
             .toUtc()
             .add(const Duration(days: 2))
@@ -109,8 +109,7 @@ void main() {
           .setMockMethodCallHandler(channel, null));
       final store = ProfileLabSessionStore.forTesting(paths, channel: channel);
 
-      final loaded =
-          await store.load(cloudOrigin: 'https://app.conclaveax.com');
+      final loaded = await store.load(cloudOrigin: 'https://syntila.app');
       expect(loaded, isNull);
       expect(await paths.sessionFile.exists(), isFalse);
       expect(values, isEmpty);

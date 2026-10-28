@@ -38,7 +38,7 @@ class SpaceDirectoryResolver {
   Future<void> _tail = Future<void>.value();
 
   static const _registryFileName = 'space-directories.json';
-  static const _markerFileName = '.conclave-space.json';
+  static const _markerFileName = '.syntila-space.json';
   static const _schemaVersion = 1;
   static const _ownerIdLength = 8;
   static final _safeId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$');

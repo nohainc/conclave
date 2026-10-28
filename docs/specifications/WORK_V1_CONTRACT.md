@@ -749,7 +749,7 @@ and do not request provider fetching by Workspace. Chat, Work, Research, and
 Implement receive safe relative file references; Plan receives attachment
 metadata, and Test/Verify use their defined handoff inputs.
 Thread-local execution materializes file bytes under
-`.conclave/inputs/<work-request-id>/file-NNN`; paths are derived from
+`.syntila/inputs/<work-request-id>/file-NNN`; paths are derived from
 server-generated request identity and attachment order, never accepted from
 the client. The same materialized files are immutable across retries.
 

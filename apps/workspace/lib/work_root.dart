@@ -15,7 +15,7 @@ class WorkRootResolver {
 
   String get defaultPath {
     final separator = platform.isWindows ? r'\' : '/';
-    return _join([platform.homeDirectory, 'Documents', 'Conclave'],
+    return _join([platform.homeDirectory, 'Documents', 'Syntila'],
         separator: separator);
   }
 

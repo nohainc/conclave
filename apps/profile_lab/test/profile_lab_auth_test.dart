@@ -8,14 +8,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('ProfileLabSession', () {
     test(
-        'parses valid Profile Lab session with conclave.profile-lab.management audience',
+        'parses valid Profile Lab session with syntila.profile-lab.management audience',
         () {
       final expiresAt = DateTime.now().toUtc().add(const Duration(days: 30));
       final issuedAt = DateTime.now().toUtc();
       final session = ProfileLabSession.fromJson({
-        'credential': 'conclave_dhs_secret123',
+        'credential': 'syntila_dhs_secret123',
         'sessionId': 'session-xyz',
-        'audience': 'conclave.profile-lab.management',
+        'audience': 'syntila.profile-lab.management',
         'user': {
           'userId': 'admin-user-1',
           'displayName': 'Admin User',
@@ -25,24 +25,24 @@ void main() {
         'issuedAt': issuedAt.toIso8601String(),
       });
 
-      expect(session.credential, 'conclave_dhs_secret123');
+      expect(session.credential, 'syntila_dhs_secret123');
       expect(session.sessionId, 'session-xyz');
       expect(session.userId, 'admin-user-1');
       expect(session.displayName, 'Admin User');
       expect(session.email, 'admin@syntila.test');
-      expect(session.audience, 'conclave.profile-lab.management');
+      expect(session.audience, 'syntila.profile-lab.management');
       expect(session.isExpired, isFalse);
     });
 
     test(
-        'strictly rejects workspace session audience conclave.desktop.management',
+        'strictly rejects workspace session audience syntila.desktop.management',
         () {
       final expiresAt = DateTime.now().toUtc().add(const Duration(days: 30));
       expect(
         () => ProfileLabSession.fromJson({
-          'credential': 'conclave_dhs_secret123',
+          'credential': 'syntila_dhs_secret123',
           'sessionId': 'session-xyz',
-          'audience': 'conclave.desktop.management',
+          'audience': 'syntila.desktop.management',
           'user': {
             'userId': 'admin-user-1',
             'displayName': 'Admin User',
@@ -85,7 +85,7 @@ void main() {
     });
 
     test(
-        'creates intent with conclave.profile-lab.management audience and clientName',
+        'creates intent with syntila.profile-lab.management audience and clientName',
         () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => server.close(force: true));
@@ -97,7 +97,7 @@ void main() {
         final body = jsonDecode(bodyText) as Map<String, dynamic>;
         expect(body['clientName'], 'Syntila Profile Lab');
         expect(body['contractVersion'], '1.1');
-        expect(body['audience'], 'conclave.profile-lab.management');
+        expect(body['audience'], 'syntila.profile-lab.management');
 
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({
@@ -110,7 +110,7 @@ void main() {
               .add(const Duration(minutes: 10))
               .toIso8601String(),
           'pollIntervalMs': 1000,
-          'audience': 'conclave.profile-lab.management',
+          'audience': 'syntila.profile-lab.management',
         }));
         await request.response.close();
       });
@@ -122,7 +122,7 @@ void main() {
       final intent = await client.createIntent();
       expect(intent.intentId, 'intent-lab-1');
       expect(intent.pollToken, 'poll-token-lab-xyz');
-      expect(intent.audience, 'conclave.profile-lab.management');
+      expect(intent.audience, 'syntila.profile-lab.management');
     });
 
     test('polls, claims, and validates a Profile Lab session', () async {
@@ -147,9 +147,9 @@ void main() {
           final body = jsonDecode(bodyText) as Map<String, dynamic>;
           expect(body['pollToken'], 'poll-token-lab-xyz');
           request.response.write(jsonEncode({
-            'credential': 'conclave_dhs_claimed123',
+            'credential': 'syntila_dhs_claimed123',
             'sessionId': 'session-claimed-1',
-            'audience': 'conclave.profile-lab.management',
+            'audience': 'syntila.profile-lab.management',
             'user': {
               'userId': 'admin-1',
               'displayName': 'Admin One',
@@ -163,10 +163,10 @@ void main() {
         } else if (request.uri.path == '/api/desktop-auth/session' &&
             request.method == 'GET') {
           expect(request.headers.value(HttpHeaders.authorizationHeader),
-              'Bearer conclave_dhs_claimed123');
+              'Bearer syntila_dhs_claimed123');
           request.response.write(jsonEncode({
             'sessionId': 'session-claimed-1',
-            'audience': 'conclave.profile-lab.management',
+            'audience': 'syntila.profile-lab.management',
             'user': {
               'userId': 'admin-1',
               'displayName': 'Admin One',
@@ -187,13 +187,13 @@ void main() {
         verificationUrl: Uri.parse('http://127.0.0.1:${server.port}/verify'),
         expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
         pollIntervalMs: 100,
-        audience: 'conclave.profile-lab.management',
+        audience: 'syntila.profile-lab.management',
       );
 
       final session = await client.waitForApprovalAndClaim(intent);
-      expect(session.credential, 'conclave_dhs_claimed123');
+      expect(session.credential, 'syntila_dhs_claimed123');
       expect(session.sessionId, 'session-claimed-1');
-      expect(session.audience, 'conclave.profile-lab.management');
+      expect(session.audience, 'syntila.profile-lab.management');
 
       await expectLater(client.validateSession(session), completes);
     });
@@ -208,7 +208,7 @@ void main() {
         expect(request.uri.path,
             '/api/desktop-auth/sessions/session-lab-1/revoke');
         expect(request.headers.value(HttpHeaders.authorizationHeader),
-            'Bearer conclave_dhs_revoke_cred');
+            'Bearer syntila_dhs_revoke_cred');
         request.response.headers.contentType = ContentType.json;
         request.response.write(jsonEncode({'revoked': true}));
         await request.response.close();
@@ -220,7 +220,7 @@ void main() {
       addTearDown(client.close);
 
       final session = ProfileLabSession(
-        credential: 'conclave_dhs_revoke_cred',
+        credential: 'syntila_dhs_revoke_cred',
         sessionId: 'session-lab-1',
         userId: 'admin-1',
         displayName: 'Admin',

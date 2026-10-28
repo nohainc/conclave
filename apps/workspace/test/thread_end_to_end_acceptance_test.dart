@@ -26,9 +26,9 @@ import 'dart:io';
 Future<void> main(List<String> args) async {
   final remote = args[0];
   final phase = args[1];
-  final threadDirectory = Directory('conclave');
+  final threadDirectory = Directory('syntila');
   if (!threadDirectory.existsSync()) {
-    final clone = await Process.run('git', ['clone', '-q', remote, 'conclave']);
+    final clone = await Process.run('git', ['clone', '-q', remote, 'syntila']);
     if (clone.exitCode != 0) exit(clone.exitCode);
   }
   File('syntila/\$phase.txt').writeAsStringSync(phase);

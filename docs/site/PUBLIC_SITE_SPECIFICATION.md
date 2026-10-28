@@ -12,9 +12,9 @@ Thread, Workspace, or Worker state.
 | --- | --- | --- |
 | `conclaveax.com` | Public Astro website | None |
 | `www.conclaveax.com` | Redirect to the canonical domain | None |
-| `app.conclaveax.com` | Authenticated Syntila application | Better Auth |
+| `syntila.app` | Authenticated Syntila application | Better Auth |
 
-The public site links to `https://app.conclaveax.com`. It does not proxy or
+The public site links to `https://syntila.app`. It does not proxy or
 embed the application. Syntila Cloud provides application APIs, authentication,
 authorization, and orchestration. Syntila Workspace is the local desktop
 runtime that supervises provider CLI execution.
@@ -143,7 +143,7 @@ on decorative gradients, robot imagery, or animation to explain the product.
 
 An implementation is conformant when a visitor can, without signing in:
 
-- distinguish the public site from `app.conclaveax.com`;
+- distinguish the public site from `syntila.app`;
 - explain the Space/Thread to Workspace execution path;
 - understand that provider execution uses local CLI software;
 - find the primary application action and public product explanations;

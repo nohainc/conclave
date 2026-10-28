@@ -92,9 +92,9 @@ for the headless architecture.
 
 The Workspace is an execution environment, not a directory. Its private
 Application Data Root is resolved automatically under the Syntila application
-family root (`~/Library/Application Support/Conclave/` on macOS, XDG state on
+family root (`~/Library/Application Support/Syntila/` on macOS, XDG state on
 Linux, `%LOCALAPPDATA%\Syntila` on Windows). The user Work Root is separate and
-defaults to `~/Documents/Conclave`; Space Work Directories live beneath it and
+defaults to `~/Documents/Syntila`; Space Work Directories live beneath it and
 are configured through `folders.work` in `workspace.nano`. Space directory names
 are human-readable, while a private registry and marker bind each directory to
 its immutable Space ID. Thread directories are not created during normal
@@ -194,8 +194,8 @@ A Workspace build targets exactly one Cloud; there is no runtime switch.
 
 | Command | Cloud API | State directory (macOS) |
 | --- | --- | --- |
-| `pnpm workspace:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave` |
-| `pnpm workspace:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local` |
+| `pnpm workspace:build:macos:prod` (default) | `https://syntila.app` | `~/Library/Application Support/Syntila` |
+| `pnpm workspace:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Syntila Local` |
 
 Local builds are compiled with `SYNTILA_WORKSPACE_ENVIRONMENT=local`, ignore
 `cloud.url` from `workspace.nano`, and write to a separate state directory so they

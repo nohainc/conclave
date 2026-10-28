@@ -35,8 +35,8 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 - **Syntila Cloud** owns collaboration and scheduling state, the logical Worker catalog, the single current Profile and bounded Profile history for each logical Worker, and authorization. Provider credentials stay local.
 - **Syntila Workspace** is the machine execution environment. It owns
   application-managed state below
-  `~/Library/Application Support/Conclave/Workspace/` and resolves one
-  user-owned Work Root, which defaults to `~/Documents/Conclave` on macOS.
+  `~/Library/Application Support/Syntila/Workspace/` and resolves one
+  user-owned Work Root, which defaults to `~/Documents/Syntila` on macOS.
 - **Logical Workers** such as ChatGPT and Gemini are stable product identities. The Engine and Profile resolve each identity to a supported provider CLI.
 
 ## Work v1
@@ -67,7 +67,7 @@ User Workflow Configuration -> execution resolution -> logical Worker -> current
 ### Filesystem ownership
 
 The application-family data root is resolved automatically at
-`~/Library/Application Support/Conclave/`. Workspace state, registry,
+`~/Library/Application Support/Syntila/`. Workspace state, registry,
 Profiles, Engines, sessions, caches, runtime metadata, and other internal
 files remain application-managed below its `Workspace/` subtree. Profile Lab
 uses a separate `Profile Lab/` subtree under the same root.
@@ -85,12 +85,12 @@ The filesystem contract is:
 
 ```text
 USER-OWNED
-~/Documents/Conclave/
+~/Documents/Syntila/
 └── <Space>/
     └── projects/files
 
 SYNTILA-OWNED
-~/Library/Application Support/Conclave/
+~/Library/Application Support/Syntila/
 ├── Workspace/
 │   ├── profiles
 │   ├── engines

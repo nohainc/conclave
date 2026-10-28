@@ -205,13 +205,13 @@ public localhost API.
 Syntila-owned runtime state is under:
 
 ```text
-~/Library/Application Support/Conclave/Workspace/
+~/Library/Application Support/Syntila/Workspace/
     configuration, registry, profiles, engines, sessions, assignments,
     logs, cache, runtime
 ```
 
 User-owned files are under the configured Work Root (default
-`~/Documents/Conclave`) and Space directories below it. Every Space owner,
+`~/Documents/Syntila`) and Space directories below it. Every Space owner,
 including the Workspace owner, has one folder directly under Work Root, named
 once as the first 8 characters of their user ID (longer on collision) and
 recorded in the private registry; it never changes, so a user rename moves
@@ -346,7 +346,7 @@ settings mutation or live reload command.
     service..
         enabled true
     cloud..
-        url https://app.conclaveax.com
+        url https://syntila.app
         connect_on_start true
     workspace..
         name My Workspace
@@ -355,12 +355,12 @@ settings mutation or live reload command.
     folders..
         root /home/me
         syntila /home/me/.local/share/syntila/workspace
-        state /home/me/.local/state/conclave/workspace
-        work /home/me/Documents/Conclave
+        state /home/me/.local/state/syntila/workspace
+        work /home/me/Documents/Syntila
         profiles /home/me/.local/share/syntila/workspace/Profiles
         engines /home/me/.local/share/syntila/workspace/Engines
-        logs /home/me/.local/state/conclave/workspace/logs
-        cache /home/me/.local/state/conclave/workspace/cache
+        logs /home/me/.local/state/syntila/workspace/logs
+        cache /home/me/.local/state/syntila/workspace/cache
 ```
 
 `root`, `syntila`, `state`, and `work` are required. Extra aliases are allowed
@@ -467,8 +467,8 @@ Service or `0600` file credential store; see the
 - Linux: systemd user unit, or the service as a foreground main process for
   containers; Unix-domain socket IPC under the `0700` state root; Secret
   Service or a `0600` file, selected once per state root and recorded
-  (`systemd-creds` is not implemented); `$XDG_STATE_HOME/conclave/workspace`,
-  with an existing legacy `~/.conclave-workspace` root kept in place.
+  (`systemd-creds` is not implemented); `$XDG_STATE_HOME/syntila/workspace`,
+  with an existing legacy `~/.syntila-workspace` root kept in place.
 - Windows: per-user logon task in the interactive session (not a Service
   Control Manager service); named-pipe IPC restricted to the owning user;
   DPAPI secret store; `%LOCALAPPDATA%\Syntila\Workspace`.

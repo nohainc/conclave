@@ -30,7 +30,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     ".development/provision-profile-starter-templates.sql",
   );
   const baseline = readFileSync(
-    join(root, "apps/cloud/migrations-v8/0001_conclave_v8.sql"),
+    join(root, "apps/cloud/migrations-v8/0001_syntila_v8.sql"),
     "utf8",
   );
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });

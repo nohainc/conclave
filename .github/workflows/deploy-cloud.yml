@@ -27,7 +27,7 @@ jobs:
         run: bash scripts/ci/require-ci-success.sh
 
   deploy:
-    name: Deploy app.conclaveax.com
+    name: Deploy syntila.app
     needs: require-ci
     if: github.ref == 'refs/heads/main'
     environment: production
@@ -82,7 +82,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/production-workspace-gateway-smoke.mjs --schema-only
 
-      - name: Deploy app.conclaveax.com Worker
+      - name: Deploy syntila.app Worker
         working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

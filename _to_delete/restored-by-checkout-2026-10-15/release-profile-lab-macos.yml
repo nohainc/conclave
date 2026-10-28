@@ -1,4 +1,4 @@
-name: Release Conclave Profile Lab for macOS (Internal)
+name: Release Syntila Profile Lab for macOS (Internal)
 
 on:
   workflow_dispatch:
@@ -88,15 +88,15 @@ jobs:
         env:
           PROFILE_LAB_VERSION: ${{ inputs.version }}
         run: |
-          ARCHIVE="dist/conclave-profile-lab/macos/Conclave-Profile-Lab-$PROFILE_LAB_VERSION-macos.zip"
+          ARCHIVE="dist/syntila-profile-lab/macos/Syntila-Profile-Lab-$PROFILE_LAB_VERSION-macos.zip"
           mkdir -p "$RUNNER_TEMP/profile-lab-app-check"
           ditto -x -k "$ARCHIVE" "$RUNNER_TEMP/profile-lab-app-check"
-          APP="$RUNNER_TEMP/profile-lab-app-check/Conclave Profile Lab.app"
+          APP="$RUNNER_TEMP/profile-lab-app-check/Syntila Profile Lab.app"
           test -d "$APP"
       - name: Upload internal immutable release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: conclave-profile-lab-${{ inputs.version }}-macos
-          path: dist/conclave-profile-lab/macos/Conclave-Profile-Lab-${{ inputs.version }}-macos.zip
+          name: syntila-profile-lab-${{ inputs.version }}-macos
+          path: dist/syntila-profile-lab/macos/Syntila-Profile-Lab-${{ inputs.version }}-macos.zip
           retention-days: 90
           if-no-files-found: error

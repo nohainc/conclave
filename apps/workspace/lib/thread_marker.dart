@@ -11,7 +11,7 @@ class ThreadIdentityMarker {
   });
 
   static const currentSchemaVersion = 1;
-  static const fileName = '.conclave-thread.json';
+  static const fileName = '.syntila-thread.json';
 
   final int schemaVersion;
   final String spaceId;

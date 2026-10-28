@@ -8,28 +8,27 @@ repository root with a scoped Cloudflare API token and account ID.
 
 The checked-in Worker configurations expect these production resources:
 
-- D1 database: `conclave-v8-production`;
-- R2 bucket: `conclave-artifacts-production`;
-- app Worker: `conclave-ax-app`.
+- D1 database: `syntila`;
+- R2 bucket: `syntila-artifacts-production`;
+- app Worker: `syntila-app`.
 
 Do not reuse development D1 databases or R2 buckets for production.
 
 ## Provision storage
 
 ```sh
-wrangler d1 create conclave-v8-production
-wrangler r2 bucket create conclave-artifacts-production
+wrangler d1 create syntila
+wrangler r2 bucket create syntila-artifacts-production
 ```
 
-The v8 D1 database has already been provisioned and initialized from
-`apps/cloud/migrations-v8/0001_conclave_v8.sql`. A private copy of production
-rows was imported and checked against the source counts. The previous
-`syntila-production` database remains available as a rollback copy; do not
-delete it until the v8 app has been deployed and its production checks pass.
+The `syntila` database was created on 2026-10-28 in EEUR with ID
+`6130c425-59e2-4ec7-b7bd-d3fe8a8ea6a7`. It starts with the schema and
+product seed records only; no accounts or data were copied from the previous
+production database. The previous database remains intact.
 
 ### Forward migrations
 
-`0001_conclave_v8.sql` has already been applied to production and is immutable.
+`0001_syntila_v8.sql` has already been applied to production and is immutable.
 Do not edit or re-bootstrap it to deliver schema changes. Add an ordered
 forward migration and apply it through the production deployment workflow.
 Migration `0002_desktop_auth_multi_audience.sql` rebuilds the desktop auth

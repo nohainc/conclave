@@ -228,7 +228,7 @@ export async function securityContext(
   }
 
   const token = bearer(request);
-  if (token && token.startsWith("conclave_dhs_")) {
+  if (token && token.startsWith("syntila_dhs_")) {
     const tokenHash = await hashToken(token);
     const now = new Date().toISOString();
     const session = await env.SYNTILA_DB.prepare(
@@ -257,7 +257,7 @@ export async function securityContext(
       );
     }
     if (
-      session.audience === "conclave.profile-lab.management" &&
+      session.audience === "syntila.profile-lab.management" &&
       env.SYNTILA_PROFILE_LAB_OWNER_EMAIL !== undefined &&
       !(await isProfileLabOwner(env, session.userId))
     ) {

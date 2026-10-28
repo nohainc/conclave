@@ -84,7 +84,7 @@ void main() {
               'channel': 'stable',
               'packageDigest': digest,
               'packageR2Key': 'workspace/5.0.0.tar.gz',
-              'publisher': 'conclave',
+              'publisher': 'syntila',
               'signature': 'sig-test',
             },
           }));
@@ -303,7 +303,7 @@ void main() {
   });
 
   test('verifies signed Workspace metadata before activation', () async {
-    final fixture = await Ed25519ReleaseFixture.create(publisher: 'conclave');
+    final fixture = await Ed25519ReleaseFixture.create(publisher: 'syntila');
     final root = await Directory.systemTemp.createTemp('syntila-update-');
     final bytes = [1, 3, 3, 7];
     final digest = sha256.convert(bytes).toString();
@@ -318,7 +318,7 @@ void main() {
       'releaseNotes': 'verified update',
     };
     final signature = await fixture.signWorkspaceRelease(
-      publisher: 'conclave',
+      publisher: 'syntila',
       keyId: fixtureKeyId,
       digest: digest,
       metadata: metadata,
@@ -329,7 +329,7 @@ void main() {
         channel: 'stable',
         bytes: bytes,
         digest: digest,
-        publisher: 'conclave',
+        publisher: 'syntila',
         signingKeyId: fixtureKeyId,
         signature: signature,
         supportedOS: metadata['supportedOS'] as List<String>,

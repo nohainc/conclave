@@ -15,7 +15,7 @@ describe("Worker Profile V9 cleanup migration", () => {
       execFileSync("sqlite3", ["-bail", "-json", ":memory:"], {
         input:
           [
-            "0001_conclave_v8.sql",
+            "0001_syntila_v8.sql",
             "0043_worker_profiles_v9.sql",
             "0044_remove_v8_profile_lifecycle.sql",
             "0046_worker_catalog_profile_identity.sql",
@@ -37,7 +37,7 @@ describe("Worker Profile V9 cleanup migration", () => {
       execFileSync("sqlite3", ["-bail", "-json", ":memory:"], {
         input:
           [
-            "0001_conclave_v8.sql",
+            "0001_syntila_v8.sql",
             "0043_worker_profiles_v9.sql",
             "0044_remove_v8_profile_lifecycle.sql",
             "0046_worker_catalog_profile_identity.sql",

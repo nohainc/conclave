@@ -44,7 +44,7 @@ Cloud stores file bytes in artifact storage bound to the user and Thread and
 records file references on the request; an explicit resend of the same
 submission replays the same request and file IDs. Changing the authentication
 session clears in-progress delivery status in AX. At dispatch, Workspace receives
-its delivered copy of each file and writes `.conclave/inputs/<workRequestId>/file-NNN` below the
+its delivered copy of each file and writes `.syntila/inputs/<workRequestId>/file-NNN` below the
 execution directory before starting the generic CLI Worker Engine. Chat,
 Research and Implement prompts include these local paths; Plan receives
 attachment metadata. File delivery is provider-independent: reading each file

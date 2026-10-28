@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-database_name="${SYNTILA_LOCAL_D1_NAME:-conclave-development}"
+database_name="${SYNTILA_LOCAL_D1_NAME:-syntila-development}"
 wrangler_config="${SYNTILA_WRANGLER_CONFIG:-${repo_root}/apps/cloud/wrangler.jsonc}"
 
 if [[ ! -f "$wrangler_config" ]]; then

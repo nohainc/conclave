@@ -22,7 +22,7 @@ describe("Workspace runtime lifecycle routes", () => {
     ["token creation", "POST", "/api/workspaces/workspace-1/enrollments"],
   ])("does not expose %s", async (_label, method, path) => {
     const response = await routeWorkerRequest(
-      new Request(`https://app.conclaveax.com${path}`, { method }),
+      new Request(`https://syntila.app${path}`, { method }),
       {} as Env,
       undefined,
       {},
@@ -37,7 +37,7 @@ describe("Workspace runtime lifecycle routes", () => {
       Response.json({ workspaceRuntimeId: "runtime-1" }, { status: 201 }),
     );
     const response = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspace-runtime/register", {
+      new Request("https://syntila.app/api/workspace-runtime/register", {
         method: "POST",
         headers: {
           authorization: "Bearer desktop-human-token",
@@ -62,24 +62,21 @@ describe("Workspace runtime lifecycle routes", () => {
     );
     const release = vi.fn(async () => Response.json({ released: true }));
     const checkResponse = await routeWorkerRequest(
-      new Request(
-        "https://app.conclaveax.com/api/workspace-runtime/ownership",
-        {
-          method: "POST",
-          headers: {
-            authorization: "Bearer desktop-human-token",
-            "content-type": "application/json",
-          },
-          body: "{}",
+      new Request("https://syntila.app/api/workspace-runtime/ownership", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer desktop-human-token",
+          "content-type": "application/json",
         },
-      ),
+        body: "{}",
+      }),
       {} as Env,
       undefined,
       { handleCheckWorkspaceOwnership: ownership },
       dependencies(sameOrigin),
     );
     const releaseResponse = await routeWorkerRequest(
-      new Request("https://app.conclaveax.com/api/workspace-runtime/release", {
+      new Request("https://syntila.app/api/workspace-runtime/release", {
         method: "POST",
         headers: {
           authorization: "Bearer fresh-desktop-human-token",
@@ -104,17 +101,14 @@ describe("Workspace runtime lifecycle routes", () => {
     const sameOrigin = vi.fn();
     const disconnect = vi.fn(async () => Response.json({ disconnected: true }));
     const response = await routeWorkerRequest(
-      new Request(
-        "https://app.conclaveax.com/api/workspace-runtime/disconnect",
-        {
-          method: "POST",
-          headers: {
-            authorization: "Bearer desktop-human-token",
-            "content-type": "application/json",
-          },
-          body: "{}",
+      new Request("https://syntila.app/api/workspace-runtime/disconnect", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer desktop-human-token",
+          "content-type": "application/json",
         },
-      ),
+        body: "{}",
+      }),
       {} as Env,
       undefined,
       { handleDisconnectDesktopWorkspace: disconnect },
@@ -130,12 +124,12 @@ describe("Workspace runtime lifecycle routes", () => {
     const approve = vi.fn(async () => Response.json({ approved: true }));
     const response = await routeWorkerRequest(
       new Request(
-        "https://app.conclaveax.com/api/desktop-auth/intents/intent-1/approve",
+        "https://syntila.app/api/desktop-auth/intents/intent-1/approve",
         {
           method: "POST",
           headers: {
             cookie: "better-auth-session=opaque",
-            origin: "https://app.conclaveax.com",
+            origin: "https://syntila.app",
             "content-type": "application/json",
           },
           body: "{}",
@@ -157,7 +151,7 @@ describe("Workspace runtime lifecycle routes", () => {
     const cancel = vi.fn(async () => Response.json({ cancelled: true }));
     const response = await routeWorkerRequest(
       new Request(
-        "https://app.conclaveax.com/api/desktop-auth/intents/intent-1/cancel",
+        "https://syntila.app/api/desktop-auth/intents/intent-1/cancel",
         {
           method: "POST",
           headers: {

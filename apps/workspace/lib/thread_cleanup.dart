@@ -136,7 +136,7 @@ class ThreadCleanupService {
     }
     final directory = candidate.directory;
     final spaceMarker = File(
-      '${directory.parent.path}${Platform.pathSeparator}.conclave-space.json',
+      '${directory.parent.path}${Platform.pathSeparator}.syntila-space.json',
     );
     if (await spaceMarker.exists()) {
       throw const ThreadCleanupViolation(

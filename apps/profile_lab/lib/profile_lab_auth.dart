@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'profile_lab_cloud_config.dart';
 
-const profileLabAudience = 'conclave.profile-lab.management';
+const profileLabAudience = 'syntila.profile-lab.management';
 const profileLabClientName = 'Syntila Profile Lab';
 const profileLabAuthIntentContractVersion = '1.1';
 

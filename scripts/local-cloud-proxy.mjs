@@ -1,4 +1,4 @@
-const upstream = "https://app.conclaveax.com";
+const upstream = "https://syntila.app";
 const localPrefix = "syntila-dev-";
 const upstreamTimeoutMs = 10_000;
 

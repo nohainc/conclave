@@ -1,4 +1,4 @@
--- Phase 5: Conclave-owned canonical history. Provider sessions are local execution state.
+-- Phase 5: Syntila-owned canonical history. Provider sessions are local execution state.
 -- Snapshot references intentionally survive deletion of source execution rows.
 CREATE TABLE conversation_history_entries (
   id TEXT PRIMARY KEY DEFAULT ('history-' || lower(hex(randomblob(16)))),
@@ -7,7 +7,7 @@ CREATE TABLE conversation_history_entries (
   schema_version INTEGER NOT NULL DEFAULT 1 CHECK (schema_version = 1),
   kind TEXT NOT NULL CHECK (kind IN ('user_message', 'worker_response', 'workflow_event', 'execution_event', 'artifact_event', 'context_event')),
   event_type TEXT NOT NULL,
-  actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'worker', 'conclave')),
+  actor_type TEXT NOT NULL CHECK (actor_type IN ('user', 'worker', 'syntila')),
   actor_id TEXT,
   work_request_id TEXT,
   turn_id TEXT,
@@ -68,7 +68,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = NEW.conversation_id), 0) + 1,
     'workflow_event',
     'workflow.request_accepted',
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NULL,
@@ -90,7 +90,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'workflow_event',
     'workflow.request_status_changed',
-    'conclave',
+    'syntila',
     NULL,
     NEW.id,
     NULL,
@@ -111,7 +111,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'workflow_event',
     'workflow.run_created',
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NULL,
@@ -133,7 +133,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'workflow_event',
     'workflow.run_status_changed',
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NULL,
@@ -154,7 +154,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'workflow_event',
     'workflow.step_created',
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NULL,
@@ -176,7 +176,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'workflow_event',
     'workflow.step_status_changed',
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NULL,
@@ -197,7 +197,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = NEW.conversation_id), 0) + 1,
     'execution_event',
     'execution.created',
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NEW.id,
@@ -219,7 +219,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = NEW.conversation_id), 0) + 1,
     'execution_event',
     'execution.' || CASE WHEN NEW.status = 'running' THEN 'started' ELSE NEW.status END,
-    'conclave',
+    'syntila',
     NULL,
     NEW.work_request_id,
     NEW.id,
@@ -262,7 +262,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'artifact_event',
     'artifact.created',
-    'conclave',
+    'syntila',
     NULL,
     cr.work_request_id,
     NULL,
@@ -283,7 +283,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = cr.conversation_id), 0) + 1,
     'artifact_event',
     'artifact.removed',
-    'conclave',
+    'syntila',
     NULL,
     cr.work_request_id,
     NULL,
@@ -305,7 +305,7 @@ BEGIN
     COALESCE((SELECT MAX(sequence) FROM conversation_history_entries WHERE conversation_id = NEW.id), 0) + 1,
     'context_event',
     'context.revision_advanced',
-    'conclave',
+    'syntila',
     NULL,
     NULL,
     NULL,
@@ -323,13 +323,13 @@ END;
 WITH seed (conversation_id, kind, event_type, actor_type, actor_id, work_request_id, turn_id, artifact_id, source_id, text, metadata_json, deduplication_key, occurred_at, rank) AS (
   SELECT m.conversation_id, 'user_message', 'message.user_created', 'user', m.author_user_id, m.work_request_id, NULL, NULL, m.id, m.text, json_object('userMessageId', m.id), 'user:' || m.id, m.created_at, 0 FROM conversation_user_messages m
   UNION ALL
-  SELECT cr.conversation_id, 'workflow_event', 'workflow.request_snapshot_imported', 'conclave', NULL, wr.id, NULL, NULL, wr.id, NULL, json_object('workflowId', wr.workflow_id, 'workflowVersion', wr.workflow_version, 'status', wr.status, 'imported', json('true')), NULL, wr.updated_at, 1 FROM work_requests wr JOIN conversation_work_requests cr ON cr.work_request_id = wr.id
+  SELECT cr.conversation_id, 'workflow_event', 'workflow.request_snapshot_imported', 'syntila', NULL, wr.id, NULL, NULL, wr.id, NULL, json_object('workflowId', wr.workflow_id, 'workflowVersion', wr.workflow_version, 'status', wr.status, 'imported', json('true')), NULL, wr.updated_at, 1 FROM work_requests wr JOIN conversation_work_requests cr ON cr.work_request_id = wr.id
   UNION ALL
-  SELECT t.conversation_id, 'execution_event', 'execution.snapshot_imported', 'conclave', NULL, t.work_request_id, t.id, NULL, t.id, NULL, json_object('status', t.status, 'startedAt', t.started_at, 'completedAt', t.completed_at, 'imported', json('true')), NULL, t.created_at, 2 FROM conversation_turns t
+  SELECT t.conversation_id, 'execution_event', 'execution.snapshot_imported', 'syntila', NULL, t.work_request_id, t.id, NULL, t.id, NULL, json_object('status', t.status, 'startedAt', t.started_at, 'completedAt', t.completed_at, 'imported', json('true')), NULL, t.created_at, 2 FROM conversation_turns t
   UNION ALL
   SELECT t.conversation_id, 'worker_response', 'message.worker_created', 'worker', t.worker_id, t.work_request_id, t.id, NULL, t.id, t.result_text, json_object('workerId', t.worker_id, 'workerTypeId', t.worker_type_id, 'workerDisplayName', t.worker_display_name, 'profileId', t.profile_id, 'profileVersion', t.profile_version, 'modelId', t.model_id, 'effort', t.effort, 'workflowId', t.workflow_id, 'workflowVersion', t.workflow_version, 'userMessageId', t.user_message_id, 'assignmentId', t.assignment_id, 'taskId', t.task_id, 'stepKind', t.step_kind, 'workerSessionId', t.worker_session_id, 'baseContextRevision', t.base_context_revision), 'worker:' || t.id, t.completed_at, 3 FROM conversation_turns t WHERE t.status = 'completed' AND t.result_text IS NOT NULL
   UNION ALL
-  SELECT cr.conversation_id, 'artifact_event', 'artifact.snapshot_imported', 'conclave', NULL, cr.work_request_id, NULL, a.id, a.id, NULL, json_object('contentDigest', a.content_digest, 'imported', json('true')), NULL, a.created_at, 4 FROM artifacts a JOIN conversation_work_requests cr ON cr.work_request_id = COALESCE(a.work_request_id, (SELECT wt.work_request_id FROM workflow_tasks wt JOIN worker_assignments wa ON wa.task_id = wt.id WHERE wa.id = a.assignment_id), (SELECT work_request_id FROM runs WHERE id = a.run_id))
+  SELECT cr.conversation_id, 'artifact_event', 'artifact.snapshot_imported', 'syntila', NULL, cr.work_request_id, NULL, a.id, a.id, NULL, json_object('contentDigest', a.content_digest, 'imported', json('true')), NULL, a.created_at, 4 FROM artifacts a JOIN conversation_work_requests cr ON cr.work_request_id = COALESCE(a.work_request_id, (SELECT wt.work_request_id FROM workflow_tasks wt JOIN worker_assignments wa ON wa.task_id = wt.id WHERE wa.id = a.assignment_id), (SELECT work_request_id FROM runs WHERE id = a.run_id))
 )
 INSERT INTO conversation_history_entries (conversation_id, sequence, kind, event_type, actor_type, actor_id, work_request_id, turn_id, artifact_id, source_id, text, metadata_json, deduplication_key, occurred_at)
 SELECT conversation_id, ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY occurred_at, rank, source_id),

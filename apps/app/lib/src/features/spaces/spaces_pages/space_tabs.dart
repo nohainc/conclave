@@ -146,8 +146,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                           style: SyntilaMenuStyle.item(isDark),
                           leadingIcon: Icon(icon, size: 16),
                           onPressed: () => Navigator.pop(menuContext, action),
-                          child:
-                              Text(label, style: SyntilaMenuStyle.textStyle),
+                          child: Text(label, style: SyntilaMenuStyle.textStyle),
                         ),
                       ),
                   ],

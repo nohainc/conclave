@@ -76,7 +76,7 @@ function createMemoryDb(users: Record<string, string>) {
 }
 
 function post(path: string, body: unknown): Request {
-  return new Request(`https://app.conclaveax.com/api/auth/${path}`, {
+  return new Request(`https://syntila.app/api/auth/${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -98,7 +98,7 @@ describe("two-step email change", () => {
       SYNTILA_DB: memory.db,
       SYNTILA_ENVIRONMENT: "production",
       BETTER_AUTH_SECRET: "a-secure-production-secret-that-is-long-enough",
-      BETTER_AUTH_URL: "https://app.conclaveax.com",
+      BETTER_AUTH_URL: "https://syntila.app",
       SYNTILA_EMAIL: { send },
     };
     return { ...memory, send, env };

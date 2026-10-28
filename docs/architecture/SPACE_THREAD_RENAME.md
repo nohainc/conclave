@@ -50,7 +50,7 @@ cutover. No remote database, namespace or application is changed by this task.
 
 Workspace's ID-only directory layout remains `<WorkRoot>/<spaceId>/<threadId>`.
 Stable entity IDs preserve the physical directory location during a terminology
-change; this task deliberately does not introduce a `.conclave/spaces/...` tree or
+change; this task deliberately does not introduce a `.syntila/spaces/...` tree or
 move user files. That alternative in the handoff analysis is not the normative
 v8 filesystem contract. Marker names/fields and local contract metadata now use
 Thread/Space naming; existing installations must have their metadata converted
@@ -99,7 +99,7 @@ validation jobs, both native macOS builds and the final acceptance gate:
 This is executable evidence for the rename and CI commits, not evidence that
 production has adopted their database contract.
 
-Read-only inspection of the configured `conclave-v8-production` database found
+Read-only inspection of the configured `syntila` database found
 71 schema tables, including `projects`, `workstreams` and older runtime
 entities. The required `spaces`, `threads`, `space_memberships`,
 `space_invitations` and `workspace_space_grants` tables were absent. Applied

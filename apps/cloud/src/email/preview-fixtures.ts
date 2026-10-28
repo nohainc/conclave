@@ -4,7 +4,7 @@ import type { EmailTemplateId, EmailTemplateInputMap } from "./email-types.js";
  * Synthetic, non-deliverable values used by local previews and QA. These
  * values must never be used as production event data.
  */
-export const EMAIL_PREVIEW_ORIGIN = "https://app.conclaveax.com";
+export const EMAIL_PREVIEW_ORIGIN = "https://syntila.app";
 
 export const emailPreviewFixtures: Readonly<{
   [TId in EmailTemplateId]: EmailTemplateInputMap[TId];

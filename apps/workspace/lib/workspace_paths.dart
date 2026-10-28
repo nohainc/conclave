@@ -25,7 +25,7 @@ class WorkspacePaths {
         'Application Support',
         // Local development builds keep their state apart from the
         // production app so registrations and sessions never mix.
-        syntilaWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave',
+        syntilaWorkspaceIsLocalBuild ? 'Syntila Local' : 'Syntila',
       ]));
     }
     if (runtime.operatingSystem == 'windows') {
@@ -37,12 +37,12 @@ class WorkspacePaths {
       }
       return Directory(_join([
         local ?? '${runtime.homeDirectory}/AppData/Local',
-        syntilaWorkspaceIsLocalBuild ? 'Conclave Local' : 'Conclave'
+        syntilaWorkspaceIsLocalBuild ? 'Syntila Local' : 'Syntila'
       ]));
     }
     final folder = syntilaWorkspaceIsLocalBuild
-        ? '.conclave-workspace-local'
-        : '.conclave-workspace';
+        ? '.syntila-workspace-local'
+        : '.syntila-workspace';
     final legacy =
         Directory('${runtime.homeDirectory}${Platform.pathSeparator}$folder');
     if (runtime.operatingSystem == 'linux') {
@@ -58,7 +58,7 @@ class WorkspacePaths {
     return legacy;
   }
 
-  /// `$XDG_STATE_HOME/conclave/workspace` (ADR-021 §2.5). A relative
+  /// `$XDG_STATE_HOME/syntila/workspace` (ADR-021 §2.5). A relative
   /// XDG value is invalid per the XDG spec and falls back to the default.
   static Directory linuxXdgStateDirectory({
     required String homeDirectory,
@@ -68,10 +68,10 @@ class WorkspacePaths {
         ? xdgStateHome
         : '$homeDirectory/.local/state';
     return Directory(
-        '$base/conclave/${syntilaWorkspaceIsLocalBuild ? 'workspace-local' : 'workspace'}');
+        '$base/syntila/${syntilaWorkspaceIsLocalBuild ? 'workspace-local' : 'workspace'}');
   }
 
-  /// Earlier Linux service runs used `~/.conclave-workspace`. That root keeps
+  /// Earlier Linux service runs used `~/.syntila-workspace`. That root keeps
   /// its authority in place so installation and runtime identities, the
   /// credential, registry, Profiles, and sessions are never moved or forked.
   static Directory resolveLinuxStateDirectory(
@@ -95,7 +95,7 @@ class WorkspacePaths {
     if (runtime.operatingSystem == 'windows') {
       final target = defaultWorkspaceDirectory(platform: runtime);
       final legacy = Directory(
-          '${runtime.homeDirectory}/${syntilaWorkspaceIsLocalBuild ? '.conclave-workspace-local' : '.conclave-workspace'}');
+          '${runtime.homeDirectory}/${syntilaWorkspaceIsLocalBuild ? '.syntila-workspace-local' : '.syntila-workspace'}');
       return resolveWindowsStateDirectory(legacy: legacy, target: target);
     }
     return defaultApplicationDataRoot(platform: runtime);
@@ -216,7 +216,7 @@ class WorkspacePaths {
       platform.homeDirectory,
       'Library',
       'Logs',
-      'Conclave Workspace',
+      'Syntila Workspace',
     ]));
   }
 
@@ -279,7 +279,7 @@ class WorkspacePaths {
     final newWork = Directory(_join([
       runtime.homeDirectory,
       'Documents',
-      'Conclave',
+      'Syntila',
     ]));
     final oldWorkRoots = [
       Directory(_join([applicationRoot.path, 'Workspace', 'Work'])),

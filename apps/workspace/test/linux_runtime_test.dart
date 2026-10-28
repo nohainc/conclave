@@ -21,20 +21,20 @@ void main() {
           homeDirectory: '/home/u',
           xdgStateHome: '/var/state',
         ).path,
-        '/var/state/conclave/workspace',
+        '/var/state/syntila/workspace',
       );
       expect(
         WorkspacePaths.linuxXdgStateDirectory(
           homeDirectory: '/home/u',
           xdgStateHome: 'relative',
         ).path,
-        '/home/u/.local/state/conclave/workspace',
+        '/home/u/.local/state/syntila/workspace',
       );
     });
 
     test('an existing legacy root keeps its authority in place', () {
-      final legacy = Directory('${root.path}/.conclave-workspace');
-      final target = Directory('${root.path}/state/conclave/workspace');
+      final legacy = Directory('${root.path}/.syntila-workspace');
+      final target = Directory('${root.path}/state/syntila/workspace');
       expect(
         WorkspacePaths.resolveLinuxStateDirectory(
           legacy: legacy,

@@ -10,7 +10,7 @@ describe("inventory scheduling for Workers configured after Workspace selection"
     sqlite = new DatabaseSync(":memory:");
     sqlite.exec("PRAGMA foreign_keys = ON");
     for (const migration of [
-      "0001_conclave_v8.sql",
+      "0001_syntila_v8.sql",
       "0018_user_workflow_configurations.sql",
       "0020_space_workflow_configurations.sql",
       "0022_workflow_workspace_selection.sql",

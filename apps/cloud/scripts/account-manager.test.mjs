@@ -26,7 +26,7 @@ function database() {
   db.exec(`
     INSERT INTO users(id,email,display_name,status,created_at,updated_at) VALUES ('one','one@example.com','One','active','2026-01-01','2026-01-01'),('two','two@example.com','Two','deactivated','2026-01-01','2026-01-01');
     INSERT INTO auth_sessions(id,user_id,token,expires_at,created_at,updated_at) VALUES ('session','one','secret','2099','2026','2026');
-    INSERT INTO desktop_human_sessions(id,user_id,token_hash,audience,created_at,last_used_at,expires_at) VALUES ('desktop','one','hash','conclave.desktop.management','2026','2026','2099');`);
+    INSERT INTO desktop_human_sessions(id,user_id,token_hash,audience,created_at,last_used_at,expires_at) VALUES ('desktop','one','hash','syntila.desktop.management','2026','2026','2099');`);
   return db;
 }
 test("environments are explicit and separated", () => {

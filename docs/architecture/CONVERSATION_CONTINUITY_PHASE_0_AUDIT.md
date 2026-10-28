@@ -62,7 +62,7 @@ provider conversation from Cloud history.
 | Actual CLI session/thread | Engine-owned local JSON mapping under Workspace `Workers/<workerId>/state`; provider CLI owns its native conversation data. Actual provider session IDs do not cross Local Worker Protocol into Cloud. |
 | Canonical AI history/context revision | No dedicated canonical Turn log, context revision, summary checkpoint, or per-Worker applied revision. Cloud execution history is durable, but is not automatically replayed as provider-neutral conversation context. |
 
-Schema evidence: [v8 baseline](../../apps/cloud/migrations-v8/0001_conclave_v8.sql),
+Schema evidence: [v8 baseline](../../apps/cloud/migrations-v8/0001_syntila_v8.sql),
 [Chat schema admission](../../apps/cloud/migrations-v8/0006_chat_workflow_admission.sql),
 [local paths](../../apps/workspace/lib/workspace_paths.dart),
 [session store](../../engines/cli_worker/lib/src/engine_session_store.dart).

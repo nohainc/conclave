@@ -13,7 +13,7 @@ it("provisions only the missing baseline starter table and preserves Drafts and 
     const sql = starterTemplateProvisioningSql(
       readFileSync(
         new URL(
-          "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+          "../apps/cloud/migrations-v8/0001_syntila_v8.sql",
           import.meta.url,
         ),
         "utf8",

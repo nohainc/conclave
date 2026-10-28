@@ -17,18 +17,18 @@ class ProfileLabPaths {
   final Directory? _repositoryRoot;
 
   /// Application-managed Profile Lab data:
-  /// `~/Library/Application Support/Conclave/Profile Lab/`
+  /// `~/Library/Application Support/Syntila/Profile Lab/`
   ///
   /// Local development builds use `Syntila Local` instead of `Syntila` so
   /// drafts and settings never mix with the production app.
   Directory get applicationSupportDirectory => Directory(
         '$_home/Library/Application Support/'
-        '${ProfileLabCloudConfig.isLocalBuild ? 'Conclave Local' : 'Conclave'}'
+        '${ProfileLabCloudConfig.isLocalBuild ? 'Syntila Local' : 'Syntila'}'
         '/Profile Lab',
       );
 
   /// Isolated drafts storage root:
-  /// `~/Library/Application Support/Conclave/Profile Lab/drafts/`
+  /// `~/Library/Application Support/Syntila/Profile Lab/drafts/`
   Directory get draftsDirectory =>
       Directory('${applicationSupportDirectory.path}/drafts');
 
@@ -45,7 +45,7 @@ class ProfileLabPaths {
   static const _profilesRelativePath = 'apps/profile_lab/assets/profiles';
 
   /// Checkout path remembered for launches that do not start inside it:
-  /// `~/Library/Application Support/Conclave/Profile Lab/repository_root.txt`
+  /// `~/Library/Application Support/Syntila/Profile Lab/repository_root.txt`
   File get rememberedRepositoryFile =>
       File('${applicationSupportDirectory.path}/repository_root.txt');
 
@@ -102,19 +102,19 @@ class ProfileLabPaths {
   }
 
   /// Bundled/cached CLI Worker Engine binaries root:
-  /// `~/Library/Application Support/Conclave/Profile Lab/engines/`
+  /// `~/Library/Application Support/Syntila/Profile Lab/engines/`
   Directory get enginesDirectory =>
       Directory('${applicationSupportDirectory.path}/engines');
 
   /// Dedicated isolated scratch and execution sandbox root:
-  /// `~/Library/Application Support/Conclave/Profile Lab/sandbox/`
+  /// `~/Library/Application Support/Syntila/Profile Lab/sandbox/`
   Directory get sandboxDirectory =>
       Directory('${applicationSupportDirectory.path}/sandbox');
 
   /// Dedicated macOS logging directory:
-  /// `~/Library/Logs/conclave.profile_lab/`
+  /// `~/Library/Logs/syntila.profile_lab/`
   Directory get logsDirectory =>
-      Directory('$_home/Library/Logs/conclave.profile_lab');
+      Directory('$_home/Library/Logs/syntila.profile_lab');
 
   /// Legacy credentials root used only to remove or migrate old session files.
   Directory get credentialsDirectory =>
@@ -129,7 +129,7 @@ class ProfileLabPaths {
       File('${applicationSupportDirectory.path}/cloud_settings.json');
 
   Directory get legacyApplicationSupportDirectory => Directory(
-        '$_home/Library/Application Support/conclave.profile_lab',
+        '$_home/Library/Application Support/syntila.profile_lab',
       );
 
   /// Bundle identifier and secure Keychain service namespace.

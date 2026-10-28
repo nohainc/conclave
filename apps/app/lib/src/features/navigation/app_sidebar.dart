@@ -128,8 +128,7 @@ class AppSidebar extends StatelessWidget {
                               Scaffold.maybeOf(sidebarContext)?.closeDrawer();
                             }
                           },
-                          borderRadius:
-                              BorderRadius.circular(SyntilaRadius.sm),
+                          borderRadius: BorderRadius.circular(SyntilaRadius.sm),
                           child: Padding(
                             padding: const EdgeInsets.all(4),
                             child: SyntilaBrand.logoMark(size: 28),
@@ -164,8 +163,7 @@ class AppSidebar extends StatelessWidget {
                             constraints: const BoxConstraints(
                                 minWidth: 32, minHeight: 32),
                             style: IconButton.styleFrom(
-                              hoverColor:
-                                  SyntilaColors.navigationHover(isDark),
+                              hoverColor: SyntilaColors.navigationHover(isDark),
                               shape: RoundedRectangleBorder(
                                 borderRadius:
                                     BorderRadius.circular(SyntilaRadius.sm),
@@ -232,8 +230,7 @@ class AppSidebar extends StatelessWidget {
                               : onToggleCollapse,
                           icon: Icon(Icons.menu_open_rounded,
                               size: 20,
-                              color:
-                                  SyntilaColors.navigationTextMuted(isDark)),
+                              color: SyntilaColors.navigationTextMuted(isDark)),
                           padding: EdgeInsets.zero,
                           constraints:
                               const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -310,8 +307,8 @@ class AppSidebar extends StatelessWidget {
                                 color: shellContext.isNavActive(
                                         const AxNavigation.profileSecurity())
                                     ? (isDark
-                                        ? SyntilaColors
-                                            .navigationSelectedColor(isDark)
+                                        ? SyntilaColors.navigationSelectedColor(
+                                            isDark)
                                         : SyntilaColors.primarySoft)
                                     : Colors.transparent,
                                 borderRadius:
@@ -453,8 +450,7 @@ class AppIconRail extends StatelessWidget {
             onPressed: onPressed,
             icon: iconWidget ??
                 Icon(icon,
-                    size: 20,
-                    color: SyntilaColors.navigationTextMuted(isDark)),
+                    size: 20, color: SyntilaColors.navigationTextMuted(isDark)),
             splashRadius: 16,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -907,8 +903,7 @@ class _RailSearchMenuAnchorState extends State<_RailSearchMenuAnchor> {
                               },
                               style: TextStyle(
                                 fontSize: 12,
-                                color:
-                                    SyntilaColors.textPrimary(widget.isDark),
+                                color: SyntilaColors.textPrimary(widget.isDark),
                               ),
                               cursorColor: SyntilaBrand.accent,
                               cursorHeight: 14,

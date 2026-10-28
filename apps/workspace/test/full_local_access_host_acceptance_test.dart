@@ -10,8 +10,7 @@ import 'package:test/test.dart';
 /// on the designated Workspace machine with
 /// `SYNTILA_TEST_FULL_LOCAL_ACCESS=1`.
 void main() {
-  final enabled =
-      Platform.environment['SYNTILA_TEST_FULL_LOCAL_ACCESS'] == '1';
+  final enabled = Platform.environment['SYNTILA_TEST_FULL_LOCAL_ACCESS'] == '1';
   test(
     'Host network, Git, filesystem and process access',
     () async {

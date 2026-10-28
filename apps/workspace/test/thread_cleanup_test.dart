@@ -90,7 +90,7 @@ void main() {
       () async {
     final candidate = (await service().scan()).candidates.single;
     final lockFile = File(
-      '${root.path}${Platform.pathSeparator}.conclave-mutation-locks'
+      '${root.path}${Platform.pathSeparator}.syntila-mutation-locks'
       '${Platform.pathSeparator}space-1${Platform.pathSeparator}'
       'thread-1.lock',
     );
@@ -127,7 +127,7 @@ void main() {
   test('never deletes a Thread directory under a shared Space directory',
       () async {
     await File(
-      '${thread.parent.path}${Platform.pathSeparator}.conclave-space.json',
+      '${thread.parent.path}${Platform.pathSeparator}.syntila-space.json',
     ).writeAsString('{"spaceId":"space-1"}');
     final candidate = (await service().scan()).candidates.single;
 

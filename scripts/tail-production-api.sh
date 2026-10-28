@@ -43,4 +43,4 @@ spawn_terminal() {
 }
 
 spawn_terminal "${RUNNER_TAIL}" "Syntila - Production API Logs"
-echo "✓ Spawned live log tail in a new terminal window for production API (conclave-ax-app)."
+echo "✓ Spawned live log tail in a new terminal window for production API (syntila-app)."

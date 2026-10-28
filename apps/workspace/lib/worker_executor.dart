@@ -73,7 +73,7 @@ typedef WorkRequestInputFetcher = Future<void> Function({
   required String contentDigest,
 });
 
-/// Writes each file input to `.conclave/inputs/<work-request-id>/file-NNN`
+/// Writes each file input to `.syntila/inputs/<work-request-id>/file-NNN`
 /// from the Input Delivery store. Cloud dispatches only after every input is
 /// delivered; [fetch] covers a copy removed since (retention, later retry).
 Future<void> _materializeWorkRequestInputs({
@@ -97,7 +97,7 @@ Future<void> _materializeWorkRequestInputs({
     return;
   }
   final root =
-      Directory('${threadDirectory.path}${Platform.pathSeparator}.conclave');
+      Directory('${threadDirectory.path}${Platform.pathSeparator}.syntila');
   final inputs = Directory('${root.path}${Platform.pathSeparator}inputs');
   final requestDirectory =
       Directory('${inputs.path}${Platform.pathSeparator}$rawRequestId');
@@ -794,7 +794,7 @@ class WorkerAssignmentHandler {
   ) =>
       {
         ...payload,
-        'conclave': {
+        'syntila': {
           'workspaceId': context.workspaceId,
           'workspaceRuntimeId': context.workspaceRuntimeId,
           'workerId': context.workerId,

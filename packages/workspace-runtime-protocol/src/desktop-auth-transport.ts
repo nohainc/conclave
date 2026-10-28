@@ -64,7 +64,7 @@ export const DesktopHumanSessionIssueSchema = z
     expiresAt: timestamp,
     refreshAfter: timestamp.optional(),
     sessionId: id,
-    audience: z.literal("conclave.desktop.management"),
+    audience: z.literal("syntila.desktop.management"),
   })
   .strict();
 export const DesktopHumanSessionRevokeRequestSchema = z

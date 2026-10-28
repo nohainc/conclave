@@ -5,8 +5,7 @@ import 'package:test/test.dart';
 
 void main() {
   test('reconciles the latest idempotent assignment state', () async {
-    final directory =
-        await Directory.systemTemp.createTemp('syntila-journal-');
+    final directory = await Directory.systemTemp.createTemp('syntila-journal-');
     final journal =
         AssignmentJournal(File('${directory.path}/assignments.jsonl'));
     await journal.append(AssignmentRecord(

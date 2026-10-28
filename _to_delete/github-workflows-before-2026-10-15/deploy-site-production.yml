@@ -1,4 +1,4 @@
-name: Deploy Conclave AX Public Site
+name: Deploy Syntila AX Public Site
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: conclave-ax-public-site-production
+  group: syntila-ax-public-site-production
   cancel-in-progress: true
 
 permissions:

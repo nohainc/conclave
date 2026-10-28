@@ -25,7 +25,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     new URL(".development/provision-profile-qualification.sql", root),
     qualificationProvisioningSql(
       readFileSync(
-        new URL("apps/cloud/migrations-v8/0001_conclave_v8.sql", root),
+        new URL("apps/cloud/migrations-v8/0001_syntila_v8.sql", root),
         "utf8",
       ),
     ),

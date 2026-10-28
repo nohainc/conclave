@@ -39,7 +39,7 @@ export function sqliteD1(
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec(
     readFileSync(
-      new URL("../../migrations-v8/0001_conclave_v8.sql", import.meta.url),
+      new URL("../../migrations-v8/0001_syntila_v8.sql", import.meta.url),
       "utf8",
     ),
   );

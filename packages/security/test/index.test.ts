@@ -98,11 +98,11 @@ describe("current authorization model", () => {
       authorizeProfileAdmin(context, ["admin-only"], "profiles:release:manage"),
     ).toThrow(AuthorizationError);
 
-    // Desktop clients must possess conclave.profile-lab.management audience
+    // Desktop clients must possess syntila.profile-lab.management audience
     const profileLabDesktopContext: SecurityContext = {
       ...context,
       clientType: "desktop",
-      audience: "conclave.profile-lab.management",
+      audience: "syntila.profile-lab.management",
     };
     expect(() =>
       authorizeProfileAdmin(profileLabDesktopContext, ["user-1"]),
@@ -111,7 +111,7 @@ describe("current authorization model", () => {
     const workspaceDesktopContext: SecurityContext = {
       ...context,
       clientType: "desktop",
-      audience: "conclave.desktop.management",
+      audience: "syntila.desktop.management",
     };
     expect(() =>
       authorizeProfileAdmin(workspaceDesktopContext, ["user-1"]),
@@ -171,10 +171,10 @@ describe("current authorization model", () => {
         sessionId: "session-1",
       },
       "desktop",
-      "conclave.profile-lab.management",
+      "syntila.profile-lab.management",
     );
     expect(desktopResolved.clientType).toBe("desktop");
-    expect(desktopResolved.audience).toBe("conclave.profile-lab.management");
+    expect(desktopResolved.audience).toBe("syntila.profile-lab.management");
   });
 });
 

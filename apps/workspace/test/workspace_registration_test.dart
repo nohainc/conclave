@@ -132,15 +132,15 @@ void main() {
   });
 
   test('Cloud API URLs normalize configured /api suffixes exactly once', () {
-    const configured = 'https://app.conclaveax.com/api/';
+    const configured = 'https://syntila.app/api/';
 
     expect(
       normalizeWorkspaceCloudOrigin(configured),
-      'https://app.conclaveax.com',
+      'https://syntila.app',
     );
     expect(
       workspaceCloudApiUri(configured, '/api/workspace-runtime/register'),
-      Uri.parse('https://app.conclaveax.com/api/workspace-runtime/register'),
+      Uri.parse('https://syntila.app/api/workspace-runtime/register'),
     );
   });
 
@@ -517,7 +517,7 @@ void main() {
     const registration = WorkspaceRegistration(
       workspaceRuntimeId: 'runtime-1',
       workspaceId: 'workspace-1',
-      cloudUrl: 'https://app.conclaveax.com',
+      cloudUrl: 'https://syntila.app',
       name: 'My Workspace',
       hostname: 'my-host',
       installationId: 'install_12345678-1234-4234-8234-123456789abc',

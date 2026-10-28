@@ -234,11 +234,11 @@ const tableDefinitionSources = Object.freeze({
     "conversation_work_requests",
   ],
   mutation_receipts: [
-    "apps/cloud/migrations-v8/0001_conclave_v8.sql",
+    "apps/cloud/migrations-v8/0001_syntila_v8.sql",
     "mutation_receipts",
   ],
   execution_workspaces: [
-    "apps/cloud/migrations-v8/0001_conclave_v8.sql",
+    "apps/cloud/migrations-v8/0001_syntila_v8.sql",
     "execution_workspaces",
   ],
   workspace_installations: [
@@ -246,7 +246,7 @@ const tableDefinitionSources = Object.freeze({
     "workspace_installations",
   ],
   workspace_runtime_identities: [
-    "apps/cloud/migrations-v8/0001_conclave_v8.sql",
+    "apps/cloud/migrations-v8/0001_syntila_v8.sql",
     "workspace_runtime_identities",
   ],
   desktop_auth_intents: [
@@ -277,7 +277,7 @@ const indexDefinitionSources = Object.freeze({
     "conversation_turns",
   ],
   idx_runtime_installation_active: [
-    "apps/cloud/migrations-v8/0001_conclave_v8.sql",
+    "apps/cloud/migrations-v8/0001_syntila_v8.sql",
     "workspace_runtime_identities",
   ],
   idx_workspace_installations_active_workspace: [
@@ -355,8 +355,15 @@ export const requiredProductionSmokeTableDefinitions = Object.freeze(
             `created_at TEXT NOT NULL, ${columns.join(", ")},`,
           );
         }
-        if (tableName === "conversations") {
-          const columns = ["0079_ai_history_cutoff.sql"].flatMap((path) => {
+        if (
+          tableName === "conversations" ||
+          tableName === "execution_workspaces"
+        ) {
+          const evolutionPaths =
+            tableName === "execution_workspaces"
+              ? ["0070_workspace_parallel_slots.sql"]
+              : ["0079_ai_history_cutoff.sql"];
+          const columns = evolutionPaths.flatMap((path) => {
             const evolution = readFileSync(
               join(repositoryRoot, "apps/cloud/migrations-v8", path),
               "utf8",
@@ -484,7 +491,7 @@ export function productionSmokeSchemaIssues(
 
     const normalize = (definition) => {
       const normalized = normalizeTableDefinition(definition);
-      return table === "mutation_receipts"
+      return table === "mutation_receipts" || table === "execution_workspaces"
         ? normalized.replace(/\s*([(),])\s*/g, "$1")
         : normalized;
     };

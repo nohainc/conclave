@@ -87,11 +87,11 @@ IPC is never a TCP/localhost listener.
 
 | Platform | Runtime state root |
 | --- | --- |
-| macOS | `~/Library/Application Support/Conclave/Workspace/` (existing) |
-| Linux | `$XDG_STATE_HOME/conclave/workspace/` (default `~/.local/state/...`) for registry, sessions, logs, runtime; `$XDG_DATA_HOME/syntila/workspace/` for Profiles and Engines; `$XDG_CACHE_HOME` for cache |
+| macOS | `~/Library/Application Support/Syntila/Workspace/` (existing) |
+| Linux | `$XDG_STATE_HOME/syntila/workspace/` (default `~/.local/state/...`) for registry, sessions, logs, runtime; `$XDG_DATA_HOME/syntila/workspace/` for Profiles and Engines; `$XDG_CACHE_HOME` for cache |
 | Windows | `%LOCALAPPDATA%\Syntila\Workspace\` |
 
-Work Root remains user-chosen (default `~/Documents/Conclave` or
+Work Root remains user-chosen (default `~/Documents/Syntila` or
 `%USERPROFILE%\Documents\Syntila`; headless hosts must set it explicitly).
 `SYNTILA_WORKSPACE_DATA_DIR` keeps its existing override semantics.
 

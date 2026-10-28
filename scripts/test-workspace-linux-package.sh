@@ -43,16 +43,16 @@ STATE="$TEST_ROOT/state"
 mkdir -p "$TEST_ROOT/home"
 HOME="$TEST_ROOT/home" SYNTILA_WORKSPACE_SECRET_STORE='file' syntila-workspace run --data-dir "$STATE" --once
 identity="$(cat "$STATE/installation-id")"
-mkdir -p "$STATE/sessions" "$TEST_ROOT/home/Documents/Conclave"
+mkdir -p "$STATE/sessions" "$TEST_ROOT/home/Documents/Syntila"
 printf 'keep session\n' > "$STATE/sessions/preserve-test"
-printf 'keep user work\n' > "$TEST_ROOT/home/Documents/Conclave/preserve-test"
+printf 'keep user work\n' > "$TEST_ROOT/home/Documents/Syntila/preserve-test"
 python3 "$ROOT/scripts/release/build-apt-repository.py" --output "$TEST_ROOT/repo" --signing-key "$KEY" "$PACKAGE"
 sudo apt-get "${APT_ARGS[@]}" update
 sudo apt-get "${APT_ARGS[@]}" install --only-upgrade -y syntila-workspace
 [[ "$(dpkg-query --show --showformat='${Version}' syntila-workspace)" == "$VERSION" ]]
 [[ "$(cat "$STATE/installation-id")" == "$identity" ]]
 grep -qx 'keep session' "$STATE/sessions/preserve-test"
-grep -qx 'keep user work' "$TEST_ROOT/home/Documents/Conclave/preserve-test"
+grep -qx 'keep user work' "$TEST_ROOT/home/Documents/Syntila/preserve-test"
 HOME="$TEST_ROOT/home" SYNTILA_WORKSPACE_SECRET_STORE='file' syntila-workspace run --data-dir "$STATE" > "$TEST_ROOT/service.log" 2>&1 &
 service_pid=$!
 ready=0
@@ -85,5 +85,5 @@ service_pid=''
 sudo apt-get remove -y syntila-workspace
 [[ "$(cat "$STATE/installation-id")" == "$identity" ]]
 grep -qx 'keep session' "$STATE/sessions/preserve-test"
-grep -qx 'keep user work' "$TEST_ROOT/home/Documents/Conclave/preserve-test"
+grep -qx 'keep user work' "$TEST_ROOT/home/Documents/Syntila/preserve-test"
 echo 'APT install, upgrade, IPC, graceful stop and removal preserved user state.'

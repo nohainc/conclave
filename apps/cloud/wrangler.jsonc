@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "conclave-api",
+  "name": "syntila-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-20",
   "compatibility_flags": ["nodejs_compat"],
@@ -38,7 +38,7 @@
   "d1_databases": [
     {
       "binding": "SYNTILA_DB",
-      "database_name": "conclave-development",
+      "database_name": "syntila-development",
       "database_id": "local",
       "migrations_dir": "migrations-v8",
     },
@@ -46,12 +46,12 @@
   "r2_buckets": [
     {
       "binding": "SYNTILA_ARTIFACTS",
-      "bucket_name": "conclave-artifacts-development",
+      "bucket_name": "syntila-artifacts-development",
     },
   ],
   "workflows": [
     {
-      "name": "conclave-run",
+      "name": "syntila-run",
       "binding": "SYNTILA_RUN_WORKFLOW",
       "class_name": "SyntilaRunWorkflow",
     },

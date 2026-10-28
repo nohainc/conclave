@@ -1,10 +1,10 @@
-name: Deploy Conclave Cloud API
+name: Deploy Syntila Cloud API
 
 on:
   workflow_dispatch:
 
 concurrency:
-  group: conclave-ax-production-deploy
+  group: syntila-ax-production-deploy
   cancel-in-progress: false
 
 permissions:
@@ -47,14 +47,14 @@ jobs:
         run: pnpm validate:app
       - name: Build Flutter web
         working-directory: apps/app
-        run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+        run: flutter build web --release --dart-define=SYNTILA_API_URL=/api
       - name: Verify browser bundle contains no server secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET }}
-          CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET }}
-          CONCLAVE_RELEASE_PUBLISH_TOKEN: ${{ secrets.CONCLAVE_RELEASE_PUBLISH_TOKEN }}
-          CONCLAVE_WORKSPACE_ED25519_SEED: ${{ secrets.CONCLAVE_WORKSPACE_ED25519_SEED }}
+          SYNTILA_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.SYNTILA_AUTH_GITHUB_CLIENT_SECRET }}
+          SYNTILA_AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.SYNTILA_AUTH_GOOGLE_CLIENT_SECRET }}
+          SYNTILA_RELEASE_PUBLISH_TOKEN: ${{ secrets.SYNTILA_RELEASE_PUBLISH_TOKEN }}
+          SYNTILA_WORKSPACE_ED25519_SEED: ${{ secrets.SYNTILA_WORKSPACE_ED25519_SEED }}
         run: node scripts/assert-no-browser-secrets.mjs apps/app/build/web
       - name: Verify production security configuration
         run: node scripts/verify-production-security.mjs
@@ -64,18 +64,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          CONCLAVE_AUTH_GITHUB_CLIENT_ID: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_ID }}
-          CONCLAVE_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GITHUB_CLIENT_SECRET }}
-          CONCLAVE_AUTH_GOOGLE_CLIENT_ID: ${{ secrets.CONCLAVE_AUTH_GOOGLE_CLIENT_ID }}
-          CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET }}
+          SYNTILA_AUTH_GITHUB_CLIENT_ID: ${{ secrets.SYNTILA_AUTH_GITHUB_CLIENT_ID }}
+          SYNTILA_AUTH_GITHUB_CLIENT_SECRET: ${{ secrets.SYNTILA_AUTH_GITHUB_CLIENT_SECRET }}
+          SYNTILA_AUTH_GOOGLE_CLIENT_ID: ${{ secrets.SYNTILA_AUTH_GOOGLE_CLIENT_ID }}
+          SYNTILA_AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.SYNTILA_AUTH_GOOGLE_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           for name in \
             BETTER_AUTH_SECRET \
-            CONCLAVE_AUTH_GITHUB_CLIENT_ID \
-            CONCLAVE_AUTH_GITHUB_CLIENT_SECRET \
-            CONCLAVE_AUTH_GOOGLE_CLIENT_ID \
-            CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET; do
+            SYNTILA_AUTH_GITHUB_CLIENT_ID \
+            SYNTILA_AUTH_GITHUB_CLIENT_SECRET \
+            SYNTILA_AUTH_GOOGLE_CLIENT_ID \
+            SYNTILA_AUTH_GOOGLE_CLIENT_SECRET; do
             value="${!name:-}"
             if [ -n "$value" ]; then
               printf '%s' "$value" | pnpm exec wrangler secret put "$name" \
@@ -107,7 +107,7 @@ jobs:
                 const missing = required.filter((name) => !configured.has(name));
                 if (missing.length > 0) {
                   console.error(`Missing production Worker secrets: ${missing.join(", ")}`);
-                  console.error("These must be configured as Cloudflare Worker secrets on conclave-ax-app.");
+                  console.error("These must be configured as Cloudflare Worker secrets on syntila-app.");
                   console.error("Add them with: pnpm exec wrangler secret put NAME --config ../../infra/cloudflare/app.wrangler.jsonc");
                   process.exit(1);
                 }
@@ -118,7 +118,7 @@ jobs:
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
         run: |
           if [ -z "${BETTER_AUTH_SECRET:-}" ]; then
-            echo "Configure the GitHub Actions secret BETTER_AUTH_SECRET with the same value as the conclave-ax-app Cloudflare Worker secret."
+            echo "Configure the GitHub Actions secret BETTER_AUTH_SECRET with the same value as the syntila-app Cloudflare Worker secret."
             echo "The production dual desktop-auth smoke uses it to sign a disposable AX browser approval cookie."
             exit 1
           fi
@@ -133,7 +133,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: node scripts/production-workspace-gateway-smoke.mjs --schema-only
-      - name: Deploy app.conclaveax.com API Worker
+      - name: Deploy syntila.app API Worker
         working-directory: apps/cloud
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

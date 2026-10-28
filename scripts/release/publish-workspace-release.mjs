@@ -28,7 +28,7 @@ const archive = await readFile(archivePath);
 const version = required("WORKSPACE_VERSION");
 const channel = required("RELEASE_CHANNEL");
 const keyId = required("SYNTILA_WORKSPACE_SIGNING_KEY_ID");
-const publisher = "conclave";
+const publisher = "syntila";
 const packageDigest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
 const metadata = {
   version,

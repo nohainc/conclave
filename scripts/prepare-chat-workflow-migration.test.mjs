@@ -29,7 +29,7 @@ it("preserves historical checkout columns, index names, triggers and transitive 
   try {
     let baseline = readFileSync(
       new URL(
-        "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+        "../apps/cloud/migrations-v8/0001_syntila_v8.sql",
         import.meta.url,
       ),
       "utf8",
@@ -92,7 +92,7 @@ it("aborts before mutation when inspected schema changes", () => {
     db.exec(
       readFileSync(
         new URL(
-          "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+          "../apps/cloud/migrations-v8/0001_syntila_v8.sql",
           import.meta.url,
         ),
         "utf8",
@@ -123,7 +123,7 @@ it("prepares JSONC production config and never regenerates an applied migration"
     db.exec(
       readFileSync(
         new URL(
-          "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+          "../apps/cloud/migrations-v8/0001_syntila_v8.sql",
           import.meta.url,
         ),
         "utf8",

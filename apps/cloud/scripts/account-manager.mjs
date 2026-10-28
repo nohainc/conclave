@@ -9,17 +9,17 @@ const root = resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 export function environment(name) {
   if (name === "local")
     return {
-      database: "conclave-development",
+      database: "syntila-development",
       config: "apps/cloud/wrangler.jsonc",
       flag: "--local",
       origin: "http://localhost:8787",
     };
   if (name === "production")
     return {
-      database: "conclave-v8-production",
+      database: "syntila",
       config: "infra/cloudflare/app.wrangler.jsonc",
       flag: "--remote",
-      origin: "https://app.conclaveax.com",
+      origin: "https://syntila.app",
     };
   throw new Error("Select local or production.");
 }

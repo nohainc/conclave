@@ -13,6 +13,7 @@ import {
   deliverRevocation,
   escalateUnconfirmedRevocations,
   finalizeAssignmentRevocation,
+  finalizeRevocationsOfRevokedRuntimes,
   revokeAssignment,
   type RevocationIntent,
 } from "../src/assignment-revocation.js";
@@ -471,5 +472,44 @@ describe("user cancellation", () => {
     ).toEqual({ cancelled: true });
     expect(f.row().status).toBe("cancelled");
     expect(f.task()).toBe("cancelled");
+  });
+  it("finalizes a pending revocation whose runtime identity was revoked", async () => {
+    const f = await seed("running");
+    await beginAssignmentRevocation(f.db as never, {
+      assignmentId: "A1",
+      attemptId: "ATT1",
+      intent: cancelIntent,
+    });
+    expect(f.row().status).toBe("revocation_pending");
+    // The owning runtime is still current: nothing to finalize.
+    expect(
+      await finalizeRevocationsOfRevokedRuntimes(f.db as never, "WS"),
+    ).toEqual([]);
+    expect(f.row().status).toBe("revocation_pending");
+    // The Workspace re-registers; the old identity is revoked and can never
+    // acknowledge a cancel again.
+    f.sqlite.exec(
+      "UPDATE workspace_runtime_identities SET revoked_at='now' WHERE id='RT'",
+    );
+    expect(
+      await finalizeRevocationsOfRevokedRuntimes(f.db as never, "WS"),
+    ).toEqual(["A1"]);
+    expect(f.row().status).toBe("cancelled");
+    expect(f.activeCount()).toBe(0);
+  });
+
+  it("finalizes through deliverRevocation without messaging the Gateway", async () => {
+    const f = await seed("running");
+    await beginAssignmentRevocation(f.db as never, {
+      assignmentId: "A1",
+      attemptId: "ATT1",
+      intent: cancelIntent,
+    });
+    f.sqlite.exec(
+      "UPDATE workspace_runtime_identities SET revoked_at='now' WHERE id='RT'",
+    );
+    expect(await deliverRevocation(f.gateway(false), "A1")).toBe(true);
+    expect(f.row().status).toBe("cancelled");
+    expect(f.calls).toHaveLength(0);
   });
 });

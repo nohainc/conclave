@@ -92,7 +92,7 @@ jobs:
           restore-keys: |
             pub-${{ runner.os }}-${{ steps.flutter.outputs.VERSION }}-
       - run: bash scripts/check-flutter-app.sh app
-      - run: flutter build web --release --dart-define=CONCLAVE_API_URL=/api
+      - run: flutter build web --release --dart-define=SYNTILA_API_URL=/api
         working-directory: apps/app
 
   workspace-check:
@@ -139,7 +139,7 @@ jobs:
       - run: bash scripts/build-cli-worker-engine.sh
       - name: Build Workspace using prepared dependencies and Engine
         env:
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+          SYNTILA_RELEASE_TRUST_KEYS_JSON: ${{ vars.SYNTILA_RELEASE_TRUST_KEYS_JSON || '{"syntila-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: bash scripts/build-workspace-macos.sh --prepared
 
   profile-lab-macos:
@@ -166,7 +166,7 @@ jobs:
         run: bash scripts/check-flutter-app.sh profile_lab
       - name: Build Profile Lab using prepared dependencies and Engine
         env:
-          CONCLAVE_RELEASE_TRUST_KEYS_JSON: ${{ vars.CONCLAVE_RELEASE_TRUST_KEYS_JSON || '{"conclave-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
+          SYNTILA_RELEASE_TRUST_KEYS_JSON: ${{ vars.SYNTILA_RELEASE_TRUST_KEYS_JSON || '{"syntila-ci":{"local-profile-ci":"dkQtoBOraPG9a/yfGPHEHw0F7TFC+nIbeYzbdPYnXPA="}}' }}
         run: bash scripts/build-profile-lab-macos.sh --release --prepared
 
   site-astro:

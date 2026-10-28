@@ -279,9 +279,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
               ),
               Divider(
                   height: 1,
-                  color: isDark
-                      ? SyntilaBrand.darkLine
-                      : SyntilaBrand.lightLine),
+                  color:
+                      isDark ? SyntilaBrand.darkLine : SyntilaBrand.lightLine),
               // Results List
               Flexible(
                 child: actions.isEmpty

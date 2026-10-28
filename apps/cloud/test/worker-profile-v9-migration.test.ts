@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const baseMigration = readFileSync(
   fileURLToPath(
-    new URL("../migrations-v8/0001_conclave_v8.sql", import.meta.url),
+    new URL("../migrations-v8/0001_syntila_v8.sql", import.meta.url),
   ),
   "utf8",
 );
@@ -44,7 +44,7 @@ describe("Worker Profile V9 additive migration", () => {
           '1.0.0', '2.0.0',
           '{"schemaVersion":1,"profileDefinitionId":"chatgpt-codex","releaseVersion":7,"logicalWorkerTypeId":"chatgpt"}',
           'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-          'signature-v7', 'profile-key-v1', 'conclave',
+          'signature-v7', 'profile-key-v1', 'syntila',
           '2026-10-10T00:00:00Z', '2026-10-10T00:00:00Z', '2026-10-10T00:00:00Z'
         );
         INSERT INTO tool_profile_channel_pointers (
@@ -79,13 +79,13 @@ describe("Worker Profile V9 additive migration", () => {
            '1.0.0', '2.0.0',
            '{"schemaVersion":1,"profileDefinitionId":"chatgpt-codex","releaseVersion":6,"logicalWorkerTypeId":"chatgpt"}',
            'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-           'signature-v6', 'profile-key-v1', 'conclave',
+           'signature-v6', 'profile-key-v1', 'syntila',
            '2026-10-09T00:00:00Z', '2026-10-09T00:00:00Z', '2026-10-09T00:00:00Z'),
           ('chatgpt-codex', 7, 'chatgpt', 'stable', 1, 'cli',
            '1.0.0', '2.0.0',
            '{"schemaVersion":1,"profileDefinitionId":"chatgpt-codex","releaseVersion":7,"logicalWorkerTypeId":"chatgpt"}',
            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-           'signature-v7', 'profile-key-v1', 'conclave',
+           'signature-v7', 'profile-key-v1', 'syntila',
            '2026-10-10T00:00:00Z', '2026-10-10T00:00:00Z', '2026-10-10T00:00:00Z');
         INSERT INTO tool_profile_channel_pointers (
           profile_definition_id, channel, release_version, updated_at
@@ -117,7 +117,7 @@ describe("Worker Profile V9 additive migration", () => {
           'chatgpt-codex', 8, 'chatgpt', 'stable', 1, 'cli',
           '1.0.0', '2.0.0', '{"schemaVersion":2}',
           'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
-          'signature-v8', 'profile-key-v1', 'conclave',
+          'signature-v8', 'profile-key-v1', 'syntila',
           '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z', '2026-10-11T00:00:00Z'
         );
         INSERT INTO tool_profile_channel_pointers (

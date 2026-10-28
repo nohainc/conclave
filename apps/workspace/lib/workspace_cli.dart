@@ -927,8 +927,7 @@ class WorkspaceCli {
         out.writeln('Status:        $processText');
         if (action != 'status') {
           if (!registered) {
-            out.writeln(
-                'Hint:          Run syntila-workspace service install');
+            out.writeln('Hint:          Run syntila-workspace service install');
           } else if (!running) {
             out.writeln('Hint:          Run syntila-workspace service start');
           }

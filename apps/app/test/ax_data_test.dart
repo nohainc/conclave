@@ -746,7 +746,7 @@ void main() {
     final client = _JsonClient({
       'status': 'denied',
       'clientName': 'Syntila Profile Lab',
-      'audience': 'conclave.profile-lab.management',
+      'audience': 'syntila.profile-lab.management',
     }, statusCode: 200);
     final api = AxApiClient(
       baseUrl: 'https://syntila.test/api',
@@ -758,7 +758,7 @@ void main() {
       const AxDesktopAuthIntentStatus(
         status: 'denied',
         clientName: 'Syntila Profile Lab',
-        audience: 'conclave.profile-lab.management',
+        audience: 'syntila.profile-lab.management',
       ),
     );
     expect(

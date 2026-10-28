@@ -1,8 +1,7 @@
 import 'package:syntila_design/syntila_design.dart';
 import '../common/quiet_notices.dart';
 import '../common/thread_dialogs.dart';
-import 'package:syntila_protocol/syntila_protocol.dart'
-    show ExecutionSelection;
+import 'package:syntila_protocol/syntila_protocol.dart' show ExecutionSelection;
 import '../../ax/workflow_configuration_options.dart';
 import '../../ax/sync/ax_space_invitations.dart';
 import '../invitations/space_invitation_dialog.dart';

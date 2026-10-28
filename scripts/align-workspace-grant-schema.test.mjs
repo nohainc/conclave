@@ -6,10 +6,7 @@ import { workspaceGrantScopeAlignmentSql } from "./align-workspace-grant-schema.
 it("removes only obsolete scope while retaining rows, references and grant protections", () => {
   const db = new DatabaseSync(":memory:");
   const baseline = readFileSync(
-    new URL(
-      "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
-      import.meta.url,
-    ),
+    new URL("../apps/cloud/migrations-v8/0001_syntila_v8.sql", import.meta.url),
     "utf8",
   );
   try {

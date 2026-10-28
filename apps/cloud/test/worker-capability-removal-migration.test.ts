@@ -12,7 +12,7 @@ const migrationText = (name: string): string =>
 describe("Worker capability metadata removal", () => {
   it("clears legacy values and removes capability columns", () => {
     const db = new DatabaseSync(":memory:");
-    db.exec(migrationText("0001_conclave_v8.sql"));
+    db.exec(migrationText("0001_syntila_v8.sql"));
     db.exec(migrationText("0029_worker_model_discovery.sql"));
     db.exec(migrationText("0031_remove_worker_profile_capabilities.sql"));
     db.exec(migrationText("0032_drop_worker_capability_columns.sql"));
@@ -42,7 +42,7 @@ describe("Worker capability metadata removal", () => {
 
   it("resets legacy releases, pointers, evidence, and inventory claims", () => {
     const db = new DatabaseSync(":memory:");
-    db.exec(migrationText("0001_conclave_v8.sql"));
+    db.exec(migrationText("0001_syntila_v8.sql"));
     db.exec(migrationText("0029_worker_model_discovery.sql"));
     db.exec(migrationText("0031_remove_worker_profile_capabilities.sql"));
     db.exec(migrationText("0032_drop_worker_capability_columns.sql"));
@@ -63,7 +63,7 @@ describe("Worker capability metadata removal", () => {
       "a".repeat(64),
       "signature",
       "key",
-      "conclave",
+      "syntila",
       "2026-10-01T00:00:00Z",
       "2026-10-01T00:00:00Z",
       "2026-10-01T00:00:00Z",

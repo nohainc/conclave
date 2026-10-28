@@ -156,13 +156,9 @@ for (const [route, file] of routes) {
 }
 
 const home = sources.get("/");
-const appLinks = [
-  ...home.matchAll(/href="(https:\/\/app\.syntila\.com[^"]*)"/g),
-];
+const appLinks = [...home.matchAll(/href="(https:\/\/syntila\.app[^"]*)"/g)];
 if (appLinks.length < 3)
-  errors.push(
-    "homepage: expected at least three direct Open Syntila links",
-  );
+  errors.push("homepage: expected at least three direct Open Syntila links");
 if (!home.includes('href="/#product"'))
   errors.push("homepage: Product navigation anchor is missing");
 

@@ -10,35 +10,35 @@ void main() {
 
       expect(
         paths.applicationSupportDirectory.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab',
       );
       expect(
         paths.draftsDirectory.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/drafts',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab/drafts',
       );
       expect(
         paths.enginesDirectory.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/engines',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab/engines',
       );
       expect(
         paths.sandboxDirectory.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/sandbox',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab/sandbox',
       );
       expect(
         paths.logsDirectory.path,
-        '/Users/testuser/Library/Logs/conclave.profile_lab',
+        '/Users/testuser/Library/Logs/syntila.profile_lab',
       );
       expect(
         paths.credentialsDirectory.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/credentials',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab/credentials',
       );
       expect(
         paths.sessionFile.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/credentials/profile_lab_session.json',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab/credentials/profile_lab_session.json',
       );
       expect(
         paths.cloudSettingsFile.path,
-        '/Users/testuser/Library/Application Support/Conclave/Profile Lab/cloud_settings.json',
+        '/Users/testuser/Library/Application Support/Syntila/Profile Lab/cloud_settings.json',
       );
       expect(
         ProfileLabPaths.bundleIdentifier,

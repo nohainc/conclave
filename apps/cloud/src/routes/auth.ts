@@ -161,8 +161,7 @@ export {
 const DESKTOP_HUMAN_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
 function desktopAuthAppOrigin(request: Request, env: SecurityEnv): string {
-  const configured =
-    env.SYNTILA_APP_URL?.trim() || env.BETTER_AUTH_URL?.trim();
+  const configured = env.SYNTILA_APP_URL?.trim() || env.BETTER_AUTH_URL?.trim();
   if (!configured) return new URL(request.url).origin;
 
   let parsed: URL;
@@ -603,7 +602,7 @@ export async function handleClaimDesktopAuthIntent(
     );
   }
   const sessionId = crypto.randomUUID();
-  const credential = randomSecret("conclave_dhs_");
+  const credential = randomSecret("syntila_dhs_");
   const tokenHash = await hashToken(credential);
   const issuedAt = new Date();
   const expiresAt = new Date(issuedAt.getTime() + DESKTOP_HUMAN_SESSION_MS);
@@ -762,7 +761,7 @@ export async function handleRotateDesktopHumanSession(
     session,
     now,
   } = await findDesktopHumanSession(request, env, sessionId);
-  const nextCredential = randomSecret("conclave_dhs_");
+  const nextCredential = randomSecret("syntila_dhs_");
   const expiresAt = new Date(
     Date.now() + DESKTOP_HUMAN_SESSION_MS,
   ).toISOString();

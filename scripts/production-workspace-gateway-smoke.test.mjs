@@ -50,7 +50,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
   it("tracks canonical columns after all forward migrations", () => {
     const database = new DatabaseSync(":memory:");
     for (const migration of [
-      "0001_conclave_v8.sql",
+      "0001_syntila_v8.sql",
       "0002_desktop_auth_multi_audience.sql",
       "0003_workspace_installations.sql",
       "0004_workspace_runtime_identity_uniqueness.sql",
@@ -153,7 +153,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
     database.exec(
       readFileSync(
         new URL(
-          "../apps/cloud/migrations-v8/0001_conclave_v8.sql",
+          "../apps/cloud/migrations-v8/0001_syntila_v8.sql",
           import.meta.url,
         ),
         "utf8",
@@ -254,6 +254,18 @@ describe("production Workspace Gateway smoke schema gate", () => {
         ),
       );
     }
+    const slotsMigration = readFileSync(
+      new URL(
+        "../apps/cloud/migrations-v8/0070_workspace_parallel_slots.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    database.exec(
+      slotsMigration.match(
+        /ALTER TABLE execution_workspaces ADD COLUMN[^;]+;/,
+      )[0],
+    );
     const definitions = Object.fromEntries(
       database
         .prepare(
@@ -326,12 +338,12 @@ describe("production Workspace Gateway smoke schema gate", () => {
     );
     const definitions = { ...canonicalDefinitions };
     definitions.desktop_auth_intents = definitions.desktop_auth_intents.replace(
-      "'conclave.profile-lab.management'",
+      "'syntila.profile-lab.management'",
       "'syntila.workspace.legacy'",
     );
     definitions.desktop_human_sessions =
       definitions.desktop_human_sessions.replace(
-        "'conclave.profile-lab.management'",
+        "'syntila.profile-lab.management'",
         "'syntila.workspace.legacy'",
       );
     definitions.execution_workspaces = definitions.execution_workspaces.replace(
@@ -369,8 +381,8 @@ describe("production Workspace Gateway smoke schema gate", () => {
     );
 
     for (const contract of [
-      'audience: "conclave.desktop.management"',
-      'audience: "conclave.profile-lab.management"',
+      'audience: "syntila.desktop.management"',
+      'audience: "syntila.profile-lab.management"',
       "verifyWorkspaceAuth",
       "SYNTILA_PROFILE_LAB_OWNER_EMAIL",
       "Profile Lab is restricted to its verified owner account",
@@ -380,7 +392,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "/approve",
       "/claim",
       "claimed_session_id",
-      "conclave.profile-lab.management",
+      "syntila.profile-lab.management",
       "/api/desktop-auth/session",
       "/api/admin/workers",
       "The profiles:admin permission is required",
@@ -403,7 +415,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
     const deployedSmoke = workflow.indexOf(
       "name: Require production desktop-auth and Workspace Gateway acceptance",
     );
-    const deploy = workflow.indexOf("name: Deploy app.conclaveax.com Worker");
+    const deploy = workflow.indexOf("name: Deploy syntila.app Worker");
     const secretRequirement = workflow.indexOf(
       "name: Sync Better Auth and OAuth secrets to the Worker",
     );

@@ -40,9 +40,9 @@ You can also change the origin in **Cloud connection** settings while the app is
 
 ## Cloud configuration and authentication
 
-The build default is `https://app.conclaveax.com`. For a development build, set `SYNTILA_CLOUD_URL` with a Dart define; operators can save a local origin override or reset it to the build default in Cloud connection settings. The override is non-secret app configuration. Changing the Cloud origin clears the current sign-in because sessions are bound to their origin.
+The build default is `https://syntila.app`. For a development build, set `SYNTILA_CLOUD_URL` with a Dart define; operators can save a local origin override or reset it to the build default in Cloud connection settings. The override is non-secret app configuration. Changing the Cloud origin clears the current sign-in because sessions are bound to their origin.
 
-Sign-in opens a browser approval flow for **Syntila Profile Lab**, using the dedicated `conclave.profile-lab.management` audience. It is separate from Syntila Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: Worker/Profile administration uses `profiles:admin`; publication requires `profiles:release:manage`. Cloud is the authorization and publication authority; Profile Lab never holds provider credentials.
+Sign-in opens a browser approval flow for **Syntila Profile Lab**, using the dedicated `syntila.profile-lab.management` audience. It is separate from Syntila Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: Worker/Profile administration uses `profiles:admin`; publication requires `profiles:release:manage`. Cloud is the authorization and publication authority; Profile Lab never holds provider credentials.
 
 For local Cloud development, configure an authorized test account in the local Cloud environment. Do not copy a Workspace session or put a bearer token in app configuration or source control.
 
@@ -122,7 +122,7 @@ Candidate → Test → Validate → Publish lifecycle. Start
 a separate non-release Workspace.
 
 For the currently provisioned hosted development environment, set
-`SYNTILA_DEVELOPMENT_CLOUD_URL=https://app.conclaveax.com` on both launchers.
+`SYNTILA_DEVELOPMENT_CLOUD_URL=https://syntila.app` on both launchers.
 Explicit `SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY`
 still enables unsigned local candidate execution only against loopback Cloud.
 
@@ -146,8 +146,8 @@ A Profile Lab build targets exactly one Cloud; rebuild to switch.
 
 | Command | Cloud API | State directory (macOS) |
 | --- | --- | --- |
-| `pnpm profile-lab:build:macos:prod` (default) | `https://app.conclaveax.com` | `~/Library/Application Support/Conclave/Profile Lab` |
-| `pnpm profile-lab:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Conclave Local/Profile Lab` |
+| `pnpm profile-lab:build:macos:prod` (default) | `https://syntila.app` | `~/Library/Application Support/Syntila/Profile Lab` |
+| `pnpm profile-lab:build:macos:local` | `http://localhost:8787` | `~/Library/Application Support/Syntila Local/Profile Lab` |
 
 Local builds use `--dart-define=SYNTILA_PROFILE_LAB_ENVIRONMENT=local`, show an
 orange "LOCAL DEVELOPMENT BUILD" banner, ignore saved Cloud overrides, and make

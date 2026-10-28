@@ -208,11 +208,11 @@ describe("durable mutation receipts", () => {
         )
       ).json()) as { space: { id: string } }
     ).space.id;
-    const token = "conclave_dhs_idempotency-test";
+    const token = "syntila_dhs_idempotency-test";
     f.sqlite
       .prepare(
         `INSERT INTO desktop_human_sessions(id,user_id,token_hash,audience,created_at,last_used_at,expires_at)
-      VALUES('session','owner',?,'conclave.desktop.management','now','now','2099-01-01T00:00:00Z')`,
+      VALUES('session','owner',?,'syntila.desktop.management','now','now','2099-01-01T00:00:00Z')`,
       )
       .run(await hashToken(token));
     const env: SecurityEnv = { ...f.env, TEST_AUTHENTICATION: undefined };

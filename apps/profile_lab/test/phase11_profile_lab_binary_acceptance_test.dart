@@ -43,7 +43,9 @@ void main() {
         },
       );
       final result = await sandbox.executeTestLadder(candidate: candidate);
-      expect(result.overallResult, 'pass');
+      expect(result.overallResult, 'pass',
+          reason:
+              result.stages.map((stage) => stage.toJson()).toList().toString());
       expect(
         result.stages.map((stage) => stage.stageId),
         containsAll(<String>[
