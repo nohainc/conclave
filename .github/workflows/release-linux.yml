@@ -104,7 +104,7 @@ jobs:
       - name: Export public signing identity
         id: signing
         env:
-          FINGERPRINT: ${{ vars.SYNTILA_APT_SIGNING_FINGERPRINT }}
+          FINGERPRINT: ${{ vars.SYNTILA_APT_SIGNING_FINGERPRINT || vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
         run: echo "fingerprint=$FINGERPRINT" >> "$GITHUB_OUTPUT"
       - name: Download tested packages
         env:
@@ -112,8 +112,8 @@ jobs:
         run: gh run download "$GITHUB_RUN_ID" --pattern 'linux-workspace-*' --dir candidates
       - name: Sign and publish the static APT repository
         env:
-          SYNTILA_APT_PRIVATE_KEY: ${{ secrets.SYNTILA_APT_PRIVATE_KEY }}
-          SYNTILA_APT_SIGNING_FINGERPRINT: ${{ vars.SYNTILA_APT_SIGNING_FINGERPRINT }}
+          SYNTILA_APT_PRIVATE_KEY: ${{ secrets.SYNTILA_APT_PRIVATE_KEY || secrets.CONCLAVE_APT_PRIVATE_KEY }}
+          SYNTILA_APT_SIGNING_FINGERPRINT: ${{ vars.SYNTILA_APT_SIGNING_FINGERPRINT || vars.CONCLAVE_APT_SIGNING_FINGERPRINT }}
           SYNTILA_WORKSPACE_VERSION: ${{ needs.preflight.outputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/release/publish-apt-repository.sh candidates
