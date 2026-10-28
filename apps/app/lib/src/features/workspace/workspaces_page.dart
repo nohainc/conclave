@@ -174,6 +174,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
   }
 
   Widget _workspaceDetail(BuildContext context, AxWorkspace workspace) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final workers = widget.workspaceWorkers
         .where((worker) =>
             worker.workspaceId == workspace.id && worker.status != 'removed')
@@ -276,13 +277,14 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               key: ValueKey('leave-shared-workspace-${workspace.id}'),
-              icon: const Icon(Icons.link_off, size: 18, color: Colors.red),
-              label: const Text(
+              icon: Icon(Icons.link_off,
+                  size: 18, color: SyntilaColors.errorText(isDark)),
+              label: Text(
                 'Revoke shared Workspace',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: SyntilaColors.errorText(isDark)),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
+                side: BorderSide(color: SyntilaColors.errorText(isDark)),
               ),
               onPressed: () async {
                 final confirmed = await showDialog<bool>(
@@ -300,9 +302,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                       ),
                       FilledButton(
                         key: const ValueKey('confirm-leave-shared-workspace'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
+                        style: SyntilaDialogStyle.destructiveButton(),
                         onPressed: () => Navigator.pop(context, true),
                         child: const Text('Revoke'),
                       ),
@@ -322,14 +322,14 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
               key: ValueKey('revoke-workspace-${workspace.id}'),
-              icon:
-                  const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-              label: const Text(
+              icon: Icon(Icons.delete_outline,
+                  size: 18, color: SyntilaColors.errorText(isDark)),
+              label: Text(
                 'Unregister Workspace',
-                style: TextStyle(color: Colors.red),
+                style: TextStyle(color: SyntilaColors.errorText(isDark)),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
+                side: BorderSide(color: SyntilaColors.errorText(isDark)),
               ),
               onPressed: () async {
                 final confirmed = await showDialog<bool>(
@@ -347,9 +347,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
                       ),
                       FilledButton(
                         key: const ValueKey('confirm-revoke-workspace'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
+                        style: SyntilaDialogStyle.destructiveButton(),
                         onPressed: () => Navigator.pop(context, true),
                         child: const Text('Unregister'),
                       ),
@@ -489,7 +487,7 @@ class _WorkerCard extends StatelessWidget {
         : Icon(
             worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
             size: 32,
-            color: worker.isReady ? null : Colors.amber,
+            color: worker.isReady ? null : SyntilaColors.warningText(isDark),
           );
 
     final modelsText = models.isEmpty ? 'Unavailable' : models.join(' · ');
@@ -527,10 +525,10 @@ class _WorkerCard extends StatelessWidget {
                           ),
                           const SizedBox(width: 6),
                           if (!worker.isReady)
-                            const Icon(
+                            Icon(
                               Icons.warning_amber,
                               size: 16,
-                              color: Colors.amber,
+                              color: SyntilaColors.warningText(isDark),
                             )
                           else
                             Icon(

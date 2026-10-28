@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:syntila_design/syntila_design.dart';
 
 import '../../ax/ax_models.dart';
 import '../../ax/ax_workspace_member_access.dart';
@@ -296,10 +297,13 @@ class _WorkspaceMemberAccessSectionState
       );
     }
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return Icon(
       worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
       size: 20,
-      color: worker.isReady ? theme.colorScheme.primary : Colors.amber,
+      color: worker.isReady
+          ? theme.colorScheme.primary
+          : SyntilaColors.warningText(isDark),
     );
   }
 

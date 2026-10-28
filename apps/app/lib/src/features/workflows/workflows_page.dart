@@ -287,7 +287,9 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
     final selection = definition.steps.length == 1
         ? configuration.selectionFor(definition.steps.first.kind)
         : configuration.defaults;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
 
     final selectedWorker =
         workers.where((worker) => worker.id == selection.worker).firstOrNull;
@@ -480,8 +482,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.warning_amber,
-                            size: 16, color: Colors.amber),
+                        Icon(Icons.warning_amber,
+                            size: 16, color: SyntilaColors.warningText(isDark)),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
@@ -512,8 +514,8 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.warning_amber,
-                            size: 16, color: Colors.amber),
+                        Icon(Icons.warning_amber,
+                            size: 16, color: SyntilaColors.warningText(isDark)),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
@@ -885,10 +887,11 @@ class _WorkflowsPageState extends State<WorkflowsPage> {
         semanticLabel: '${worker.displayName} icon',
       );
     }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Icon(
       worker.isReady ? Icons.smart_toy_outlined : Icons.warning_amber,
       size: 18,
-      color: worker.isReady ? null : Colors.amber,
+      color: worker.isReady ? null : SyntilaColors.warningText(isDark),
     );
   }
 

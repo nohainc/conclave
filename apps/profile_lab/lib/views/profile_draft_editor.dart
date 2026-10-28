@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:syntila_design/syntila_design.dart';
 
 import '../controllers/profile_lab_controller.dart';
 import '../theme/profile_lab_theme.dart';
@@ -465,8 +466,9 @@ class _JsonCodeEditingController extends TextEditingController {
         children.add(TextSpan(
           text: text.substring(index, end),
           style: base.copyWith(
-            color:
-                isKey ? ProfileLabTheme.primaryAccent : const Color(0xffa8d8a8),
+            color: isKey
+                ? ProfileLabTheme.primaryAccent
+                : SyntilaColors.syntaxStringDark,
           ),
         ));
         index = end;
@@ -476,8 +478,9 @@ class _JsonCodeEditingController extends TextEditingController {
         children.add(TextSpan(
           text: character,
           style: base.copyWith(
-            color:
-                activeBracket == index ? Colors.white : const Color(0xffd6b675),
+            color: activeBracket == index
+                ? Colors.white
+                : SyntilaColors.syntaxBracketDark,
             fontWeight:
                 activeBracket == index ? FontWeight.bold : FontWeight.normal,
             backgroundColor: activeBracket == index
@@ -495,7 +498,7 @@ class _JsonCodeEditingController extends TextEditingController {
         if (match != null) {
           children.add(TextSpan(
             text: match.group(0),
-            style: base.copyWith(color: const Color(0xffd5a6e8)),
+            style: base.copyWith(color: SyntilaColors.syntaxKeywordDark),
           ));
           index = match.end;
           continue;
@@ -505,7 +508,7 @@ class _JsonCodeEditingController extends TextEditingController {
       if (literal != null) {
         children.add(TextSpan(
           text: literal.group(0),
-          style: base.copyWith(color: const Color(0xffe5a96f)),
+          style: base.copyWith(color: SyntilaColors.syntaxNumberDark),
         ));
         index = literal.end;
         continue;

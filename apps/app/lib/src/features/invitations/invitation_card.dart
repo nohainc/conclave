@@ -53,7 +53,7 @@ class AxInvitationCard extends StatelessWidget {
                   child: Text(
                     badge,
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: scheme.primary,
                     ),

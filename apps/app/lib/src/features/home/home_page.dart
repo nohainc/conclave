@@ -1516,13 +1516,13 @@ class _ForYouItemTile extends StatelessWidget {
         SyntilaColors.primaryForeground(isDark),
       AxHomeAttentionType.needsInput ||
       AxHomeAttentionType.approvalRequired =>
-        isDark ? Colors.orangeAccent : Colors.orange.shade800,
-      AxHomeAttentionType.executionFailed => colorScheme.error,
+        SyntilaColors.warningText(isDark),
+      AxHomeAttentionType.executionFailed => SyntilaColors.errorText(isDark),
       AxHomeAttentionType.workerProblem ||
       AxHomeAttentionType.workspaceProblem =>
-        isDark ? Colors.amberAccent : Colors.amber.shade900,
+        SyntilaColors.warningText(isDark),
       AxHomeAttentionType.executionCompleted =>
-        isDark ? Colors.greenAccent : Colors.green.shade700,
+        SyntilaColors.successText(isDark),
     };
   }
 
@@ -1811,7 +1811,7 @@ class _HomeUpdateRow extends StatelessWidget {
                             borderRadius: BorderRadius.circular(4)),
                         child: Text(label.toUpperCase(),
                             style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.5,
                                 color: colors.onPrimaryContainer)),

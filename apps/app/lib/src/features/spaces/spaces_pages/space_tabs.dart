@@ -43,7 +43,7 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                       child: FilledButton.icon(
                         key: const ValueKey('space-new-thread'),
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF5E20F8),
+                          backgroundColor: SyntilaColors.primary,
                           foregroundColor: Colors.white,
                           visualDensity: VisualDensity.compact,
                         ),
@@ -414,11 +414,11 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   contentPadding: EdgeInsets.zero,
                   leading: CircleAvatar(
                     radius: 16,
-                    backgroundColor: Colors.amber.withValues(alpha: 0.15),
-                    child: const Icon(
+                    backgroundColor: SyntilaColors.warningSoft(isDark),
+                    child: Icon(
                       Icons.mail_outline,
                       size: 16,
-                      color: Colors.amber,
+                      color: SyntilaColors.warningText(isDark),
                     ),
                   ),
                   title: Text(
@@ -442,18 +442,18 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.15),
+                          color: SyntilaColors.warningSoft(isDark),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.4),
+                            color: SyntilaColors.warning.withValues(alpha: 0.4),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           'PENDING',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: Colors.amber,
+                            color: SyntilaColors.warningText(isDark),
                           ),
                         ),
                       ),

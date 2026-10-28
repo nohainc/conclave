@@ -1125,8 +1125,8 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
   Widget build(BuildContext context) {
     if (!widget.running && !widget.unread) return const SizedBox.shrink();
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    // Only one marker at a time: running (pulsing light brand violet) outranks
-    // unread (solid brand violet), so the two states stay distinguishable.
+    // Only one marker at a time: running (pulsing light brand accent) outranks
+    // unread (solid brand accent), so the two states stay distinguishable.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1134,7 +1134,7 @@ class _ActivityIndicatorsState extends State<SidebarActivityIndicators> {
           _dot(
             const ValueKey('sidebar-running-indicator'),
             'Running',
-            const Color(0xff966efa), // Brand violet mixed with 35% white.
+            SyntilaColors.primaryRunningIndicator,
             (dot) => reduceMotion
                 ? Opacity(opacity: 0.4, child: dot)
                 : FadeTransition(

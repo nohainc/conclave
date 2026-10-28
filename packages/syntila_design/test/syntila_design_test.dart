@@ -17,19 +17,19 @@ double _contrastRatio(Color foreground, Color background) {
 void main() {
   group('Surface Hierarchy & Theme Tokens', () {
     test('Light mode surface hierarchy is defined deterministically', () {
-      expect(SyntilaColors.canvasLight, const Color(0xffeff0ff));
-      expect(SyntilaColors.surfaceLight, const Color(0xfffbfbff));
-      expect(SyntilaColors.surfaceHoverLight, const Color(0xffe6e7f5));
-      expect(SyntilaColors.borderLight, const Color(0xffd2d3e1));
-      expect(SyntilaColors.codeBackgroundLight, const Color(0xffe6e7f5));
+      expect(SyntilaColors.canvasLight, const Color(0xfff1f2f4));
+      expect(SyntilaColors.surfaceLight, const Color(0xfffbfcfd));
+      expect(SyntilaColors.surfaceHoverLight, const Color(0xffe7e8ea));
+      expect(SyntilaColors.borderLight, const Color(0xffd3d5d7));
+      expect(SyntilaColors.codeBackgroundLight, const Color(0xffe7e8ea));
     });
 
     test('Dark mode surface hierarchy is defined deterministically', () {
-      expect(SyntilaColors.canvasDark, const Color(0xff171721));
-      expect(SyntilaColors.surfaceDark, const Color(0xff1f1e29));
-      expect(SyntilaColors.surfaceHoverDark, const Color(0xff242530));
-      expect(SyntilaColors.borderDark, const Color(0xff2d2d38));
-      expect(SyntilaColors.codeBackgroundDark, const Color(0xff10101a));
+      expect(SyntilaColors.canvasDark, const Color(0xff17181a));
+      expect(SyntilaColors.surfaceDark, const Color(0xff1e2021));
+      expect(SyntilaColors.surfaceHoverDark, const Color(0xff252628));
+      expect(SyntilaColors.borderDark, const Color(0xff2d2e30));
+      expect(SyntilaColors.codeBackgroundDark, const Color(0xff111213));
     });
 
     test('Material 3 ColorScheme maps surface containers properly', () {

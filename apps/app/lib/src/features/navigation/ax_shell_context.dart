@@ -22,7 +22,7 @@ extension ExecutionStatusToneHelpers on ExecutionStatusTone {
       case ExecutionStatusTone.degraded:
         return SyntilaBrand.warning;
       case ExecutionStatusTone.neutral:
-        return isDark ? Colors.white38 : SyntilaBrand.lightInkMuted;
+        return SyntilaColors.neutral;
       case ExecutionStatusTone.failed:
         return SyntilaBrand.error;
     }

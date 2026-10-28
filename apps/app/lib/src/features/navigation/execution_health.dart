@@ -280,9 +280,7 @@ class ExecutionStatusPopover extends StatelessWidget {
         ? SyntilaBrand.success
         : isDegraded
             ? SyntilaBrand.warning
-            : isDark
-                ? Colors.white38
-                : SyntilaBrand.lightInkMuted;
+            : SyntilaColors.neutral;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

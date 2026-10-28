@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:syntila_design/syntila_design.dart';
 
 import '../../ax/work_request_file_picker_stub.dart'
     if (dart.library.html) '../../ax/work_request_file_picker_web.dart'
@@ -158,7 +159,7 @@ class _AttachmentCardState extends State<AttachmentCard> {
             child: Text(preview,
                 maxLines: 6,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 9, fontFamily: 'monospace')))
+                style: SyntilaTypography.monoSmall))
         : const Center(child: Icon(Icons.insert_drive_file_outlined, size: 32));
     final canDownload = widget.file['fileId'] is String &&
         context.getInheritedWidgetOfExactType<AttachmentDownloadScope>() !=

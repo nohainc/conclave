@@ -2235,6 +2235,7 @@ class _WorkActivityTrail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final activeIndex = activities.lastIndexWhere((item) => !item.isFinished);
     final active = activeIndex < 0 ? null : activities[activeIndex];
     // Oldest first, the active row last. Narration the Worker moved on from
@@ -2283,7 +2284,7 @@ class _WorkActivityTrail extends StatelessWidget {
                         ? Icons.error_outline_rounded
                         : Icons.check_circle_outline_rounded,
                     size: 14,
-                    color: item.isError ? Colors.redAccent : color,
+                    color: item.isError ? SyntilaColors.errorText(isDark) : color,
                   ),
                   const SizedBox(width: 7),
                   Expanded(

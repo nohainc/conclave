@@ -94,13 +94,13 @@
   background: var(--gradient-brand);
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow:
-    0 4px 16px -2px rgba(99, 102, 241, 0.5),
+    0 4px 16px -2px rgba(7, 89, 209, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .button--primary:hover {
   color: #ffffff;
   box-shadow:
-    0 6px 24px -2px rgba(99, 102, 241, 0.7),
+    0 6px 24px -2px rgba(7, 89, 209, 0.7),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
   transform: translateY(-1px);
 }
@@ -134,7 +134,7 @@
   border-color: var(--color-line-glow);
   box-shadow:
     0 16px 40px -12px rgba(0, 0, 0, 0.7),
-    0 0 24px -6px rgba(99, 102, 241, 0.2);
+    0 0 24px -6px rgba(7, 89, 209, 0.2);
   transform: translateY(-3px);
 }
 .card p,
@@ -174,7 +174,7 @@ pre {
   font-size: var(--text-sm);
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: #15151d;
+  background: #111213;
   border: 1px solid var(--color-line);
   overflow-x: auto;
 }
