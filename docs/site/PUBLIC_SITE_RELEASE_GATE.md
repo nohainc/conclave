@@ -1,7 +1,7 @@
-# Conclave AX Public Site Release Gate
+# Syntila Public Site Release Gate
 
 The public site is ready to serve as the public entry point when automated
-checks pass and a person unfamiliar with Conclave AX can explain the product
+checks pass and a person unfamiliar with Syntila can explain the product
 from the page without additional context.
 
 ## Automated checks
@@ -28,11 +28,11 @@ privacy, and performance budgets. Confirm `www.conclaveax.com` redirects to
 
 ## Human review
 
-Ask someone who has not worked on Conclave AX to review the site without
+Ask someone who has not worked on Syntila to review the site without
 additional explanation. They should be able to answer:
 
-1. What does Conclave AX help people do?
-2. How do Spaces and Threads use Conclave Workspace?
+1. What does Syntila help people do?
+2. How do Spaces and Threads use Syntila Workspace?
 3. Where does provider CLI execution happen?
 4. How do they open the application?
 

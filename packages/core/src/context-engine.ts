@@ -205,7 +205,7 @@ export const emptyContextState = (): ContextState => ({
   summary: null,
 });
 
-/** Only committed, versioned Conclave context facts are projected. Never parse worker prose. */
+/** Only committed, versioned Syntila context facts are projected. Never parse worker prose. */
 export function projectContextState(
   history: readonly ContextHistoryFact[],
   seed: ContextState = emptyContextState(),
@@ -306,7 +306,7 @@ function deltaState(
   return output as unknown as ContextState;
 }
 
-/** Deterministic, provider-independent assembly. Persistence and transitions remain Conclave-owned. */
+/** Deterministic, provider-independent assembly. Persistence and transitions remain Syntila-owned. */
 export class ContextEngine {
   bootstrap(input: ContextEngineInput): BootstrapContext {
     return this.build(input, "BootstrapContext") as BootstrapContext;

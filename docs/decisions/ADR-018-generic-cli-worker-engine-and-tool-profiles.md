@@ -16,7 +16,7 @@ diagnostic history, and security audit records.
 The runtime requires a clear process and security boundary:
 
 ~~~text
-Conclave Workspace
+Syntila Workspace
 -> isolated Worker process
 -> provider CLI
 ~~~
@@ -44,7 +44,7 @@ engine avoids duplicating common runtime code.
 
 ## Decision
 
-Architecture v8 uses **one generic Conclave CLI Worker Engine executable** for
+Architecture v8 uses **one generic Syntila CLI Worker Engine executable** for
 all supported local CLI-based Workers.
 
 Logical product Workers remain stable:
@@ -59,11 +59,11 @@ but they are implemented through signed, immutable, versioned **Tool Profile
 releases** interpreted by the generic engine.
 
 ~~~text
-Conclave Workspace
+Syntila Workspace
         |
         | Local Worker Protocol 4.0
         v
-Conclave CLI Worker Engine
+Syntila CLI Worker Engine
         |
         | signed Tool Profile
         v
@@ -197,7 +197,7 @@ release without rebuilding Workspace or the engine.
 
 Architecture v8 does not expose profile creation/editing to normal users.
 
-The first product supports only Conclave-approved, signed official profiles.
+The first product supports only Syntila-approved, signed official profiles.
 
 Normal Workspace UI continues to show logical Workers:
 
@@ -453,7 +453,7 @@ metadata/pointers. Trust does not depend on storage location.
 ## 17. New logical Workers can be added without a Workspace binary release
 
 When a new approved CLI integration fits the existing engine/profile schema,
-Conclave may publish:
+Syntila may publish:
 
 ~~~text
 Worker catalog entry
@@ -552,7 +552,7 @@ Do not force non-CLI integrations into command-line emulation.
 
 ## 21. Scope
 
-Conclave uses one generic CLI Worker Engine and signed Tool Profiles for normal
+Syntila uses one generic CLI Worker Engine and signed Tool Profiles for normal
 CLI execution. Logical ChatGPT/Gemini Worker IDs and Thread bindings remain
 stable across Engine and Profile releases. Release status and acceptance
 evidence are tracked in the [v8 implementation plan](../roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).

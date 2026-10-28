@@ -1,4 +1,4 @@
-# Conclave Brand & Design System Specification
+# Syntila Brand & Design System Specification
 
 **Status:** Canonical  
 **Version:** 1.0.0  
@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary & Design Principles
 
-This specification establishes the source of truth for the Conclave brand and visual language. It represents a **controlled brand-system consolidation**, unifying all Conclave client applications (`apps/app`, `apps/workspace`, `apps/profile_lab`), web surfaces, and collateral without altering the essential character of Conclave.
+This specification establishes the source of truth for the Syntila brand and visual language. It represents a **controlled brand-system consolidation**, unifying all Syntila client applications (`apps/app`, `apps/workspace`, `apps/profile_lab`), web surfaces, and collateral without altering the essential character of Syntila.
 
 ### Core Principles
 1. **Intentionality over Novelty:** Every color, radius, and font size corresponds to a documented semantic token.
@@ -104,7 +104,7 @@ This specification establishes the source of truth for the Conclave brand and vi
 
 ## 5. Spacing Scale
 
-Conclave follows a strict **4px / 8px modular spacing grid**:
+Syntila follows a strict **4px / 8px modular spacing grid**:
 
 | Token | Size | Common Use Cases |
 |---|---|---|
@@ -187,7 +187,7 @@ Level 0: Canvas (#121217)
 
 ## 10. Summary Matrix for Developers
 
-When implementing UI components across Conclave:
+When implementing UI components across Syntila:
 - **Buttons / Actions:** Primary `#5E4BD8`, Pressed `#4937BD`, Text `#FFFFFF`, Radius `md` (10px).
 - **Cards / Containers:** Light `#FFFFFF` on `#F8F7F3` with border `#DFDED8`; Dark `#1A1A22` on `#121217` with border `#2E2E3A`, Radius `lg` (12px).
 - **Inputs:** Fill matches Surface, Border matches Border token, Focused Border `#5E4BD8` (1.5px), Radius `md` (10px).

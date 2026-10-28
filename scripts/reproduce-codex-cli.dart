@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-/// Diagnostic-only invocation of Codex, outside the Conclave Service/Engine.
+/// Diagnostic-only invocation of Codex, outside the Syntila Service/Engine.
 /// Raw evidence may contain private prompt/response content; keep it local.
 Future<void> main(List<String> arguments) async {
   final options = <String, String>{};

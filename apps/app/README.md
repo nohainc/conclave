@@ -1,6 +1,6 @@
-# Conclave AX
+# Syntila
 
-Conclave AX is the Flutter application for human authentication, Spaces,
+Syntila is the Flutter application for human authentication, Spaces,
 Threads, Chat, Work, Workspace access, Worker catalog visibility, and
 account security. The Thread Chat tab is the human discussion surface;
 Work remains the execution surface.
@@ -49,7 +49,7 @@ Sending from Preview returns the composer to Write mode. Chat timestamps always
 include the local date and time, including newly sent messages before refresh.
 Own-message footers align right in date/time, edit, copy order; other-message
 footers align left in copy, edit, date/time order.
-Conclave response timestamps follow the action icons directly in the left-aligned
+Syntila response timestamps follow the action icons directly in the left-aligned
 footer. Work errors use the same message font, size and line height as Chat,
 with red as their semantic color.
 Own Chat bubbles use the active navigation background (a light accent wash in
@@ -75,7 +75,7 @@ from the input's bottom edge, has no opening/closing animation, and uses the
 same 10px corner radius as the input.
 The original Markdown source is submitted unchanged, including whitespace and
 fenced code. Viewer access and submission readiness still gate execution.
-Sending immediately adds the prompt and a Conclave preparation message to the
+Sending immediately adds the prompt and a Syntila preparation message to the
 timeline and clears the composer. Readiness checks and Cloud submission update
 that response in place; accepted requests resolve to live progress, an answer or
 an error. Refresh preserves pending local entries until Cloud returns their
@@ -90,7 +90,7 @@ common short language aliases. Unknown tags and blocks over 50,000 characters
 remain plain monospace code. Copy preserves code whitespace and trailing lines.
 
 Run failures include a **Copy Run error** icon that copies the full message.
-Worker replies appear as compact Conclave messages in Work history. Failed
+Worker replies appear as compact Syntila messages in Work history. Failed
 Step diagnostics and implementation details are available from the **Run
 details** info action, keeping the main timeline focused on the response.
 AX sends commands and reads history over HTTP, with WebSocket notifications
@@ -112,7 +112,7 @@ and acquires no mutation lease. Work is writable and uses mutation coordination.
 The team Chat discussion tab remains a separate collaboration surface.
 
 The package intentionally has no native desktop targets. Desktop execution is
-provided by Conclave Workspace; Conclave AX communicates with Cloud through
+provided by Syntila Workspace; Syntila communicates with Cloud through
 the Human Product Protocol and realtime event stream.
 
 If live data cannot load, the recovery screen shows the failing resource,

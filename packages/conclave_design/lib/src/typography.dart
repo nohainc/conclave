@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Typography scale, font families, and text styles for Conclave AX.
+/// Typography scale, font families, and text styles for Syntila.
 abstract final class ConclaveTypography {
   static const fontFamily = 'Inter';
   static const fontFamilyFallback = [

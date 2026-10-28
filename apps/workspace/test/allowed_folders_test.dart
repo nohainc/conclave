@@ -31,7 +31,7 @@ void main() {
         .create(recursive: true);
     appData = await Directory('${home.path}/Library/Application Support')
         .create(recursive: true);
-    registryDirectory = Directory('${appData.path}/Conclave/Registry');
+    registryDirectory = Directory('${appData.path}/Syntila/Registry');
   });
 
   tearDown(() async {

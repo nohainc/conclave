@@ -135,8 +135,8 @@ class _RecoveryPanel extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 retrying
-                    ? 'Conclave AX is retrying automatically.'
-                    : 'If an active run exists, Conclave AX will keep checking for updates.',
+                    ? 'Syntila is retrying automatically.'
+                    : 'If an active run exists, Syntila will keep checking for updates.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

@@ -13,7 +13,7 @@ class SpaceFolderExistsException implements Exception {
   final String folderName;
 
   /// True when the folder carries the identity marker of a different Space,
-  /// for example because another Conclave environment on this machine shares
+  /// for example because another Syntila environment on this machine shares
   /// the work root and claimed it. Never true for an unmarked folder.
   final bool ownedByAnotherSpace;
   @override
@@ -95,7 +95,7 @@ class SpaceDirectoryResolver {
       if (directory != null && await directory.exists()) {
         // The registry says this folder is the Space's, but the folder may
         // since have been claimed by another Space (for example by another
-        // Conclave environment sharing this work root) or lost its marker.
+        // Syntila environment sharing this work root) or lost its marker.
         // Stop and ask, exactly like a same-named folder, instead of failing
         // with an internal error. A confirmed retry takes the folder over.
         final markerFile = File(_join(directory.path, _markerFileName));

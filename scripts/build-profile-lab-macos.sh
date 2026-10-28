@@ -6,7 +6,7 @@ PROFILE_LAB_DIR="$ROOT/apps/profile_lab"
 DIST_DIR="$ROOT/dist/conclave-profile-lab/macos"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Conclave Profile Lab macOS builds must run on macOS." >&2
+  echo "Syntila Profile Lab macOS builds must run on macOS." >&2
   exit 1
 fi
 
@@ -67,7 +67,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $(basename "$0") [options]"
       echo ""
-      echo "Builds the Conclave Profile Lab desktop application for macOS."
+      echo "Builds the Syntila Profile Lab desktop application for macOS."
       echo "Run scripts/test-profile-lab-macos.sh separately for analysis and tests."
       echo ""
       echo "Options:"
@@ -107,11 +107,11 @@ fi
 
 VERSION="${CONCLAVE_PROFILE_LAB_VERSION:-$(awk '/^version:/ {print $2; exit}' "$PROFILE_LAB_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
-  echo "Could not determine Conclave Profile Lab version." >&2
+  echo "Could not determine Syntila Profile Lab version." >&2
   exit 1
 fi
 
-echo "Building Conclave Profile Lab $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
+echo "Building Syntila Profile Lab $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$PROFILE_LAB_DIR"
 if [[ "$PREPARED" == "1" ]]; then
   [[ -f .dart_tool/package_config.json && -x assets/engines/conclave_cli_worker_engine ]] || {
@@ -128,12 +128,12 @@ if [[ "$MODE" == "debug" ]]; then
   flutter build macos --debug \
     --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
     --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
-  APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Debug/Conclave Profile Lab.app"
+  APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Debug/Syntila Profile Lab.app"
 else
   flutter build macos --release \
     --dart-define=CONCLAVE_PROFILE_LAB_VERSION="$VERSION" \
     --dart-define=CONCLAVE_PROFILE_LAB_ENVIRONMENT="$TARGET_ENV"
-  APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Release/Conclave Profile Lab.app"
+  APP="$PROFILE_LAB_DIR/build/macos/Build/Products/Release/Syntila Profile Lab.app"
 fi
 
 if [[ ! -d "$APP" ]]; then
@@ -154,7 +154,7 @@ rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 ZIP_SUFFIX=""
 [[ "$TARGET_ENV" == "local" ]] && ZIP_SUFFIX="-local"
-ZIP="$DIST_DIR/Conclave-Profile-Lab-$VERSION-macos$ZIP_SUFFIX.zip"
+ZIP="$DIST_DIR/Syntila-Profile-Lab-$VERSION-macos$ZIP_SUFFIX.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
 if [[ "$SIGN_APP" == "1" && -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then

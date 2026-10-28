@@ -220,7 +220,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(scaffold(EstablishedUserHome(
       spaces: const [
-        AxSpace(id: 's', name: 'Conclave', branch: 'main', lastActivity: 'Now')
+        AxSpace(id: 's', name: 'Syntila', branch: 'main', lastActivity: 'Now')
       ],
       workers: const [],
       workspaces: const [],
@@ -231,7 +231,7 @@ void main() {
       continueWorkItems: [
         AxContinueWorkItem(
           spaceId: 's',
-          spaceName: 'Conclave',
+          spaceName: 'Syntila',
           threadId: 't',
           threadTitle: 'Thread',
           collaboratorsDisplay: '',
@@ -463,7 +463,7 @@ void main() {
     )));
 
     // NewUserHome Header & Hero
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     expect(find.text('Bring your people and AI together.'), findsOneWidget);
     expect(find.text('Create your first Space'), findsOneWidget);
     expect(find.text('Start a shared space for people, conversations and AI.'),
@@ -475,7 +475,7 @@ void main() {
     expect(find.text('or'), findsNothing);
 
     // Value cards
-    expect(find.text('How Conclave AX works'), findsOneWidget);
+    expect(find.text('How Syntila works'), findsOneWidget);
     expect(find.text('People first'), findsOneWidget);
     expect(find.text('Private credentials'), findsOneWidget);
     expect(find.text('Shared conversations'), findsOneWidget);
@@ -485,14 +485,14 @@ void main() {
         findsOneWidget);
     expect(
         find.text(
-            'Connect Conclave Workspace to make local Workers available to your Spaces.'),
+            'Connect Syntila Workspace to make local Workers available to your Spaces.'),
         findsOneWidget);
     expect(find.text('Connect Workspace →'), findsOneWidget);
 
     // Dashboard sections must NOT appear for new user
     expect(find.text('For you'), findsNothing);
     expect(find.text('Continue working'), findsNothing);
-    expect(find.text("What's new in Conclave"), findsNothing);
+    expect(find.text("What's new in Syntila"), findsNothing);
     expect(find.text('AI updates'), findsNothing);
     expect(find.text('Ready Workers'), findsNothing);
     expect(find.text('Archived Spaces'), findsNothing);
@@ -529,7 +529,7 @@ void main() {
     )));
 
     // Header
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     expect(find.text('Bring your people and AI together.'), findsOneWidget);
 
     // Priority Join a Space card
@@ -546,7 +546,7 @@ void main() {
     expect(find.text('Create Space →'), findsOneWidget);
 
     // Value cards
-    expect(find.text('How Conclave AX works'), findsOneWidget);
+    expect(find.text('How Syntila works'), findsOneWidget);
     expect(find.text('People first'), findsOneWidget);
     expect(find.text('Private credentials'), findsOneWidget);
     expect(find.text('Shared conversations'), findsOneWidget);
@@ -556,7 +556,7 @@ void main() {
         findsOneWidget);
     expect(
         find.text(
-            'Connect Conclave Workspace to make local Workers available to your Spaces.'),
+            'Connect Syntila Workspace to make local Workers available to your Spaces.'),
         findsOneWidget);
     expect(find.text('Connect Workspace →'), findsOneWidget);
 
@@ -672,8 +672,8 @@ void main() {
     expect(find.text('ChatGPT Worker'), findsOneWidget);
 
     // INVARIANTS: Onboarding cards and prohibited legacy elements must NOT appear
-    expect(find.text('Welcome to Conclave AX'), findsNothing);
-    expect(find.text('How Conclave AX works'), findsNothing);
+    expect(find.text('Welcome to Syntila'), findsNothing);
+    expect(find.text('How Syntila works'), findsNothing);
     expect(find.text('Spaces count'), findsNothing);
     expect(find.text('Ready Workers count'), findsNothing);
     expect(find.text('Workspaces count'), findsNothing);
@@ -736,7 +736,7 @@ void main() {
         kind: AxAttentionKind.needsInput,
         categoryLabel: 'Needs your input',
         title: 'Authentication thread needs your input',
-        subtitle: 'Conclave',
+        subtitle: 'Syntila',
         timestampDisplay: '24 min ago',
         actionLabel: 'Open',
         spaceId: 'space-1',
@@ -1034,7 +1034,7 @@ void main() {
     final continueItems = [
       const AxContinueWorkItem(
         spaceId: 'proj-conclave',
-        spaceName: 'Conclave Development',
+        spaceName: 'Syntila Development',
         threadId: 'ws-sessions',
         threadTitle: 'Worker Sessions',
         collaboratorsDisplay: 'ChatGPT',
@@ -1093,7 +1093,7 @@ void main() {
       spaces: const [
         AxSpace(
           id: 'proj-conclave',
-          name: 'Conclave Development',
+          name: 'Syntila Development',
           branch: 'main',
           lastActivity: 'Today',
         ),
@@ -2776,7 +2776,7 @@ void main() {
     const continueItems = [
       AxContinueWorkItem(
         spaceId: 'space-1',
-        spaceName: 'Conclave Core',
+        spaceName: 'Syntila Core',
         threadId: 'ws-offline',
         threadTitle: 'Offline Mode Testing',
         collaboratorsDisplay: 'You + ChatGPT',
@@ -2861,9 +2861,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     expect(find.text('Offline · Cached data'), findsOneWidget);
-    expect(find.text('How Conclave AX works'), findsOneWidget);
+    expect(find.text('How Syntila works'), findsOneWidget);
   });
 
   testWidgets(
@@ -3319,9 +3319,9 @@ void main() {
         onCreateSpace: () {},
       )));
 
-      expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+      expect(find.text('Welcome to Syntila'), findsOneWidget);
       expect(find.text('Create your first Space'), findsOneWidget);
-      expect(find.text('How Conclave AX works'), findsOneWidget);
+      expect(find.text('How Syntila works'), findsOneWidget);
       expect(find.text('People first'), findsOneWidget);
       expect(find.text('Private credentials'), findsOneWidget);
       expect(find.text('Shared conversations'), findsOneWidget);
@@ -3371,7 +3371,7 @@ void main() {
       )));
 
       expect(find.text('Home'), findsOneWidget);
-      expect(find.text('Welcome to Conclave AX'), findsNothing);
+      expect(find.text('Welcome to Syntila'), findsNothing);
       expect(find.text('Setup required'), findsNothing);
       expect(find.text('Workspace offline'), findsNothing);
       expect(find.text('Continue working'), findsOneWidget);
@@ -3499,7 +3499,7 @@ void main() {
         spaceName: 'Space One',
         threadTitle: 'Backend Architecture',
         objective: 'Generating database migration schemas',
-        workerName: 'Conclave Core Engine',
+        workerName: 'Syntila Core Engine',
         status: RunStatus.running,
         taskCount: 5,
         completedTaskCount: 2,

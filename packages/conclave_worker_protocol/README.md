@@ -1,4 +1,4 @@
-# Conclave Worker Protocol
+# Syntila Worker Protocol
 
 Canonical Dart models and validators for the Local Worker Protocol 4.1 wire
 contract shared by Workspace and the standalone CLI Worker Engine.

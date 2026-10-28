@@ -336,7 +336,7 @@ class _WorkspaceCardBody extends StatelessWidget {
     final theme = Theme.of(context);
     if (workers.isEmpty) {
       return Text(
-        'No Workers are available for this Workspace yet. Configure Workers in Conclave Workspace on this computer.',
+        'No Workers are available for this Workspace yet. Configure Workers in Syntila Workspace on this computer.',
         style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
       );
     }
@@ -580,7 +580,7 @@ class _EmptyWorkspaces extends StatelessWidget {
                   style: TextStyle(fontWeight: FontWeight.w700)),
               SizedBox(height: 8),
               Text(
-                  'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
+                  'Download and register Syntila Workspace to make a Workspace and its Workers available here.'),
             ],
           ),
         ),

@@ -1571,7 +1571,7 @@ class _WorkTimelineCard extends StatelessWidget {
             onRetryStep != null);
     final isError = error?.isNotEmpty == true;
 
-    // Waiting/queued messages belong to Conclave. A running Step is the
+    // Waiting/queued messages belong to Syntila. A running Step is the
     // product's worker execution signal; no final text is required to attribute it.
     final senderStep = activeStep?.status == 'running'
         ? activeStep
@@ -1636,7 +1636,7 @@ class _WorkTimelineCard extends StatelessWidget {
         modelPresentation.iconAssetForBrightness(Theme.of(context).brightness);
 
     final senderName =
-        isWorkerResponse ? (hasModel ? modelName : workerName) : 'Conclave';
+        isWorkerResponse ? (hasModel ? modelName : workerName) : 'Syntila';
     final workerOwnerName = senderTurn?.workerOwnerName?.trim();
     final workerIcon =
         presentation.iconAssetForBrightness(Theme.of(context).brightness);

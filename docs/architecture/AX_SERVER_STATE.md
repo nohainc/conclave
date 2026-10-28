@@ -585,7 +585,7 @@ rendering subscriptions. The web backend uses native IndexedDB through
 `AX_PERSIST_READ_CACHE=false` disables it. Storage failure or blocked startup
 falls back to in-memory state; startup storage reads have a bounded timeout.
 
-Cloud session authentication determines the Conclave user ID before hydration.
+Cloud session authentication determines the Syntila user ID before hydration.
 The database `conclave-ax-read-cache-v1` stores versioned safe read DTOs per user,
 never the session, viewer email, tokens, account security, credentials, grants,
 pending forms, mutation keys, local optimistic entities, or executable operations.
@@ -878,7 +878,7 @@ Page rows have larger touch targets. Action icons appear only on selected or
 hovered Space and Thread rows; New Thread
 appears beside each Space when permitted. Invitations open Inbox.
 
-The mobile HUD starts with the Conclave logo, linking to the Spaces/Threads list.
+The mobile HUD starts with the Syntila logo, linking to the Spaces/Threads list.
 An 8px gap separates the logo from the page title. HUD action icons use a
 consistent 20px size, including the application menu. It has no account avatar
 or Back to Spaces icon. On the list page, the account name replaces the Spaces title and links to
@@ -1277,9 +1277,9 @@ this change does not enable unlinking the last sign-in method.
 
 ### About description
 
-The About dialog describes Conclave AX as collaboration between people and AI
+The About dialog describes Syntila as collaboration between people and AI
 Workers in Spaces and Threads, with team conversations, AI requests, and results
-kept together. It introduces Workflows and local execution through Conclave
+kept together. It introduces Workflows and local execution through Syntila
 Workspace and provider CLIs without presenting AI orchestration as the sole
 product purpose.
 
@@ -1308,7 +1308,7 @@ Message and Ask AI inputs share the two-row MarkdownComposer layout, including
 text padding, bottom-row insets, send-button placement, and a six-line growth
 limit. Message keeps emoji and Markdown actions on the left; Ask AI keeps its
 workflow and execution controls there and hides emoji. Emoji and Markdown
-popups use the shared Conclave composer menu surface, border, radius, and shadow.
+popups use the shared Syntila composer menu surface, border, radius, and shadow.
 
 The Message / Ask AI mode selector uses two icon buttons inside the
 32-pixel-wide left rail beside the input and bottom row, with Message above Ask AI.

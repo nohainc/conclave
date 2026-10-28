@@ -268,7 +268,7 @@ class _SpaceAdditionalFoldersState extends State<_SpaceAdditionalFolders> {
             child: current.folders.isEmpty
                 ? const Text(
                     'No folders are allowed on this Workspace yet. Add them '
-                    'in the Conclave Workspace app under Allowed folders.')
+                    'in the Syntila Workspace app under Allowed folders.')
                 : ListView(
                     shrinkWrap: true,
                     children: [

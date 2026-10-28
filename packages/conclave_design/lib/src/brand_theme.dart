@@ -6,7 +6,7 @@ import 'radius.dart';
 import 'typography.dart';
 import 'brand_assets.dart';
 
-/// Shared Conclave AX theme system and brand container.
+/// Shared Syntila theme system and brand container.
 abstract final class ConclaveBrand {
   // Brand Accents
   static const accent = ConclaveColors.primary;
@@ -75,7 +75,7 @@ abstract final class ConclaveBrand {
   static bool isTablet(double width) => width < desktopBreakpoint;
   static bool isMobile(double width) => width < desktopBreakpoint;
 
-  /// Builds the canonical light [ThemeData] for Conclave AX.
+  /// Builds the canonical light [ThemeData] for Syntila.
   static ThemeData lightTheme() {
     const colorScheme = ColorScheme.light(
       primary: ConclaveColors.primary,
@@ -171,7 +171,7 @@ abstract final class ConclaveBrand {
     );
   }
 
-  /// Builds the canonical dark [ThemeData] for Conclave AX.
+  /// Builds the canonical dark [ThemeData] for Syntila.
   static ThemeData darkTheme() {
     const colorScheme = ColorScheme.dark(
       primary: ConclaveColors.primary,

@@ -137,7 +137,7 @@ Future<void> main(List<String> args) async {
 Future<void> _initializeRepository(Directory repository, String branch) async {
   await _runGit(repository, ['init', '-q']);
   await _runGit(repository, ['config', 'user.email', 'test@example.com']);
-  await _runGit(repository, ['config', 'user.name', 'Conclave Test']);
+  await _runGit(repository, ['config', 'user.name', 'Syntila Test']);
   await File('${repository.path}${Platform.pathSeparator}README.md')
       .writeAsString('initial\n');
   await _runGit(repository, ['add', 'README.md']);

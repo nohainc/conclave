@@ -310,7 +310,7 @@ export function buildBetterAuthOptions(
 
   const passkeyOptions = {
     rpID: env.BETTER_AUTH_RP_ID,
-    rpName: "Conclave",
+    rpName: "Syntila",
     origin: env.BETTER_AUTH_ORIGIN,
     schema: {
       passkey: {
@@ -373,7 +373,7 @@ export function buildBetterAuthOptions(
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
-      // Email changes use the Conclave two-step one-time-code flow
+      // Email changes use the Syntila two-step one-time-code flow
       // (`/api/auth/change-email/*`); Better Auth's link flow stays disabled.
       changeEmail: { enabled: false },
       deleteUser: {

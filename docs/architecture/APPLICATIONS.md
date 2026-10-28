@@ -1,16 +1,16 @@
-# Conclave Applications & Architecture Boundaries
+# Syntila Applications & Architecture Boundaries
 
 **Status:** Current Architecture v8 product/application boundary.
 
-Conclave defines four primary product surfaces:
-1. **Conclave AX** (`apps/app`): Human web interface for space orchestration, thread binding, and approvals.
-2. **Conclave Cloud** (`apps/cloud`): Authoritative Cloud API, database, Profile publication authority, and Workspace Gateway.
-3. **Conclave Workspace** (`apps/workspace`): Headless machine-side execution runtime (Dart service) with a management CLI.
-4. **Conclave Profile Lab** (`apps/profile_lab`): Internal administrative desktop engineering application for Worker catalog management, Profile authoring, sandbox testing, release promotion, and revocation.
+Syntila defines four primary product surfaces:
+1. **Syntila** (`apps/app`): Human web interface for space orchestration, thread binding, and approvals.
+2. **Syntila Cloud** (`apps/cloud`): Authoritative Cloud API, database, Profile publication authority, and Workspace Gateway.
+3. **Syntila Workspace** (`apps/workspace`): Headless machine-side execution runtime (Dart service) with a management CLI.
+4. **Syntila Profile Lab** (`apps/profile_lab`): Internal administrative desktop engineering application for Worker catalog management, Profile authoring, sandbox testing, release promotion, and revocation.
 
 ---
 
-## 1. Conclave AX
+## 1. Syntila
 
 **Current path:** `apps/app`
 **Target path:** `apps/app`
@@ -28,9 +28,9 @@ Conclave defines four primary product surfaces:
 - Space-facing Workspace Grants and execution authorization;
 - approvals, evidence and artifacts.
 
-Conclave AX is the web application. It is not packaged as the machine-side executor. Native mobile clients may be added later without changing the Workspace runtime boundary.
+Syntila is the web application. It is not packaged as the machine-side executor. Native mobile clients may be added later without changing the Workspace runtime boundary.
 
-Conclave AX communicates only with Conclave Cloud through the Human Product
+Syntila communicates only with Syntila Cloud through the Human Product
 Protocol. It MUST NOT connect to the Workspace Runtime Protocol or send
 machine-authenticated runtime messages. Protocol ownership and the explicit
 Workspace-to-Engine boundary are defined in the
@@ -43,7 +43,7 @@ page. See the [Workspaces UX and data contract](WORKSPACES_UX_CONTRACT.md).
 Home summarizes Spaces, Workspaces, and locally ready Workers. Both the
 Workspace count and Ready Workers count open `/workspaces`; AX does not expose
 a global Worker inventory. Getting Started guides users to add a Workspace,
-configure Workers with the Conclave Workspace CLI, and create a Space.
+configure Workers with the Syntila Workspace CLI, and create a Space.
 Authentication and local readiness problems direct users back to that local
 runtime.
 
@@ -67,7 +67,7 @@ session; typed email confirmation guards deletion instead.
 
 Workspace-owned Worker inventory remains visible in AX as operational
 readiness. Workspace registration and recovery, local Worker lifecycle,
-credentials, permissions, and runtime connection management belong to Conclave Workspace. AX owns actual
+credentials, permissions, and runtime connection management belong to Syntila Workspace. AX owns actual
 Space/Thread Worker use: task role, Workspace/Worker selection, model,
 fallback policy, Cloud scheduling state, and Cloud concurrency ceilings. These
 choices live with Space and Thread policy, not local Worker setup. See
@@ -77,7 +77,7 @@ The Work composer and its built-in Workflow/step semantics follow the frozen
 [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md). That contract is
 the sole authoritative catalog.
 
-## 2. Conclave Cloud
+## 2. Syntila Cloud
 
 **Current path:** `apps/cloud`
 **Target path:** `apps/cloud`
@@ -103,15 +103,15 @@ the sole authoritative catalog.
 - audit/evidence;
 - artifacts.
 
-Conclave Cloud never executes an external AI/model/tool directly.
+Syntila Cloud never executes an external AI/model/tool directly.
 Cloud exposes separate human-facing product APIs and an authenticated
 Workspace Gateway. The former serves AX and human management operations; the
-latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
+latter speaks only the Workspace Runtime Protocol with Syntila Workspace.
 
-## 3. Conclave Workspace
+## 3. Syntila Workspace
 
 **Path:** `apps/workspace`
-**User-facing product name:** Conclave Workspace
+**User-facing product name:** Syntila Workspace
 
 **Technology**
 - Dart (no Flutter);
@@ -140,13 +140,13 @@ latter speaks only the Workspace Runtime Protocol with Conclave Workspace.
 - logs, diagnostics and updates;
 - a management CLI over authenticated local IPC (no GUI).
 
-One normal Conclave Workspace installation runs per machine/OS-user installation.
+One normal Syntila Workspace installation runs per machine/OS-user installation.
 
 Each logical Worker Type has one local Worker slot in a Workspace. Provider
 CLIs own their sign-in; safe Worker readiness is synchronized to Cloud, and AX
 Thread policy determines how that capacity is used.
 
-Conclave Workspace is background-first. Human CLI authentication is
+Syntila Workspace is background-first. Human CLI authentication is
 distinct from Workspace runtime participation and from Worker/provider
 credentials. Signing in (`conclave-workspace login`) establishes management identity; an explicit **Connect
 Workspace** action (`connect`) registers/recovers runtime participation. A connected
@@ -155,7 +155,7 @@ runtime credential even when the human management session later requires
 reauthentication. A signed-out management client never stops runtime
 execution. Provider credentials remain local.
 
-Spaces, Threads, Discuss, Work orchestration and Space administration remain in Conclave AX.
+Spaces, Threads, Discuss, Work orchestration and Space administration remain in Syntila.
 
 ## 4. Logical Workers, CLI Worker Engine, and Tool Profiles
 
@@ -166,7 +166,7 @@ packages for normal provider CLIs.
 A Worker Type is the stable product/catalog identity for a Logical Worker, not
 a user-installed application and not an AI model.
 
-Conclave v1 initially provisions these official Logical Workers:
+Syntila v1 initially provisions these official Logical Workers:
 - **ChatGPT**, resolved by the `chatgpt-codex` Tool Profile Definition to Codex CLI (`codex`);
 - **Gemini**, resolved by the `gemini-antigravity` Tool Profile Definition to Antigravity CLI (`agy`).
 
@@ -176,12 +176,12 @@ application release when an existing Engine family and supported Tool Profile
 schema can express them.
 
 Each Workspace has one stable local slot for each type. The provider CLI owns
-sign-in and billing mode; Conclave
+sign-in and billing mode; Syntila
 does not ask the user to choose subscription versus API-key authentication or
 store the provider credentials. See the
 [Worker catalog contract v1](../specifications/FIRST_PARTY_WORKER_CATALOG_V1.md).
 
-Conclave Workspace resolves each Logical Worker to one compatible current Worker
+Syntila Workspace resolves each Logical Worker to one compatible current Worker
 Profile Release and starts the generic CLI Worker Engine out of process. The
 Engine invokes the locally installed Provider CLI using structured arguments
 and Local Worker Protocol 4.1. The Engine is the sole production CLI Worker
@@ -194,19 +194,19 @@ A local Worker slot:
 - relies on provider CLI-owned local sign-in;
 - does not own model defaults or allow-lists; model choice comes from the Work/Assignment;
 - is synchronized to Cloud as safe metadata/readiness;
-- does not connect directly to Conclave Cloud.
+- does not connect directly to Syntila Cloud.
 
 Models such as GPT, Gemini Pro/Flash or Claude Sonnet/Opus are configuration, not separate Worker Types.
 
 ## Product vocabulary
 
 Use:
-- Conclave AX;
+- Syntila;
 - Workspaces for the top-level AX execution-capacity page;
 - Workspace;
 - Worker;
 - Worker Type for the stable catalog identity;
-- Conclave Workspace for the machine-side application/runtime;
+- Syntila Workspace for the machine-side application/runtime;
 - credential state when referring to local authentication/readiness.
 
 Provider credentials remain local to provider CLI software and are not Cloud
@@ -253,17 +253,17 @@ one another.
 
 ## Architecture v8 local runtime refinement
 
-Conclave Workspace launches one generic CLI Worker Engine process
+Syntila Workspace launches one generic CLI Worker Engine process
 per assignment/probe by default. Product-visible ChatGPT/Gemini rows remain
 Logical Workers. Official current Worker Profiles map those identities to
 supported Provider CLI behavior. New normal CLI integrations should be added
 through the Cloud Worker catalog and Tool Profile releases when Profile v1 can
 express them.
 
-## 5. Conclave Profile Lab
+## 5. Syntila Profile Lab
 
 **Path:** `apps/profile_lab`
-**Internal product name:** Conclave Profile Lab
+**Internal product name:** Syntila Profile Lab
 
 **Technology**
 - Flutter;
@@ -282,4 +282,4 @@ express them.
 - publish the next current Profile revision through Cloud;
 - manage release lifecycle promotion (`Testing` → `Beta` → `Stable`), rollback, and revocation.
 
-Conclave Profile Lab is strictly separated from Conclave Workspace and Conclave AX. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Space Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).
+Syntila Profile Lab is strictly separated from Syntila Workspace and Syntila. It never registers as an execution Workspace, never advertises Workers to Cloud inventory, never accepts Work assignments, and never owns Space Work Roots. Provider credentials remain owned by local provider CLIs; Profile Lab never stores provider credentials. See [ADR-019](../decisions/ADR-019-conclave-profile-lab.md).

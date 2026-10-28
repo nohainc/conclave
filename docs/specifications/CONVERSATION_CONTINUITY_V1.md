@@ -10,7 +10,7 @@ execution writes remain removed, and Thread preference is future work.
 Historical phase notes below describe completed iterations, not current API aliases.
 
 **Status:** implemented through Phase 30, including legacy-assumption cleanup, the continuity regression matrix, context/revision evidence, concurrency guards and execution boundaries.
-**Boundary:** Conclave Core and Human Product Protocol. **Contract version:** 1.
+**Boundary:** Syntila Core and Human Product Protocol. **Contract version:** 1.
 
 Space → Thread → Conversation → Work Requests is the product ownership
 model for current manual AI interactions. A Conversation identifies the workflow;
@@ -232,7 +232,7 @@ Repeated completion delivery cannot rewrite terminal evidence. Database guards
 also prevent attribution edits, start-time changes, and lifecycle regressions.
 
 `workerSessionId` is a SHA-256 reference over Workspace, Worker, Profile definition
-and the Conclave logical session key for durable assignments. It is
+and the Syntila logical session key for durable assignments. It is
 null for stateless assignments. It neither contains a native provider handle nor
 proves that a CLI thread resumed successfully. Workspace still owns the actual
 session mapping, reset/generation state, and provider-native IDs. `baseContextRevision`
@@ -265,7 +265,7 @@ is performed by this implementation phase.
 
 ## Phase 5 — Canonical conversation history
 
-Conclave owns an append-only history ledger for each Conversation. Provider CLI
+Syntila owns an append-only history ledger for each Conversation. Provider CLI
 sessions remain local execution state and are not the source of conversation
 history. The version 1 entry contract covers `user_message`, `worker_response`,
 `workflow_event`, `execution_event`, `artifact_event`, and `context_event`.
@@ -323,7 +323,7 @@ logical Worker/Profile, rather than a model. Its version 1 record contains `id`,
 `conversationId`, `workerId`, `profileId`, `profileVersion`, `nativeSessionId`,
 `synchronizedContextRevision`, `status`, `lastModelId`, `lastEffort`, `createdAt`,
 and `lastUsedAt`. Only Workspace's Engine state stores native provider handles;
-Cloud stores the opaque Conclave reference on turns, not a Worker Session table.
+Cloud stores the opaque Syntila reference on turns, not a Worker Session table.
 Last model/effort describe the last successful execution, and null denotes Default.
 
 Cloud derives the opaque reference from Workspace, logical Worker, Profile
@@ -336,7 +336,7 @@ Future multiple Conversations must allocate distinct logical keys; ownership
 validation rejects using another Conversation's existing mapping.
 
 Durable assignments carry optional `workerSession` metadata with nested
-`schemaVersion: 1`, the Conclave session/Conversation/Worker IDs, and the dispatch
+`schemaVersion: 1`, the Syntila session/Conversation/Worker IDs, and the dispatch
 `baseContextRevision`. Workspace validates ownership and translates this metadata
 into Local Worker Protocol 4.0 execute frames. Native handles are forbidden in that
 metadata. Stateless executions do not carry Worker Session state. The turn records
@@ -384,7 +384,7 @@ Values are arbitrary bounded Profile strings; workers need not share reasoning
 levels. An explicit empty per-model effort list disables effort for that model.
 When a known default model is declared, selection validation uses that model's
 options for Default. Null model/effort preserves the provider-default request;
-Conclave does not invent a resolved model or inject the advertised default.
+Syntila does not invent a resolved model or inject the advertised default.
 Catalog entries are filtered by Profile allowlist and installed CLI version.
 An unavailable default becomes null rather than silently selecting another model.
 
@@ -608,7 +608,7 @@ session and send only their new request.
 
 Cloud dispatch supplies a version 1 `bootstrap` inside `workerSession` only for
 manual durable Conversations whose published Profile explicitly disables model
-switching. The snapshot contains Conclave's canonical history through the sequence
+switching. The snapshot contains Syntila's canonical history through the sequence
 immediately before the current user message, plus Conversation/context attribution.
 It includes user/worker text and canonical event metadata, excluding the current
 request and subsequent events. The Engine combines this historical-data snapshot
@@ -712,7 +712,7 @@ Cloud route modules assemble inputs from canonical history and the frozen Work
 Request snapshot. Workflow state explicitly includes execution workflow identity
 and version, Work Request identity/status, and step identity, kind, status, and
 attempt. Space/Thread instructions seed constraints. Version 1 committed
-`context.fact_updated` Conclave events materialize scalar or identified string
+`context.fact_updated` Syntila events materialize scalar or identified string
 facts; worker prose never becomes authoritative decisions or summaries. Missing
 facts remain empty. This phase adds no context-authoring endpoint or automatic
 summary generation. Artifacts carry identity/digest, not bodies or storage secrets.
@@ -899,7 +899,7 @@ migration/deployment is included.
 
 WorkflowRun, WorkflowStepRun, routing and execution graphs remain internal
 execution models. Their presence in a response/cache does not enable orchestration
-UI. Ordinary Chat and Work continue to show the user's message, Conclave's initial
+UI. Ordinary Chat and Work continue to show the user's message, Syntila's initial
 progress, then the actual Worker name/icon and response. Model/effort selection
 stays near Send and historical attribution remains accurate.
 
@@ -1000,8 +1000,8 @@ making the information accessible on touch devices as well as desktop.
 Metadata uses the immutable matching Worker turn, with request-step snapshots
 only when turn evidence is absent. It never uses current composer or catalog
 selections to relabel historical responses. Null recorded choices remain
-`Default model · Default effort`; Conclave does not invent resolved provider
-defaults. Conclave progress/error messages do not show Worker configuration.
+`Default model · Default effort`; Syntila does not invent resolved provider
+defaults. Syntila progress/error messages do not show Worker configuration.
 
 Widget coverage exercises Chat and Work, distinct historical configurations,
 explicit defaults, misleading current-step metadata and tap disclosure. No
@@ -1140,7 +1140,7 @@ Callers may retry a rejected execution through existing request handling.
 Persistent lock files are not ownership markers. OS ownership ends on normal
 release or process death, so restart does not require deleting a stale lock file.
 The lock directory stays inside Workspace-owned Engine state. This coordinates
-Conclave Engine processes; external CLI usage is outside that boundary. Runtime
+Syntila Engine processes; external CLI usage is outside that boundary. Runtime
 Engine processes execute in one isolate; this is not a multi-isolate lock service.
 
 Tests exercise two Worker steps from one base, sibling-response exclusion, frozen

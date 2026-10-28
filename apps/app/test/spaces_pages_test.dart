@@ -2610,7 +2610,7 @@ void main() {
     expect(find.text('AI History'), findsOneWidget);
     expect(find.text('Read-only'), findsNothing);
     expect(find.text('Archive'), findsNothing);
-    expect(find.text('What should Conclave do?'), findsNothing);
+    expect(find.text('What should Syntila do?'), findsNothing);
     expect(
         find.text(
             'Ask AI to do something for the team. Nothing runs until you send the request.'),
@@ -2747,7 +2747,7 @@ void main() {
     await tester.pumpAndSettle();
     await _askAi(tester);
 
-    expect(find.text('What should Conclave do?'), findsNothing);
+    expect(find.text('What should Syntila do?'), findsNothing);
     expect(find.byKey(const ValueKey('work-add-attachments')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('work-add-attachments')));
     await tester.pumpAndSettle();
@@ -3048,7 +3048,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('The requested change is complete.'), findsOneWidget);
     expect(find.text('Implement'), findsNothing);
-    expect(find.text('Conclave'), findsOneWidget);
+    expect(find.text('Syntila'), findsOneWidget);
     expect(
       tester
           .widgetList<ConclaveMarkdownBody>(find.byType(ConclaveMarkdownBody))

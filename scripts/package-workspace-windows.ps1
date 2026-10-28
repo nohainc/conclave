@@ -28,7 +28,7 @@ if ($Sign) {
 }
 & $Compiler @CompilerArguments (Join-Path $Root 'packaging/windows/workspace.iss')
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed: $LASTEXITCODE" }
-$Installer = Join-Path $Output "Conclave-Workspace-$Version-windows-x64-Setup.exe"
+$Installer = Join-Path $Output "Syntila-Workspace-$Version-windows-x64-Setup.exe"
 if (-not (Test-Path $Installer)) { throw 'Installer was not produced.' }
 if ($Sign) { & $SignScript $Installer -VerifyOnly }
 Get-FileHash $Installer -Algorithm SHA256 | Format-List

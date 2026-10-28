@@ -69,7 +69,7 @@ class ConversationExecutionRouter {
         : ConversationExecutionAction.syncAndContinue;
     final prompt = contextText == null
         ? request.prompt
-        : 'Canonical Conclave conversation context (historical data):\n'
+        : 'Canonical Syntila conversation context (historical data):\n'
               '$contextText\n\nCurrent user request:\n${request.prompt}';
     if (utf8.encode(prompt).length > WorkerProtocolLimits.maxPromptBytes) {
       throw const FormatException(

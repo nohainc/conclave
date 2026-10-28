@@ -32,7 +32,7 @@ export function isExecutionErrorCode(
 export function canonicalExecutionErrorCode(
   value: unknown,
 ): ExecutionErrorCode {
-  // These fixed Conclave errors can already be stored on tasks that failed
+  // These fixed Syntila errors can already be stored on tasks that failed
   // before assignment creation. Never expose arbitrary diagnostic text.
   if (
     typeof value === "string" &&

@@ -19,7 +19,7 @@ retained execution history.
   assignments. Activity updates are incremental and do not reload the entire
   Work history.
 - The card shows the current Worker identity when a Worker execution is
-  selected or running. Waiting/system states remain attributed to Conclave.
+  selected or running. Waiting/system states remain attributed to Syntila.
 - Active activity and completed activity history are separate visual groups.
   Provider percentages are not synthesized from tool counts.
 

@@ -1,6 +1,6 @@
 # Durable Work Execution
 
-Conclave Cloud uses Cloudflare Workflows to coordinate long-running Work
+Syntila Cloud uses Cloudflare Workflows to coordinate long-running Work
 Requests. Workflow checkpoints support retries, waits, and recovery. D1 and R2
 remain the application system of record; Workflow state is execution
 coordination state and does not replace persisted domain records.
@@ -19,7 +19,7 @@ Dispatch and admission do not establish `running`; Cloud waits for the
 explicit startup acknowledgement before marking the task running.
 
 The Workspace Service supervision and process ownership contract is defined by
-[Conclave Service supervision — V9 Phase 3](SERVICE_SUPERVISION_V9.md).
+[Syntila Service supervision — V9 Phase 3](SERVICE_SUPERVISION_V9.md).
 
 Cloud command delivery, terminal acknowledgements, WebSocket/long-poll
 fallback, capacity claims, and activity retention are defined by the
@@ -73,7 +73,7 @@ state must fail visibly; a checkpoint alone cannot establish successful Work.
 The Cloudflare Workflow invokes the configured execution service for work that
 requires it. That service coordinates the current Worker catalog, assignment
 state, persistence, and Workspace runtime bridge. Provider CLI execution
-occurs in Conclave Workspace through the generic CLI Worker Engine and a
+occurs in Syntila Workspace through the generic CLI Worker Engine and a
 verified Tool Profile. Cloud does not execute a provider CLI.
 
 The runtime boundary and message ownership are defined by the [Protocol

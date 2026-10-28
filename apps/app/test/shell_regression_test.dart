@@ -46,7 +46,7 @@ void main() {
 
   const testSpace = AxSpace(
     id: 'p-1',
-    name: 'Conclave AX',
+    name: 'Syntila',
     branch: 'main',
     lastActivity: 'today',
     threads: [wsRunning, wsIdle],
@@ -105,7 +105,7 @@ void main() {
 
   group('Phase 13: Sidebar Content & Isolation Regressions', () {
     testWidgets(
-        'sidebar contains Conclave AX brand (home trigger), New Space button, Space tree, User profile, and Menu',
+        'sidebar contains Syntila brand (home trigger), New Space button, Space tree, User profile, and Menu',
         (tester) async {
       await tester.pumpWidget(
         wrapWithMaterial(
@@ -126,14 +126,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Allowed permanent items:
-      expect(find.text('Conclave AX'),
+      expect(find.text('Syntila'),
           findsOneWidget); // Space in tree; header has only the app mark
       expect(find.byTooltip('New Space'),
           findsOneWidget); // New Space button before alarm
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm button
       expect(
           find.descendant(
-              of: find.byType(SpaceTree), matching: find.text('Conclave AX')),
+              of: find.byType(SpaceTree), matching: find.text('Syntila')),
           findsOneWidget); // Space name in tree
       expect(find.text('Authentication redesign'),
           findsOneWidget); // Thread in tree
@@ -239,7 +239,7 @@ void main() {
 
   group('Phase 13: Global Application Menu Regressions', () {
     testWidgets(
-        'menu contains Workspaces, Archived Spaces, Appearance, Downloads, Documentation, About Conclave AX, Log out in correct order',
+        'menu contains Workspaces, Archived Spaces, Appearance, Downloads, Documentation, About Syntila, Log out in correct order',
         (tester) async {
       AxNavigation? navigated;
       bool aboutOpened = false;
@@ -275,7 +275,7 @@ void main() {
       expect(find.text('Appearance'), findsOneWidget);
       expect(find.text('Downloads'), findsOneWidget);
       expect(find.text('Documentation'), findsOneWidget);
-      expect(find.text('About Conclave AX'), findsOneWidget);
+      expect(find.text('About Syntila'), findsOneWidget);
       expect(find.text('Log out'), findsOneWidget);
 
       // Verify removed items are NOT present
@@ -310,10 +310,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(openedUrl, Uri.parse('https://conclaveax.com/how-it-works/'));
 
-      // Re-open and test About Conclave AX
+      // Re-open and test About Syntila
       await tester.tap(find.byTooltip('Application menu'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('About Conclave AX'));
+      await tester.tap(find.text('About Syntila'));
       await tester.pumpAndSettle();
       expect(aboutOpened, isTrue);
 
@@ -414,7 +414,7 @@ void main() {
       // Selecting the expanded parent from a Thread preserves expansion.
       await tester.tap(find.descendant(
         of: find.byType(SpaceTree),
-        matching: find.text('Conclave AX'),
+        matching: find.text('Syntila'),
       ));
       expect(toggledSpaceId, isNull);
       expect(navigated, const AxNavigation.space('p-1'));
@@ -542,7 +542,7 @@ void main() {
       expect(find.byType(AppSidebar), findsNothing);
       expect(
           find.byType(AppTopHud), findsOneWidget); // Top HUD visible on tablet
-      expect(find.byTooltip('Conclave AX — Spaces'), findsOneWidget);
+      expect(find.byTooltip('Syntila — Spaces'), findsOneWidget);
       expect(find.byTooltip('Application menu'), findsOneWidget);
     });
   });

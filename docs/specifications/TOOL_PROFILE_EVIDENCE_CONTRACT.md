@@ -21,7 +21,7 @@ If testing evidence were associated merely with a human-readable identifier (suc
 2. An autonomous AI repair loop could iterate through multiple patches, conflate test results across iterations, and promote a candidate whose actual payload never passed live testing.
 3. A client could submit a fabricated scenario claim or reuse a contract for a different payload unless Cloud checks the identity and digest.
 
-Conclave enforces **digest-bound lifecycle records**: each accepted contract is bound to a canonical Profile digest and immutable release identity. This prevents a record for one payload from being reused for a different payload. The contract remains an authenticated Profile Lab assertion: Cloud does not remotely observe the local Engine or provider process and does not cryptographically attest that the submitted scenarios actually ran.
+Syntila enforces **digest-bound lifecycle records**: each accepted contract is bound to a canonical Profile digest and immutable release identity. This prevents a record for one payload from being reused for a different payload. The contract remains an authenticated Profile Lab assertion: Cloud does not remotely observe the local Engine or provider process and does not cryptographically attest that the submitted scenarios actually ran.
 
 ---
 
@@ -77,7 +77,7 @@ Draft v19 (Payload B)
 1. **No Cross-Digest Reuse:** Profile Lab associates local results with the candidate digest. Cloud checks submitted evidence identity and digest against the current draft or immutable release before storing or using the record.
 2. **Draft → Testing Blocker:** Before publication, Profile Lab submits its complete local execution contract to `POST /api/admin/tool-profiles/{definitionId}/releases/{version}/qualification`. Cloud accepts qualification only while the exact release remains a mutable draft and the evidence identity, digest, Engine/provider version ranges, freshness, and contract-derived scenarios all validate against the stored draft.
 3. **Publication Blocker:** `publishDraftToolProfileRelease` requires a `qualificationEvidenceId`. Cloud reloads that immutable record and repeats all qualification checks against the current draft digest in the signing operation. Missing, stale, mismatched, incomplete, or malformed qualification blocks signature generation and publication.
-4. **Promotion Blocker:** Conclave Cloud accepts only an `acceptanceEvidenceId` that names a separately submitted immutable post-publication record for the same release and payload digest. Promotion requests never contain evidence JSON.
+4. **Promotion Blocker:** Syntila Cloud accepts only an `acceptanceEvidenceId` that names a separately submitted immutable post-publication record for the same release and payload digest. Promotion requests never contain evidence JSON.
 
 ---
 

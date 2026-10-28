@@ -468,7 +468,7 @@ class WindowsNative {
   }
 
   static int acquirePowerRequest() {
-    final text = wide('Conclave Workspace is running');
+    final text = wide('Syntila Workspace is running');
     final context = allocate(32);
     (context + 4).cast<Uint32>().value = 1;
     (context + 8).cast<Pointer<Uint16>>().value = text;

@@ -3,7 +3,7 @@
 **Status:** Superseded historical Architecture v8 Profile Lifecycle Contract
 **Decisions:** [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md), [ADR-019](../decisions/ADR-019-conclave-profile-lab.md)  
 **Profile Schema:** [Tool Profile v1](TOOL_PROFILE_V1.md)  
-**Authority:** Conclave Cloud Registry (`apps/cloud/src/tool-profile-registry.ts`) and D1 Schema (`apps/cloud/migrations-v8/0001_conclave_v8.sql`)
+**Authority:** Syntila Cloud Registry (`apps/cloud/src/tool-profile-registry.ts`) and D1 Schema (`apps/cloud/migrations-v8/0001_conclave_v8.sql`)
 
 V9 replacement: [WORKER_PROFILE_V9.md](WORKER_PROFILE_V9.md). This document is
 retained to explain the historical V8 release lifecycle and is not a supported
@@ -13,7 +13,7 @@ runtime or administration contract.
 
 ## 1. Overview
 
-Tool Profiles define provider-specific CLI behavior interpreted by the generic Conclave CLI Worker Engine (`engines/cli_worker`).
+Tool Profiles define provider-specific CLI behavior interpreted by the generic Syntila CLI Worker Engine (`engines/cli_worker`).
 
 Because Tool Profiles govern how provider executables are discovered, invoked, and supervised, changes to Profile behavior are treated with the rigor of executable code releases.
 
@@ -266,7 +266,7 @@ When an operational defect is discovered in a release currently pointed to by an
 
 ## 8. Human vs. AI Provenance and Parity
 
-Conclave maintains strict architectural parity between human operators and AI agents:
+Syntila maintains strict architectural parity between human operators and AI agents:
 
 ```text
                   +---------------------------+

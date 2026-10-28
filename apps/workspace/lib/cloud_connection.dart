@@ -167,7 +167,7 @@ class WorkspaceCloudConnection {
     required this.factory,
     this.fallbackFactory,
     Set<String>? authorizedWorkspaceIds,
-    this.name = 'Conclave Workspace',
+    this.name = 'Syntila Workspace',
     String? hostname,
     this.workspaceVersion = conclaveWorkspaceAppVersion,
     Map<String, Object?>? capabilities,

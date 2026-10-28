@@ -1,4 +1,4 @@
-# Conclave protocol schema
+# Syntila protocol schema
 
 This directory contains the canonical, language-neutral JSON Schema for the
 product message envelope, execution error vocabulary, Workspace message

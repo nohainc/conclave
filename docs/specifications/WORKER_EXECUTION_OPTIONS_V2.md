@@ -86,7 +86,7 @@ Codex discovery uses catalog `id` as logical selection and `model` as native CLI
 identity, falling back to id only when native metadata is absent. Its Engine
 passes the stored native identity to `--model` and preserves the signed separate
 reasoning-effort argument mapping. The same existing Engine argument expansion
-is used for execution, with the logical selection retained in Conclave requests.
+is used for execution, with the logical selection retained in Syntila requests.
 
 AGY TSV supplies exact native IDs and no independent effort defaults. Phase 3
 intersects those identifiers with the candidate's signed exact mapping: four
@@ -483,7 +483,7 @@ its immutable public `permissionSnapshot.executionSelection` (schema version 1):
 ```
 
 `explicit` denotes a concrete effective binding, including a workflow default or
-step override already resolved by Conclave. `catalog_default` denotes a declared
+step override already resolved by Syntila. `catalog_default` denotes a declared
 default materialized at dispatch. These sources do not claim that a human chose
 each field explicitly. Assignment payload validation requires the public snapshot
 to agree with the invoked Worker/model/effort and forbids native mapping fields.

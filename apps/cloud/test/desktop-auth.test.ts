@@ -252,7 +252,7 @@ describe("desktop human authentication", () => {
         new Request("https://app.conclave.test/api/desktop-auth/intents", {
           method: "POST",
           body: JSON.stringify({
-            clientName: "Conclave Profile Lab",
+            clientName: "Syntila Profile Lab",
             contractVersion: "1.1",
             audience: "conclave.profile-lab.management",
           }),
@@ -322,7 +322,7 @@ describe("desktop human authentication", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          clientName: "Conclave Workspace",
+          clientName: "Syntila Workspace",
           contractVersion: "1.1",
         }),
       }),
@@ -452,7 +452,7 @@ describe("desktop human authentication", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          clientName: "Conclave Workspace",
+          clientName: "Syntila Workspace",
           contractVersion: "1.1",
         }),
       }),
@@ -473,7 +473,7 @@ describe("desktop human authentication", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          clientName: "Conclave Workspace",
+          clientName: "Syntila Workspace",
           contractVersion: "1.1",
         }),
       }),
@@ -1469,7 +1469,7 @@ describe("desktop human authentication", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          clientName: "Conclave Workspace",
+          clientName: "Syntila Workspace",
           contractVersion: "1.1",
         }),
       }),
@@ -2707,7 +2707,7 @@ describe("desktop human authentication", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          clientName: "Conclave Profile Lab",
+          clientName: "Syntila Profile Lab",
           contractVersion: "1.1",
           audience: "conclave.profile-lab.management",
         }),
@@ -2738,7 +2738,7 @@ describe("desktop human authentication", () => {
       status: string;
     };
     expect(browserStatus.audience).toBe("conclave.profile-lab.management");
-    expect(browserStatus.clientName).toBe("Conclave Profile Lab");
+    expect(browserStatus.clientName).toBe("Syntila Profile Lab");
     expect(browserStatus.status).toBe("pending");
 
     // 3. Approve intent
@@ -2827,7 +2827,7 @@ describe("desktop human authentication", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          clientName: "Conclave Workspace",
+          clientName: "Syntila Workspace",
           contractVersion: "1.1",
         }),
       }),

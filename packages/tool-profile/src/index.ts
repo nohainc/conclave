@@ -395,7 +395,7 @@ const passiveCommand = z
   .strict();
 /**
  * Profile-owned command that prints the provider's own usage/limits report.
- * Conclave returns the output verbatim and never parses it, because every
+ * Syntila returns the output verbatim and never parses it, because every
  * provider calculates usage differently.
  */
 const usageCommand = z

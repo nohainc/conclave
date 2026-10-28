@@ -158,7 +158,7 @@ class WorkspaceRegistrationService {
       if (result.ownerUserId == null ||
           result.ownerUserId != expectedOwnerUserId) {
         throw StateError(
-          'Cloud returned a Workspace owned by a different Conclave account.',
+          'Cloud returned a Workspace owned by a different Syntila account.',
         );
       }
       if (expectedWorkspaceId != null &&

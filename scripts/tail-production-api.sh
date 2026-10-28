@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Conclave AX - Tail Production Cloudflare Worker Logs
+# Syntila - Tail Production Cloudflare Worker Logs
 # ==============================================================================
 # Opens a dedicated terminal streaming live production Worker logs via Wrangler.
 # ==============================================================================
@@ -16,7 +16,7 @@ cat << EOF > "${RUNNER_TAIL}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}"
-echo -e "\033[1m\033[0;35m[Conclave AX Production API Live Logs]\033[0m Streaming from Cloudflare...\n"
+echo -e "\033[1m\033[0;35m[Syntila Production API Live Logs]\033[0m Streaming from Cloudflare...\n"
 exec pnpm exec wrangler tail --config "${WRANGLER_CONFIG}"
 EOF
 chmod +x "${RUNNER_TAIL}"
@@ -42,5 +42,5 @@ spawn_terminal() {
   fi
 }
 
-spawn_terminal "${RUNNER_TAIL}" "Conclave AX - Production API Logs"
+spawn_terminal "${RUNNER_TAIL}" "Syntila - Production API Logs"
 echo "✓ Spawned live log tail in a new terminal window for production API (conclave-ax-app)."

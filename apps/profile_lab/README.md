@@ -1,6 +1,6 @@
-# Conclave Profile Lab
+# Syntila Profile Lab
 
-Conclave Profile Lab is an internal macOS desktop application for creating and maintaining Logical Workers and their Tool Profiles. Operators open a Worker, edit one local JSON candidate, run the generic CLI Worker Engine against locally installed provider CLIs, validate the exact candidate with Cloud, and publish it as the Worker’s next current Profile revision.
+Syntila Profile Lab is an internal macOS desktop application for creating and maintaining Logical Workers and their Tool Profiles. Operators open a Worker, edit one local JSON candidate, run the generic CLI Worker Engine against locally installed provider CLIs, validate the exact candidate with Cloud, and publish it as the Worker’s next current Profile revision.
 
 This README is for developers and authorized operators. The normative product and API contracts are in the [Worker Profile V9 specification](../../docs/specifications/WORKER_PROFILE_V9.md), [Profile Lab specification](../../docs/specifications/PROFILE_LAB.md), [Tool Profile v1 contract](../../docs/specifications/TOOL_PROFILE_V1.md), and [ADR-019](../../docs/decisions/ADR-019-conclave-profile-lab.md). The V8 lifecycle documents remain historical and are superseded by V9.
 
@@ -8,8 +8,8 @@ This README is for developers and authorized operators. The normative product an
 
 - **Profile Lab** authors one local candidate per Worker, runs the complete local test ladder, and requests Cloud validation/publication for that exact candidate digest.
 - **The CLI Worker Engine** executes Profile-defined behavior using provider CLI programs installed on the operator's Mac. Provider behavior belongs in Worker and Tool Profile data, not provider-specific app branches.
-- **Conclave Cloud** owns the Worker catalog, one current Profile, bounded history, digest metadata, authorization, audit records, and atomic publication. Profile Lab uses Cloud APIs and has no direct database access.
-- **Conclave Workspace** runs admitted, digest/schema-validated Profile snapshots and owns local Work Roots and execution sessions. Profile Lab is not a Workspace: it does not accept Work assignments or own Work Roots.
+- **Syntila Cloud** owns the Worker catalog, one current Profile, bounded history, digest metadata, authorization, audit records, and atomic publication. Profile Lab uses Cloud APIs and has no direct database access.
+- **Syntila Workspace** runs admitted, digest/schema-validated Profile snapshots and owns local Work Roots and execution sessions. Profile Lab is not a Workspace: it does not accept Work assignments or own Work Roots.
 - Provider CLI login and credentials stay with the locally installed provider CLI. Profile Lab does not collect or store provider API keys.
 
 ## Local development
@@ -42,7 +42,7 @@ You can also change the origin in **Cloud connection** settings while the app is
 
 The build default is `https://app.conclaveax.com`. For a development build, set `CONCLAVE_CLOUD_URL` with a Dart define; operators can save a local origin override or reset it to the build default in Cloud connection settings. The override is non-secret app configuration. Changing the Cloud origin clears the current sign-in because sessions are bound to their origin.
 
-Sign-in opens a browser approval flow for **Conclave Profile Lab**, using the dedicated `conclave.profile-lab.management` audience. It is separate from Conclave Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: Worker/Profile administration uses `profiles:admin`; publication requires `profiles:release:manage`. Cloud is the authorization and publication authority; Profile Lab never holds provider credentials.
+Sign-in opens a browser approval flow for **Syntila Profile Lab**, using the dedicated `conclave.profile-lab.management` audience. It is separate from Syntila Workspace authentication. The resulting session is stored in the macOS login Keychain under the Profile Lab service and is scoped to the selected Cloud origin. Cloud must authorize the account for the operation: Worker/Profile administration uses `profiles:admin`; publication requires `profiles:release:manage`. Cloud is the authorization and publication authority; Profile Lab never holds provider credentials.
 
 For local Cloud development, configure an authorized test account in the local Cloud environment. Do not copy a Workspace session or put a bearer token in app configuration or source control.
 
@@ -109,7 +109,7 @@ Workspace application-release signing remain separate security mechanisms.
 - [Tool Profile evidence contract](../../docs/specifications/TOOL_PROFILE_EVIDENCE_CONTRACT.md)
 - [Tool Profile v1](../../docs/specifications/TOOL_PROFILE_V1.md)
 - [Worker Profile V9](../../docs/specifications/WORKER_PROFILE_V9.md)
-- [ADR-019: Conclave Profile Lab](../../docs/decisions/ADR-019-conclave-profile-lab.md)
+- [ADR-019: Syntila Profile Lab](../../docs/decisions/ADR-019-conclave-profile-lab.md)
 
 ## Unsigned development
 

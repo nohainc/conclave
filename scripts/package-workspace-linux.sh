@@ -33,14 +33,14 @@ cat > "$STAGE/DEBIAN/control" <<CONTROL
 Package: conclave-workspace
 Version: $VERSION
 Architecture: $DEB_ARCH
-Maintainer: Conclave <support@conclaveax.com>
+Maintainer: Syntila <support@conclaveax.com>
 Section: devel
 Priority: optional
 Depends: libc6 (>= 2.31), libgcc-s1, libstdc++6, ca-certificates
 Recommends: systemd, dbus-user-session
 Suggests: libsecret-tools
 Homepage: https://conclaveax.com
-Description: Headless Conclave Workspace service and management CLI
+Description: Headless Syntila Workspace service and management CLI
  Includes the generic CLI Worker Engine. Runs as the user who owns provider
  CLI logins. No desktop environment is required. Provider CLIs are separate.
 CONTROL

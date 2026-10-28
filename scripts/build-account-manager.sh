@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build the native Conclave Accounts app from any working directory.
+# Build the native Syntila Accounts app from any working directory.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Conclave Accounts requires macOS to build." >&2
+  echo "Syntila Accounts requires macOS to build." >&2
   exit 1
 fi
 

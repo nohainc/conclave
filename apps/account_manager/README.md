@@ -1,4 +1,4 @@
-# Conclave Accounts for macOS
+# Syntila Accounts for macOS
 
 A native SwiftUI operator application for macOS 14+. Search users by name,
 email, or exact ID; inspect account metadata and lifetime Space membership,
@@ -12,13 +12,13 @@ then run:
 
 ```sh
 pnpm accounts:build
-open 'apps/account_manager/build/Conclave Accounts.app'
+open 'apps/account_manager/build/Syntila Accounts.app'
 ```
 
 You can also run `./scripts/build-account-manager.sh` directly from any working
 directory. It checks macOS build prerequisites and delegates to the canonical
 `scripts/build-account-manager-macos.sh` packager. The output is
-`apps/account_manager/build/Conclave Accounts.app`; building does not launch the
+`apps/account_manager/build/Syntila Accounts.app`; building does not launch the
 app or access either database.
 
 Requires Xcode command-line tools and Node 24+ on PATH, `~/.local/bin`,

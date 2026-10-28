@@ -20,7 +20,7 @@ const LEGACY_SENDER = "auth@auth.earthuc.com";
 const EXPECTED_PRODUCTION = Object.freeze({
   CONCLAVE_EMAIL_FROM: "conclave@conclaveax.com",
   CONCLAVE_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
-  CONCLAVE_EMAIL_FROM_NAME: "Conclave AX",
+  CONCLAVE_EMAIL_FROM_NAME: "Syntila",
 });
 
 function readJsonc(rootDir, relativePath) {

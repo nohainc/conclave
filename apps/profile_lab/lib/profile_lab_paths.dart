@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'profile_lab_cloud_config.dart';
 
-/// Standard, isolated filesystem paths for Conclave Profile Lab on macOS.
+/// Standard, isolated filesystem paths for Syntila Profile Lab on macOS.
 ///
-/// Profile Lab uses its own subtree of the Conclave application-family root,
-/// separate from Conclave Workspace.
+/// Profile Lab uses its own subtree of the Syntila application-family root,
+/// separate from Syntila Workspace.
 class ProfileLabPaths {
   ProfileLabPaths({String? homeDirectory, Directory? repositoryRoot})
       : _repositoryRoot = repositoryRoot,

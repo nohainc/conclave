@@ -1,4 +1,4 @@
-# Conclave AX Architecture
+# Syntila Architecture
 
 **Current architecture contract:** v9 — one centrally published Profile per logical Worker, interpreted by one generic CLI Worker Engine.
 
@@ -7,9 +7,9 @@
 **V8 implementation status:** The historical v8 release declaration remains gated by the acceptance evidence in the [implementation roadmap](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md).
 
 ~~~text
-Conclave AX
--> Conclave Cloud
--> Conclave Workspace
+Syntila
+-> Syntila Cloud
+-> Syntila Workspace
 -> CLI Worker Engine
 -> centrally published Worker Profile
 -> provider CLI
@@ -31,9 +31,9 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 ## Product model
 
-- **Conclave AX** is the human application for Spaces, Threads, team Chat, AI execution through Work Requests, Workspace grants, user Workflow configuration, results, and audit.
-- **Conclave Cloud** owns collaboration and scheduling state, the logical Worker catalog, the single current Profile and bounded Profile history for each logical Worker, and authorization. Provider credentials stay local.
-- **Conclave Workspace** is the machine execution environment. It owns
+- **Syntila** is the human application for Spaces, Threads, team Chat, AI execution through Work Requests, Workspace grants, user Workflow configuration, results, and audit.
+- **Syntila Cloud** owns collaboration and scheduling state, the logical Worker catalog, the single current Profile and bounded Profile history for each logical Worker, and authorization. Provider credentials stay local.
+- **Syntila Workspace** is the machine execution environment. It owns
   application-managed state below
   `~/Library/Application Support/Conclave/Workspace/` and resolves one
   user-owned Work Root, which defaults to `~/Documents/Conclave` on macOS.
@@ -41,7 +41,7 @@ are normative and checked by `scripts/verify-v8-architecture.mjs`.
 
 ## Work v1
 
-Conclave owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Users configure logical Workers for Work (`direct:v2`) and individual Steps globally, with shared overrides in each Space’s Workflows tab. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
+Syntila owns the built-in Steps and Workflows defined by the [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md). Users configure logical Workers for Work (`direct:v2`) and individual Steps globally, with shared overrides in each Space’s Workflows tab. Historical `direct:v1` snapshots retain the name Direct. A Work Request snapshots its Workflow, bindings, models, instructions, attachment references, and prompt-profile versions.
 
 | Workflow | Filesystem authority | Provider session | Mutation coordination |
 | --- | --- | --- | --- |
@@ -101,7 +101,7 @@ CONCLAVE-OWNED
     └── internal state
 ```
 
-Resetting or removing a Workspace clears only Conclave-owned state. It never
+Resetting or removing a Workspace clears only Syntila-owned state. It never
 deletes the Work Root or a Space directory; deleting user-owned files requires
 an explicit destructive action.
 
@@ -130,7 +130,7 @@ Concurrent steps retain independent context evidence, including a frozen snapsho
 fingerprint. Native session execution is exclusive across local Engine processes;
 different Workers and stateless steps remain independent.
 Versioned product Workflow definitions pin existing execution graphs, with
-Work (`work:v1`) mapped to `direct:v2`. Native provider continuity remains local to Workspace/Engine. Conclave owns an append-only canonical history of messages,
+Work (`work:v1`) mapped to `direct:v2`. Native provider continuity remains local to Workspace/Engine. Syntila owns an append-only canonical history of messages,
 responses, workflow/execution events, artifact events, and context events; provider
 sessions remain execution state. The provider-independent Context Engine assembles canonical bootstrap, delta and
 stateless context. Persistent conversation facts are distinct from receiving-step
@@ -204,7 +204,7 @@ The repository has converged on the v8 assignment path and clean v8 schema. The 
 - [Worker Profile V9](docs/specifications/WORKER_PROFILE_V9.md)
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
-- [ADR-019: Conclave Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
+- [ADR-019: Syntila Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
 - [Conversation Continuity Phase 0 audit](docs/architecture/CONVERSATION_CONTINUITY_PHASE_0_AUDIT.md)
 - [Work v1 Contract](docs/specifications/WORK_V1_CONTRACT.md)
 - [First-Party Worker Catalog v1](docs/specifications/FIRST_PARTY_WORKER_CATALOG_V1.md)
@@ -248,7 +248,7 @@ and the [v1 paging contract](docs/specifications/DISCUSSION_PAGING.md).
 
 ## Global Workflow configuration
 
-Global per-user Workflow preferences are separate from Conclave-owned definitions
+Global per-user Workflow preferences are separate from Syntila-owned definitions
 and Space/Thread state. Workflows is the sole global execution editor. Thread
 configuration retains authored context, and the existing composer displays its Space’s
 choices without submitting an execution override. Each Space inherits its owner’s

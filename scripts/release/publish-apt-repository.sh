@@ -49,7 +49,7 @@ text = text.replace('@BASE_URL@', html.escape(sys.argv[3])).replace('@FINGERPRIN
 pathlib.Path(sys.argv[2]).write_text(text)
 PY
 (cd "$TEMP/repository" && git add pool dists conclave-archive-keyring.gpg .nojekyll index.html && \
-  git -c user.name='Conclave Releases' -c user.email='releases@conclaveax.com' commit -m "Publish Conclave Workspace $CONCLAVE_WORKSPACE_VERSION" && \
+  git -c user.name='Syntila Releases' -c user.email='releases@conclaveax.com' commit -m "Publish Syntila Workspace $CONCLAVE_WORKSPACE_VERSION" && \
   git push origin "HEAD:$BRANCH")
 # Explicit whitelist: never upload .git, source code or signing material to Pages.
 mkdir -p "$OUTPUT"

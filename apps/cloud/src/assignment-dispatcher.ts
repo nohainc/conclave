@@ -105,7 +105,7 @@ function cloudFailureDiagnostic(
   };
 }
 
-/** Conclave scope reference only; does not expose or certify a native CLI thread. */
+/** Syntila scope reference only; does not expose or certify a native CLI thread. */
 export function conversationWorkerSessionReference(
   target: Pick<
     ExecutionTarget,
@@ -143,9 +143,9 @@ export interface TaskToDispatch {
   readonly timeoutMs?: number;
   /** Time admitted work may wait for a local Worker slot. */
   readonly queueWaitTimeoutMs?: number;
-  /** Conclave logical execution-session policy; never provider-specific. */
+  /** Syntila logical execution-session policy; never provider-specific. */
   readonly sessionPolicy?: unknown;
-  /** Opaque Conclave key used only for package-local session mapping. */
+  /** Opaque Syntila key used only for package-local session mapping. */
   readonly sessionKey?: unknown;
   readonly spaceId?: string;
   /** Human-readable label used only to choose a stable local Space directory. */

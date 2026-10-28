@@ -3,7 +3,7 @@
 # so tests never depend on production sender authorization.
 CONCLAVE_EMAIL_FROM=conclave@conclave.test
 CONCLAVE_EMAIL_FALLBACK_FROM=fallback@conclave.test
-CONCLAVE_EMAIL_FROM_NAME="Conclave AX (Local)"
+CONCLAVE_EMAIL_FROM_NAME="Syntila (Local)"
 
 # Optional social sign-in for isolated local mode. Create a separate OAuth app
 # per provider with the callback http://localhost:8787/api/auth/callback/<provider>.

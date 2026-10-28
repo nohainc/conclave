@@ -1,4 +1,4 @@
-# Conclave AX Architecture v8 — Generic Worker Engine and Tool Profiles
+# Syntila Architecture v8 — Generic Worker Engine and Tool Profiles
 
 **Status:** Accepted architecture and implementation target  
 **Release declaration:** Withheld; acceptance gates remain open
@@ -13,17 +13,17 @@ Architecture v8 uses one generic isolated CLI Worker Engine and signed
 Cloud-managed Tool Profiles:
 
 ~~~text
-Conclave AX
+Syntila
     |
     v
-Conclave Cloud
+Syntila Cloud
     |
     v
-Conclave Workspace
+Syntila Workspace
     |
     | Local Worker Protocol 4.1
     v
-Conclave CLI Worker Engine
+Syntila CLI Worker Engine
     |
     | signed Tool Profile
     v
@@ -117,7 +117,7 @@ Users should understand only:
 > **Thread** = persistent unit of work.\
 > **Workspace** = machine where AI can execute.  
 > **Worker** = AI/tool choice available on that Workspace.  
-> **Workflow** = Conclave-defined way to perform work.
+> **Workflow** = Syntila-defined way to perform work.
 
 Users do not need to understand:
 - Worker Engine;
@@ -168,7 +168,7 @@ Work, Tool Profiles, and Workspace/application releases. The Workspace Gateway
 is the authenticated runtime surface. Thread Discuss provides
 collaboration; Work v1 Work Requests provide execution.
 
-### 4.1 Conclave AX
+### 4.1 Syntila
 
 AX remains the human web application.
 
@@ -185,7 +185,7 @@ It owns:
 AX never sees provider credentials, local tool paths, provider session IDs, or
 raw Tool Profile configuration.
 
-### 4.2 Conclave Cloud
+### 4.2 Syntila Cloud
 
 Cloud remains the collaboration/orchestration control plane.
 
@@ -240,7 +240,7 @@ plaintext session files during migration. Sandbox runs use unique private
 scratch directories, cancel active Engine work during teardown, and fail if
 cleanup cannot be verified.
 
-### 4.3 Conclave Workspace
+### 4.3 Syntila Workspace
 
 Workspace remains the persistent machine-side trust and execution supervisor.
 
@@ -680,7 +680,7 @@ Do not accumulate large behavior branches in one profile.
 
 The logical Worker catalog is Cloud/product data, not compiled provider code.
 
-Conclave v1 initially provisions ChatGPT and Gemini as official Workers. The
+Syntila v1 initially provisions ChatGPT and Gemini as official Workers. The
 official Worker Catalog is Cloud-managed and dynamically delivered. Additional
 approved Worker Types can become available without a Workspace application
 release when an existing Engine family and supported Tool Profile schema can
@@ -753,7 +753,7 @@ Testing a disabled Worker does not enable it.
 
 ## 19. Sessions
 
-Conclave session keys remain provider-neutral.
+Syntila session keys remain provider-neutral.
 
 ~~~text
 Work/Workflow
@@ -1076,7 +1076,7 @@ Workspace and Engine versions, the official integration definition/release,
 and provider CLI name/version. Diagnostics omit signed Profile payloads,
 credential values, prompts, and free-form provider output.
 
-This allows Conclave to distinguish:
+This allows Syntila to distinguish:
 - Engine regression;
 - Profile regression;
 - provider CLI incompatibility;

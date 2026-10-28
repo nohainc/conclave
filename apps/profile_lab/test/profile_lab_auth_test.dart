@@ -95,7 +95,7 @@ void main() {
         expect(request.uri.path, '/api/desktop-auth/intents');
         final bodyText = await utf8.decoder.bind(request).join();
         final body = jsonDecode(bodyText) as Map<String, dynamic>;
-        expect(body['clientName'], 'Conclave Profile Lab');
+        expect(body['clientName'], 'Syntila Profile Lab');
         expect(body['contractVersion'], '1.1');
         expect(body['audience'], 'conclave.profile-lab.management');
 

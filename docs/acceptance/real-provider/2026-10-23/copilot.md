@@ -128,7 +128,7 @@ validated structured capabilities over guessed effort defaults when the CLI
 actually returns those capabilities. Preserve the present distinction between
 listed and verified models.
 
-Conclave's existing `usage.jsonRpc` helper uses a newline transport and a
+Syntila's existing `usage.jsonRpc` helper uses a newline transport and a
 Codex initialization handshake. Merely setting its method to
 `account.getQuota` would not work. Integrating this RPC requires a reviewed,
 generic framing/handshake option and matching validators/tests; this

@@ -1,11 +1,11 @@
-# Conclave AX Roadmap
+# Syntila Roadmap
 
 Architecture V9 is the current design target. The V8 implementation plan remains the historical implementation baseline and records evidence for the existing generic Engine path while V9 is implemented phase by phase. The canonical V9 Profile contract is [WORKER_PROFILE_V9.md](docs/specifications/WORKER_PROFILE_V9.md).
 
 ~~~text
-Conclave AX
--> Conclave Cloud
--> Conclave Workspace
+Syntila
+-> Syntila Cloud
+-> Syntila Workspace
 -> CLI Worker Engine
 -> centrally published Worker Profile
 -> provider CLI

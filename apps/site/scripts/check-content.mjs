@@ -28,7 +28,7 @@ function decodeHtml(str) {
 /** @type {Record<string, {title: string, heading: string, content: string[]}>} */
 const expected = {
   "/": {
-    title: "Conclave AX — Bring your people and AI together",
+    title: "Syntila — Bring your people and AI together",
     heading: "Bring your people and AI together.",
     content: [
       "SHARED AI WORKSPACE",
@@ -38,11 +38,11 @@ const expected = {
       "One conversation. Everyone stays in context.",
       "When a chat isn't enough",
       "Designed for how people actually collaborate.",
-      "Open Conclave AX",
+      "Open Syntila",
     ],
   },
   "/how-it-works/": {
-    title: "How Conclave AX works — Shared AI Workspace",
+    title: "How Syntila works — Shared AI Workspace",
     heading: "From shared ideas to verified results.",
     content: [
       "Create a Space",
@@ -54,12 +54,12 @@ const expected = {
     ],
   },
   "/workers/": {
-    title: "AI & Workers — Conclave AX",
+    title: "AI & Workers — Syntila",
     heading: "Connect and share your favorite AI models.",
     content: ["ChatGPT", "Claude", "Google Gemini", "Coding Agents"],
   },
   "/use-cases/": {
-    title: "Use Cases — Conclave AX",
+    title: "Use Cases — Syntila",
     heading: "AI is better when you can use it together.",
     content: [
       "Friends & Family",
@@ -68,7 +68,7 @@ const expected = {
     ],
   },
   "/security/": {
-    title: "Security — Conclave AX",
+    title: "Security — Syntila",
     heading: "Share AI access without sharing your secrets.",
     content: [
       "Space Membership",
@@ -78,7 +78,7 @@ const expected = {
     ],
   },
   "/privacy/": {
-    title: "Privacy — Conclave AX",
+    title: "Privacy — Syntila",
     heading: "Privacy follows the same boundaries as the product.",
     content: [
       "Human identity and Spaces",
@@ -87,12 +87,12 @@ const expected = {
     ],
   },
   "/downloads/": {
-    title: "Downloads — Conclave AX",
-    heading: "Run Conclave Workers on your computer.",
-    content: ["Conclave Workspace", "Download", "macOS", "Windows", "Linux"],
+    title: "Downloads — Syntila",
+    heading: "Run Syntila Workers on your computer.",
+    content: ["Syntila Workspace", "Download", "macOS", "Windows", "Linux"],
   },
   "/terms/": {
-    title: "Terms — Conclave AX",
+    title: "Terms — Syntila",
     heading: "Terms of Service",
     content: [
       "Connected Workspaces",
@@ -151,7 +151,7 @@ for (const [route, file] of routes) {
   }
   if (/secure vault/i.test(visibleText))
     errors.push(
-      `${route}: must not claim Conclave stores provider credentials in a central vault`,
+      `${route}: must not claim Syntila stores provider credentials in a central vault`,
     );
 }
 
@@ -161,7 +161,7 @@ const appLinks = [
 ];
 if (appLinks.length < 3)
   errors.push(
-    "homepage: expected at least three direct Open Conclave AX links",
+    "homepage: expected at least three direct Open Syntila links",
   );
 if (!home.includes('href="/#product"'))
   errors.push("homepage: Product navigation anchor is missing");

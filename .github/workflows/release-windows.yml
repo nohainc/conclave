@@ -137,7 +137,7 @@ jobs:
           $bundle = Join-Path $PWD 'dist/conclave-workspace/windows/release'
           ./scripts/sign-workspace-windows.ps1 -Bundle $bundle
           ./scripts/sign-workspace-windows.ps1 -Bundle $bundle -VerifyOnly
-          $archive = "dist/conclave-workspace/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip"
+          $archive = "dist/conclave-workspace/Syntila-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip"
           Compress-Archive -Path "$bundle/*" -DestinationPath $archive -Force
       - name: Validate signed service lifecycle
         shell: pwsh
@@ -164,8 +164,8 @@ jobs:
       - name: Write checksums
         shell: pwsh
         run: |
-          $files = @(Get-Item "dist/conclave-workspace/installer/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64-Setup.exe",
-                             "dist/conclave-workspace/Conclave-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip")
+          $files = @(Get-Item "dist/conclave-workspace/installer/Syntila-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64-Setup.exe",
+                             "dist/conclave-workspace/Syntila-Workspace-$env:CONCLAVE_WORKSPACE_VERSION-windows-x64.zip")
           New-Item -ItemType Directory -Force dist/windows-release | Out-Null
           $files | Copy-Item -Destination dist/windows-release
           $files | ForEach-Object { "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)" } |
@@ -211,5 +211,5 @@ jobs:
             exit 1
           fi
           gh release create "$tag" release/* --target "$GITHUB_SHA" \
-            --title "Conclave Workspace $VERSION for Windows" \
-            --notes "${NOTES:-Signed Conclave Workspace $VERSION for Windows x64.}"
+            --title "Syntila Workspace $VERSION for Windows" \
+            --notes "${NOTES:-Signed Syntila Workspace $VERSION for Windows x64.}"

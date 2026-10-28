@@ -8,7 +8,7 @@ import '../../ax/sync/ax_query_builder.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
 
-/// Fixed, Conclave-owned steps. Only execution preferences are editable here.
+/// Fixed, Syntila-owned steps. Only execution preferences are editable here.
 ///
 /// Shown as a full page (see [WorkflowEditor.open]) rather than a dialog:
 /// step editing is too large for a pop-up and must not be lost by an

@@ -33,20 +33,20 @@ The product also currently treats WebSocket as the only runtime transport. A Web
 The desired product model is:
 
 ~~~text
-Conclave Workspace
+Syntila Workspace
   human session -> account/Workspace management APIs
   runtime credential -> machine execution APIs
   WebSocket -> preferred realtime runtime transport
   HTTPS long-poll -> fallback runtime transport
 ~~~
 
-The desktop application becomes the primary management surface for one user's local Workspace and Workers. Conclave AX shows Workspace/Worker state and Space-facing execution availability, but does not own Workspace registration or local runtime recovery.
+The desktop application becomes the primary management surface for one user's local Workspace and Workers. Syntila shows Workspace/Worker state and Space-facing execution availability, but does not own Workspace registration or local runtime recovery.
 
 ## Decision
 
-### 1. Conclave Workspace authenticates the human User
+### 1. Syntila Workspace authenticates the human User
 
-Conclave Workspace gains a human sign-in flow backed by the same Better Auth identity system as Conclave AX.
+Syntila Workspace gains a human sign-in flow backed by the same Better Auth identity system as Syntila.
 
 The desktop must not reuse or scrape the browser's HttpOnly AX cookie. Instead, Cloud issues a desktop-specific human session after Better Auth authenticates the user.
 
@@ -127,7 +127,7 @@ The normal product flow becomes desktop-first.
 After sign-in:
 
 ~~~text
-Conclave Workspace
+Syntila Workspace
 -> discovers persistent installation identity
 -> proposes friendly computer name
 -> calls authenticated register/recover API
@@ -137,7 +137,7 @@ Conclave Workspace
 -> desktop starts runtime transport
 ~~~
 
-Normal users register or recover a Workspace from Conclave Workspace through
+Normal users register or recover a Workspace from Syntila Workspace through
 the authenticated `POST /api/workspace-runtime/register` route. AX does not
 create Workspace placeholders or manage local machine registration.
 
@@ -151,7 +151,7 @@ Cloud must enforce:
 
 ### 4. AX Workspaces becomes operationally read-only
 
-The Conclave AX Workspaces page remains useful for:
+The Syntila Workspaces page remains useful for:
 
 - Workspace list;
 - connected/offline state;
@@ -353,8 +353,8 @@ See [ADR-014](ADR-014-workspace-desktop-lifecycle.md) and the
 
 The architecture is accepted when tests prove:
 
-1. desktop user can authenticate using the same Conclave account identity;
-2. a fresh installation can register its Workspace directly from Conclave Workspace;
+1. desktop user can authenticate using the same Syntila account identity;
+2. a fresh installation can register its Workspace directly from Syntila Workspace;
 3. same user can recover an existing installation/runtime;
 4. another user cannot claim an installation already owned by someone else;
 5. WebSocket remains the preferred transport;

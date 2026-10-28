@@ -14,7 +14,7 @@ The Workspace page has two independent sections:
 - **Workspace Service** shows host registration, process state, PID, version,
   start time, and IPC readiness. Register, unregister, start, stop, and restart
   are host-management operations handled by the macOS service manager.
-- **Conclave Cloud** shows the Cloud connection state, effective Workspace, and
+- **Syntila Cloud** shows the Cloud connection state, effective Workspace, and
   transport. Connect, disconnect, and reconnect are runtime commands sent over
   authenticated Workspace Manager IPC.
 

@@ -46,8 +46,8 @@ keys or provider credentials are needed by CI.
   JSON decoding. No TCP listener is introduced.
 - Workspace credentials use CurrentUser DPAPI with service/account entropy.
   Only ciphertext is written under `Credentials` in private Workspace state.
-  State uses `%LOCALAPPDATA%\Conclave\Workspace`; user work defaults to
-  `%USERPROFILE%\Documents\Conclave`, independently of application files.
+  State uses `%LOCALAPPDATA%\Syntila\Workspace`; user work defaults to
+  `%USERPROFILE%\Documents\Syntila`, independently of application files.
 - Legacy `~/.conclave-workspace` state stops default activation with a
   recoverable error. Registries may hold absolute paths, so the application does
   not move files or guess which root is authoritative. Select the existing root

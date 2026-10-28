@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE_LAB_DIR="$ROOT/apps/profile_lab"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Conclave Profile Lab macOS tests must run on macOS." >&2
+  echo "Syntila Profile Lab macOS tests must run on macOS." >&2
   exit 1
 fi
 

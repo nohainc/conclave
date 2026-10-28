@@ -1,2 +1,2 @@
-// Public Conclave AX application entry point.
+// Public Syntila application entry point.
 export 'ax/ax_app.dart' show ConclaveAppShell;

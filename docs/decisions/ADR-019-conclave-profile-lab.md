@@ -1,4 +1,4 @@
-# ADR-019: Conclave Profile Lab Architecture Contract
+# ADR-019: Syntila Profile Lab Architecture Contract
 
 **Development lifecycle update (2026-10-05):** All environments expose the complete
 Profile release lifecycle. Desktop app signing is independent of Profile signing.
@@ -10,7 +10,7 @@ audience separation, credential rotation, and revocation remain enforced.
 
 **Status:** Superseded for V9 Profile lifecycle; retained as the historical V8 decision
 **Date:** 2026-10-03  
-**Historical decision:** Dedicated internal macOS engineering application (`apps/profile_lab`) for the authoring, inspection, testing, validation, release, promotion, rollback, and revocation of Conclave Worker Tool Profiles.
+**Historical decision:** Dedicated internal macOS engineering application (`apps/profile_lab`) for the authoring, inspection, testing, validation, release, promotion, rollback, and revocation of Syntila Worker Tool Profiles.
 **Builds on:** [ADR-012](ADR-012-workspace-owned-local-workers.md), [ADR-013](ADR-013-desktop-auth-and-dual-transport.md), [ADR-015](ADR-015-first-party-worker-v1-contract.md), [ADR-018](ADR-018-generic-cli-worker-engine-and-tool-profiles.md)  
 **Normative for:** Profile Lab (`apps/profile_lab`), Cloud Profile administration routes, and shared Profile/Engine runtime boundaries.
 
@@ -24,15 +24,15 @@ retained for decision history only.
 
 ## 1. Context
 
-Conclave Architecture v8 replaced provider-specific Worker executables with one generic CLI Worker Engine (`engines/cli_worker`) configured by signed, immutable Tool Profiles.
+Syntila Architecture v8 replaced provider-specific Worker executables with one generic CLI Worker Engine (`engines/cli_worker`) configured by signed, immutable Tool Profiles.
 
 Provider CLI software (e.g., Codex CLI, Gemini CLI / Antigravity, Claude Code, and future CLI tools) evolves rapidly. Vendors frequently update command-line flags, probe commands, authentication handshakes, stdout/stderr output modes, JSON schemas, streaming events, and session resumption mechanics.
 
-To maintain reliable local Worker execution across the Conclave ecosystem without repeatedly shipping new Conclave Workspace application releases, Conclave requires a specialized engineering and operations surface.
+To maintain reliable local Worker execution across the Syntila ecosystem without repeatedly shipping new Syntila Workspace application releases, Syntila requires a specialized engineering and operations surface.
 
-This tool is **Conclave Profile Lab**.
+This tool is **Syntila Profile Lab**.
 
-Profile Lab is an **internal macOS desktop application** used by Conclave engineers and operators to:
+Profile Lab is an **internal macOS desktop application** used by Syntila engineers and operators to:
 - create and maintain Logical Workers and Profile Definitions;
 - author, edit, and validate Profile Drafts;
 - locally test Draft Profiles directly against installed provider CLIs using the generic CLI Worker Engine;
@@ -58,7 +58,7 @@ Because testing a Profile against real provider CLIs is a prerequisite for promo
 Target platform: **macOS only** (Flutter desktop).  
 Repository location: `apps/profile_lab/`.
 
-Profile Lab maintains its own dedicated macOS bundle identifier, application support directory, logging namespace, secure credential namespace, preferences, and release workflows. It does not share application data directories with Conclave Workspace.
+Profile Lab maintains its own dedicated macOS bundle identifier, application support directory, logging namespace, secure credential namespace, preferences, and release workflows. It does not share application data directories with Syntila Workspace.
 
 ---
 
@@ -81,14 +81,14 @@ Provider CLI (local binary)
 ```
 
 ### Definitions:
-- **Logical Worker (`worker_catalog`):** The stable, product-facing identity referenced by Conclave AX, Cloud, Workflows, Thread bindings, permissions, scheduling, history, and inventory (e.g., `chatgpt`, `gemini`, `claude`).
+- **Logical Worker (`worker_catalog`):** The stable, product-facing identity referenced by Syntila, Cloud, Workflows, Thread bindings, permissions, scheduling, history, and inventory (e.g., `chatgpt`, `gemini`, `claude`).
 - **Tool Profile Definition (`tool_profile_definitions`):** The specification of how a logical Worker is implemented across provider tools (e.g., `chatgpt-codex`, `gemini-antigravity`, `claude-code`). Each logical Worker references one active Profile Definition.
 - **Tool Profile Release (`tool_profile_releases`):** An immutable, versioned, signed payload for a Profile Definition (e.g., `v12`, `v13`, `v14`).
 - **Generic CLI Worker Engine:** The shared, provider-independent child-process supervisor and protocol bridge (`engines/cli_worker`).
 - **Provider CLI:** The vendor-supplied executable installed on the user's workstation (`codex`, `agy`, `claude`).
 
 ### Dynamic Worker Architecture:
-Workers are **never hardcoded** in Profile Lab, Workspace, or AX. Conclave Cloud is the sole authority for available Workers.
+Workers are **never hardcoded** in Profile Lab, Workspace, or AX. Syntila Cloud is the sole authority for available Workers.
 
 The application dynamically queries Cloud for catalog and Profile state:
 - `worker_catalog`
@@ -105,11 +105,11 @@ Profile Lab must not keep a built-in list of provider executables. Local discove
 
 ## 4. Product Boundaries: Profile Lab vs Workspace vs AX
 
-The responsibilities of Conclave applications are strictly separated:
+The responsibilities of Syntila applications are strictly separated:
 
 ```text
 +---------------------+      +---------------------+      +---------------------+
-|     Conclave AX     |      |  Conclave Workspace |      | Conclave Profile Lab|
+|     Syntila     |      |  Syntila Workspace |      | Syntila Profile Lab|
 +---------------------+      +---------------------+      +---------------------+
 | Human orchestration |      | Local Work Root &   |      | Profile engineering |
 | Spaces & Streams  |      | reliable execution  |      | Draft authoring     |
@@ -121,13 +121,13 @@ The responsibilities of Conclave applications are strictly separated:
            \                            |                            /
             \                           |                           /
              +-----------------------------------------------------+
-             |                    Conclave Cloud                   |
+             |                    Syntila Cloud                   |
              | Authoritative state, Worker catalog, signing boundary|
              +-----------------------------------------------------+
 ```
 
 ### Invariant: Profile Lab is NOT a Workspace
-Profile Lab must **never** behave like Conclave Workspace. Specifically, Profile Lab:
+Profile Lab must **never** behave like Syntila Workspace. Specifically, Profile Lab:
 1. **MUST NOT** register itself as an execution Workspace via `/api/workspace-runtime/register`;
 2. **MUST NOT** advertise local Workers to Cloud inventory or synchronize readiness slots;
 3. **MUST NOT** receive Work assignments from the Cloud scheduler;
@@ -139,7 +139,7 @@ The local Engine execution inside Profile Lab exists **exclusively for Profile c
 
 ### Boundary Matrix:
 
-| Capability | Conclave Profile Lab | Conclave Workspace | Conclave AX | Conclave Cloud |
+| Capability | Syntila Profile Lab | Syntila Workspace | Syntila | Syntila Cloud |
 | :--- | :--- | :--- | :--- | :--- |
 | **Manage Worker Catalog** | Author / Administer | Read-only sync | Read-only display | Authoritative store |
 | **Author / Edit Profiles** | Yes (Drafts) | Forbidden | Forbidden | Validates & stores |
@@ -160,7 +160,7 @@ A core architectural tenet of Architecture v8 is that production Workspaces acce
 Profile Lab requires the capability to test an in-development, unreleased, unsigned Profile payload against the real CLI. This capability must **never** weaken the production trust path.
 
 The architecture formally distinguishes:
-- `SignedProfileRelease`: A cryptographically signed, immutable Profile payload admitted through Cloud verification. Conclave Workspace admits **only** this type.
+- `SignedProfileRelease`: A cryptographically signed, immutable Profile payload admitted through Cloud verification. Syntila Workspace admits **only** this type.
 - `LocalDraftProfileCandidate`: A mutable, unsigned, locally authored Profile configuration residing in Profile Lab.
 
 The canonical state machine and promotion rules are specified in the [Tool Profile Lifecycle Specification](../specifications/TOOL_PROFILE_LIFECYCLE.md).
@@ -200,26 +200,26 @@ Profile Lab adheres strictly to the repository security contract regarding AI pr
 ## 7. Profile Lab Authentication & Signing Architecture
 
 ### Human Authentication:
-Profile Lab uses Conclave Cloud authentication via a browser-assisted desktop authentication flow similar to Conclave Workspace.
+Profile Lab uses Syntila Cloud authentication via a browser-assisted desktop authentication flow similar to Syntila Workspace.
 
 However, Profile Lab operates under a **dedicated administrative security audience**:
 ```text
 conclave.profile-lab.management
 ```
 
-Conclave Cloud validates that the authenticated human holds explicit Profile administration privileges:
+Syntila Cloud validates that the authenticated human holds explicit Profile administration privileges:
 - `profiles:admin`
 - `profiles:release:manage`
 
-Normal Conclave accounts and standard Workspace owner sessions are denied access to Profile Lab management endpoints.
+Normal Syntila accounts and standard Workspace owner sessions are denied access to Profile Lab management endpoints.
 
 ### Signing Key Boundary:
 Production Profile signing keys **MUST NEVER** be stored in, accessible to, or managed by Profile Lab.
 
 The publication workflow delegates signing to a secure Cloud/CI signing boundary:
 1. Profile Lab completes local testing and validates all test evidence against the candidate `payloadDigest`.
-2. Profile Lab submits a publication request to Conclave Cloud containing the candidate payload and normalized test evidence.
-3. Conclave Cloud validates the payload schema and requires release-manager authorization. Stable promotion, channel rollback, and assignment to the Stable channel require fresh session-bound step-up authentication. Release revocation requires a mandatory reason and explicit Profile Lab confirmation.
+2. Profile Lab submits a publication request to Syntila Cloud containing the candidate payload and normalized test evidence.
+3. Syntila Cloud validates the payload schema and requires release-manager authorization. Stable promotion, channel rollback, and assignment to the Stable channel require fresh session-bound step-up authentication. Release revocation requires a mandatory reason and explicit Profile Lab confirmation.
 4. The isolated Cloud/CI signer signs the canonical payload digest with the production private key.
 5. Cloud records the immutable `SignedProfileRelease` row and assigns it to the initial release stage (e.g., `Testing`).
 
@@ -272,7 +272,7 @@ Local evidence logs remain on the operator's machine. Evidence synchronized to C
 
 ## 9. Shared Runtime Architecture & Parallel Development
 
-Profile Lab and Conclave Workspace must execute identical low-level process and engine behavior. To prevent code duplication and runtime divergence, low-level engine invocation primitives are shared:
+Profile Lab and Syntila Workspace must execute identical low-level process and engine behavior. To prevent code duplication and runtime divergence, low-level engine invocation primitives are shared:
 - Profile JSON parsing and schema validation;
 - CLI Worker Engine process supervisor;
 - Provider CLI discovery and version extraction;
@@ -298,7 +298,7 @@ Dynamic Worker loading and Workspace readiness reconciliation are actively being
 ### Positive:
 - **No Workspace App Releases for CLI Updates:** Provider CLI updates (e.g. Codex or Claude changing arguments) are resolved by releasing an updated Tool Profile via Profile Lab without deploying a new Workspace binary.
 - **Dynamic Extensibility:** New Workers (e.g., Claude) can be defined, tested against local binaries, published, and promoted dynamically.
-- **Zero Provider Credential Risk:** Conclave continues to avoid handling or persisting third-party AI provider credentials.
+- **Zero Provider Credential Risk:** Syntila continues to avoid handling or persisting third-party AI provider credentials.
 - **Cryptographic Promotion Assurance:** Workspaces only execute Profiles that have undergone verified local testing and secure Cloud signing.
 - **Clean Architectural Separation:** Profile Lab owns complexity; Workspace owns reliable local execution; AX owns orchestration; Cloud owns authoritative state.
 
@@ -311,10 +311,10 @@ Dynamic Worker loading and Workspace readiness reconciliation are actively being
 
 ## 11. Human Authentication & Boundary Isolation (Phase 6)
 
-Profile Lab reuses Conclave's browser-assisted human sign-in pattern (intents, approval URL, polling, claiming, session rotation, revocation), but enforces an explicit and distinct security boundary:
+Profile Lab reuses Syntila's browser-assisted human sign-in pattern (intents, approval URL, polling, claiming, session rotation, revocation), but enforces an explicit and distinct security boundary:
 
 1. **Dedicated Audience (`conclave.profile-lab.management`):**
-   - Profile Lab auth intents declare `audience: 'conclave.profile-lab.management'` and `clientName: 'Conclave Profile Lab'`.
+   - Profile Lab auth intents declare `audience: 'conclave.profile-lab.management'` and `clientName: 'Syntila Profile Lab'`.
    - Resulting desktop sessions are permanently tagged with this audience.
    - Normal Workspace sessions use `conclave.desktop.management`.
 
@@ -340,7 +340,7 @@ Profile Lab's build default is `https://app.conclaveax.com`; `CONCLAVE_CLOUD_URL
 
 ## 12. Profile Admin Cloud API Contract (Phase 7)
 
-Profile Lab interacts with Conclave Cloud exclusively via bounded HTTP/JSON endpoints. **Profile Lab never connects directly to Cloudflare D1 or runs raw SQL queries.** All persistence, validation, immutability triggers, and audit logging remain owned by Cloud routes.
+Profile Lab interacts with Syntila Cloud exclusively via bounded HTTP/JSON endpoints. **Profile Lab never connects directly to Cloudflare D1 or runs raw SQL queries.** All persistence, validation, immutability triggers, and audit logging remain owned by Cloud routes.
 
 Every administrative endpoint is guarded by `authorizeToolProfileAdmin(request, env, ctx)`, which enforces:
 1. A valid authenticated user in the allowlist for the required permission: `CONCLAVE_PROFILE_ADMIN_USER_IDS` for administration or `CONCLAVE_PROFILE_RELEASE_MANAGER_USER_IDS` for release management.
@@ -392,7 +392,7 @@ This status does not mean Cloud cryptographically attests that a local provider 
 
 ### AI Maintenance Boundary:
 Autonomous AI agents are permitted to participate in Profile maintenance **only** by generating and proposing candidate Draft Profile revisions within this verified manual framework:
-- Conclave owns persistent state and enforces strict schema validation and signature checks.
+- Syntila owns persistent state and enforces strict schema validation and signature checks.
 - Model-backed proposals run through the generic CLI Worker Engine using a Cloud-selected Stable Worker Profile whose signature and revocation state Profile Lab verifies. The unsigned target Draft is never used as the model runner.
 - The operator explicitly consents before Draft content and bounded diagnostics are sent to the selected provider CLI. Provider credentials remain under local CLI ownership and are never collected by Profile Lab.
 - Model output must validate as a Tool Profile and preserve Worker, Profile, release version, and provider identity. Profile Lab presents a diff and requires an explicit human review-and-apply action; proposal provenance is kept in local Draft metadata.

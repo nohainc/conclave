@@ -1,4 +1,4 @@
-# Conclave AX Technology Stack
+# Syntila Technology Stack
 
 **Status:** Current Architecture v8 implementation.
 
@@ -6,9 +6,9 @@
 
 | Layer | Technology |
 | --- | --- |
-| Conclave AX | Flutter + Dart, Web |
+| Syntila | Flutter + Dart, Web |
 | Cloud | TypeScript + Cloudflare Workers |
-| Conclave Workspace | Pure Dart headless service + CLI (no Flutter) |
+| Syntila Workspace | Pure Dart headless service + CLI (no Flutter) |
 | Local Worker Protocol | Protocol 4.0, versioned NDJSON |
 | Local CLI execution | Generic Dart CLI Worker Engine + current Worker Profiles |
 | Database | Cloudflare D1 |
@@ -24,9 +24,9 @@
 
 ## Applications and runtime
 
-Conclave AX is the human web application. Conclave Cloud owns identity,
+Syntila is the human web application. Syntila Cloud owns identity,
 authorization, Spaces, Threads, scheduling, Profile releases, and
-persistence. Conclave Workspace owns application-managed runtime state and
+persistence. Syntila Workspace owns application-managed runtime state and
 user-owned Work Root data, logical Worker readiness, Profile verification/cache, Engine supervision, permissions,
 cancellation, and diagnostics.
 
@@ -34,7 +34,7 @@ Each assignment or probe runs through the generic CLI Worker Engine as a
 separate process. The Engine starts a locally installed provider CLI using
 structured arguments. Workspace owns the process tree and applies deadlines,
 output limits, cancellation, and cleanup. Provider authentication remains with
-the provider CLI; Conclave Cloud never receives provider credentials.
+the provider CLI; Syntila Cloud never receives provider credentials.
 
 The Engine plus Profile boundary is defined by [Architecture v8](ARCHITECTURE_V8.md),
 [ADR-018](../decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md),

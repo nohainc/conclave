@@ -105,13 +105,13 @@ describe("desktop auth and runtime transport contracts", () => {
   it("accepts only the current code-free desktop auth intent version", () => {
     expect(
       DesktopAuthIntentCreateRequestSchema.parse({
-        clientName: "Conclave Workspace",
+        clientName: "Syntila Workspace",
         contractVersion: DESKTOP_AUTH_INTENT_VERSION,
       }).contractVersion,
     ).toBe("1.1");
     expect(
       DesktopAuthIntentCreateRequestSchema.safeParse({
-        clientName: "Conclave Workspace",
+        clientName: "Syntila Workspace",
         contractVersion: DESKTOP_AUTH_TRANSPORT_VERSION,
       }).success,
     ).toBe(false);

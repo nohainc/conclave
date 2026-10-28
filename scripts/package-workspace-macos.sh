@@ -76,7 +76,7 @@ fi
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$BUNDLE"
 
 VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$ROOT/apps/workspace/pubspec.yaml")}"
-PKG="$DIST_DIR/Conclave-Workspace-$VERSION-macos$SUFFIX.pkg"
+PKG="$DIST_DIR/Syntila-Workspace-$VERSION-macos$SUFFIX.pkg"
 
 STAGING="$(mktemp -d)"
 trap 'rm -rf "$STAGING"' EXIT

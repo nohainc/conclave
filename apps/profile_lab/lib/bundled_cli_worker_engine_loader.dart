@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 ///
 /// Profile Lab bundles the exact same generic CLI Worker Engine binary used by
 /// Workspace so that Profile testing is identical to production Workspace execution
-/// without requiring Conclave Workspace to be installed.
+/// without requiring Syntila Workspace to be installed.
 Future<File?> loadBundledCliWorkerEngine({
   required Directory enginesDirectory,
   AssetBundle? bundle,

@@ -1,6 +1,6 @@
 # User Workflow Configuration v1
 
-Global per-user preferences are separate from Conclave-owned Workflow definitions
+Global per-user preferences are separate from Syntila-owned Workflow definitions
 and Space/Thread authored context. Preferences
 are keyed by authenticated user and stable Workflow ID, not definition version.
 The newest definition validates step IDs. Definition graphs, prompts, labels,
@@ -104,7 +104,7 @@ retry. Mutations update the shared preference cache without a follow-up GET.
 
 Advanced execution preferences are exposed only in this editor. Users cannot
 create Workflows, add/remove/reorder steps, edit system prompts, or alter internal
-contracts. Conclave owns the definitions and structure; users own execution
+contracts. Syntila owns the definitions and structure; users own execution
 preferences. Phase 3 introduces no schema or API migration.
 
 ## Execution resolution and snapshots
@@ -118,7 +118,7 @@ Workspace eligibility rules still apply. Resolution verifies every configured
 Worker in one Workspace before freezing the request. A missing, offline, or
 incompatible Worker fails admission; it is never silently replaced. `Auto`
 model and effort remain null, meaning the signed Profile/provider CLI default;
-Conclave does not guess a provider model or effort.
+Syntila does not guess a provider model or effort.
 
 Every new accepted Work Request stores `stepExecutionConfigs` keyed by definition
 step kind in its immutable v1 snapshot. Each value records schema version, Worker

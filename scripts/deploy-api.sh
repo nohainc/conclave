@@ -19,7 +19,7 @@ if [[ ! -f apps/app/build/web/index.html ]]; then
   exit 1
 fi
 
-echo "Deploying Conclave Cloud API Worker (conclave-ax-app)..."
+echo "Deploying Syntila Cloud API Worker (conclave-ax-app)..."
 pnpm exec wrangler deploy --config "$wrangler_config" "$@"
 
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
@@ -27,4 +27,4 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" && -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]]; then
   node scripts/production-workspace-gateway-smoke.mjs --schema-only
 fi
 
-echo "Conclave API deployment complete."
+echo "Syntila API deployment complete."

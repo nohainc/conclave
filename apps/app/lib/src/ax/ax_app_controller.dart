@@ -290,7 +290,7 @@ extension _AxAppController on _AxAppStateMixin {
             const SizedBox(width: 12),
             const Expanded(
               child: Text(
-                'About Conclave AX',
+                'About Syntila',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
               ),
             ),
@@ -303,12 +303,12 @@ extension _AxAppController on _AxAppStateMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Conclave AX brings people and AI Workers together in Spaces and Threads to discuss ideas, share context, and get work done.',
+                'Syntila brings people and AI Workers together in Spaces and Threads to discuss ideas, share context, and get work done.',
                 style: TextStyle(fontSize: 13.5, height: 1.45),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Team conversations, AI requests, and results stay together in one place. Choose how Workers handle tasks through Workflows, and run AI work on your own machines with Conclave Workspace and the provider CLIs you already use.',
+                'Team conversations, AI requests, and results stay together in one place. Choose how Workers handle tasks through Workflows, and run AI work on your own machines with Syntila Workspace and the provider CLIs you already use.',
                 style: TextStyle(fontSize: 12.5, height: 1.45),
               ),
               const SizedBox(height: 16),
@@ -344,7 +344,7 @@ extension _AxAppController on _AxAppStateMixin {
               }),
               const SizedBox(height: 12),
               Text(
-                '© ${DateTime.now().year} Conclave AX',
+                '© ${DateTime.now().year} Syntila',
                 style: Theme.of(dialogContext).textTheme.bodySmall,
               ),
             ],
@@ -413,7 +413,7 @@ extension _AxAppController on _AxAppStateMixin {
       _updateLiveState(() {
         realtimeStale = status != 'connected';
         realtimeNotice = realtimeStale
-            ? 'Live updates paused. Conclave AX is reconnecting.'
+            ? 'Live updates paused. Syntila is reconnecting.'
             : 'Live updates connected.';
       });
       // Cloud closes the socket when the account or session is removed, and

@@ -1,4 +1,4 @@
-/// Spacing scale constants for Conclave AX (4/8px grid system).
+/// Spacing scale constants for Syntila (4/8px grid system).
 abstract final class ConclaveSpacing {
   static const double xxs = 2.0;
   static const double xs = 4.0;

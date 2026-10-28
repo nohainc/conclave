@@ -256,7 +256,7 @@ class CliWorkerEngine {
   }
 
   /// Runs the Profile-declared usage command and returns its output verbatim.
-  /// Conclave deliberately never interprets the text: each provider calculates
+  /// Syntila deliberately never interprets the text: each provider calculates
   /// usage differently, so the Profile owns the command and the UI shows it.
   Future<void> _usage(UsageRequest request, IOSink sink) async {
     if (!_initialized) return _write(sink, _notInitialized(request.requestId));
@@ -1635,7 +1635,7 @@ class CliWorkerEngine {
         }
         // A resumed provider conversation can get stuck answering nothing
         // (seen with long Gemini threads). After the plain retry also came
-        // back empty, rebuild the conversation from Conclave's own history
+        // back empty, rebuild the conversation from Syntila's own history
         // exactly as for an unavailable session.
         final emptyAfterRetry =
             interpreted.emptyResponse && emptyRetried && !toolSeen;

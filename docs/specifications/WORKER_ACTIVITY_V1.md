@@ -195,7 +195,7 @@ conversation turn are rejected at the Cloud gateway and are never projected.
 
 ## AX Work presentation
 
-Conclave AX shows live Worker progress inside the normal Work response, with no
+Syntila shows live Worker progress inside the normal Work response, with no
 separate activity widget and no list of events. Three parts of the response
 follow the live flow:
 

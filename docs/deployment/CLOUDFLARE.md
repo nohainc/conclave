@@ -1,4 +1,4 @@
-# Conclave AX Cloudflare Deployment
+# Syntila Cloudflare Deployment
 
 Current product and runtime boundaries are documented in [Architecture v8](../architecture/ARCHITECTURE_V8.md).
 Operational guidance for signed Workspace and Tool Profile releases is in [Workspace release operations](WORKSPACE_RELEASES.md) and
@@ -8,7 +8,7 @@ Operational guidance for signed Workspace and Tool Profile releases is in [Works
 
 - `conclaveax.com` — public Astro/static-first website.
 - `www.conclaveax.com` — permanent redirect to `conclaveax.com`.
-- `app.conclaveax.com` — Conclave AX / Conclave Cloud web application.
+- `app.conclaveax.com` — Syntila / Syntila Cloud web application.
 - `api.conclaveax.com` — reserved for a separately exposed API when production authentication and API separation are complete.
 - `docs.conclaveax.com` — documentation later.
 - `status.conclaveax.com` — status page later.
@@ -28,8 +28,8 @@ immutable for one year. These rules apply only to the public-site Worker.
 
 ## Current deployment
 
-`app.conclaveax.com` is the Conclave AX/Cloud application. It runs the real
-application; there is no demo-mode runtime branch. Production Conclave AX is a
+`app.conclaveax.com` is the Syntila/Cloud application. It runs the real
+application; there is no demo-mode runtime branch. Production Syntila is a
 public login application whose human sessions are handled by Better Auth.
 Cloudflare Access is optional for staging, administrative, debug, and other
 internal environments; it is not an application authentication dependency.
@@ -40,7 +40,7 @@ The deployment builds Flutter Web with the planned same-origin API endpoint:
 flutter build web --release --dart-define=CONCLAVE_API_URL=https://app.conclaveax.com/api
 ```
 
-Conclave AX uses its normal connection-error state when the API is unavailable. This
+Syntila uses its normal connection-error state when the API is unavailable. This
 is intentional: development should expose integration gaps rather than hide
 them behind fake runtime data.
 
@@ -55,7 +55,7 @@ Configure the OAuth applications with these callback URLs:
 - `https://app.conclaveax.com/api/auth/callback/github`
 - `https://app.conclaveax.com/api/auth/callback/google`
 
-The GitHub application must allow the `user:email` scope. Conclave requests
+The GitHub application must allow the `user:email` scope. Syntila requests
 only identity scopes for sign-in; signing in with GitHub does not grant GitHub
 repository access. Repository authorization is a separate future integration.
 
@@ -71,7 +71,7 @@ Set these values in the Worker environment:
 - `CONCLAVE_AUTH_GOOGLE_CLIENT_ID` — Google OAuth client ID;
 - `CONCLAVE_AUTH_GOOGLE_CLIENT_SECRET` — Google OAuth client secret;
 - `BETTER_AUTH_SECRET` — Better Auth encryption/signing secret;
-- `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Conclave AX
+- `BETTER_AUTH_TRUSTED_ORIGINS` — optional comma-separated additional Syntila
   origins for local or controlled preview environments.
 
 The production Worker also uses Cloudflare Email Service for email verification,
@@ -80,7 +80,7 @@ the Cloud email service and uses these production variables:
 
 - `CONCLAVE_EMAIL_FROM=conclave@conclaveax.com`
 - `CONCLAVE_EMAIL_FALLBACK_FROM=vitalii@conclaveax.com`
-- `CONCLAVE_EMAIL_FROM_NAME=Conclave AX`
+- `CONCLAVE_EMAIL_FROM_NAME=Syntila`
 
 Both addresses must be independently authorized by the Cloudflare Email
 Sending configuration on the `conclaveax.com` zone before deploying this change.
@@ -127,7 +127,7 @@ with "Sign-in with this provider is not set up on this server yet."
    | Local (isolated mode) | `http://localhost:3000` | `http://localhost:8787/api/auth/callback/github` |
 
    The callback URL is the Cloud API origin (`BETTER_AUTH_URL`), not the
-   Flutter app origin. Conclave requests only the `user:email` scope; leave
+   Flutter app origin. Syntila requests only the `user:email` scope; leave
    device flow off.
 2. Generate a client secret and copy the client ID and secret.
 3. Production: add them as the GitHub Actions secrets
@@ -142,11 +142,11 @@ with "Sign-in with this provider is not set up on this server yet."
 
 Behavior:
 
-- A new GitHub account creates a Conclave user from its verified primary email,
+- A new GitHub account creates a Syntila user from its verified primary email,
   name and avatar. Anyone with a GitHub account may sign in; membership in
   Spaces still requires an invitation. An account without a verified email
   cannot sign in.
-- Implicit account linking is disabled. If a Conclave account already exists for
+- Implicit account linking is disabled. If a Syntila account already exists for
   the same email, GitHub sign-in returns to the sign-in page with an "account
   already exists" message. Sign in the usual way and use **Link GitHub** in the
   profile security settings; later GitHub sign-ins then work.
@@ -187,10 +187,10 @@ with "Sign-in with this provider is not set up on this server yet."
 
 Behavior:
 
-- A new Google account creates a Conclave user from its verified email, name and
+- A new Google account creates a Syntila user from its verified email, name and
   picture. Anyone with a Google account may sign in; membership in Spaces still
   requires an invitation.
-- Implicit account linking is disabled. If a Conclave account already exists for
+- Implicit account linking is disabled. If a Syntila account already exists for
   the same email (for example email and password), Google sign-in returns to the
   sign-in page with an "account already exists" message. Sign in the usual way
   and use **Link Google** in the profile security settings; later Google
@@ -235,7 +235,7 @@ Better Auth uses database-backed HttpOnly sessions in `auth_sessions`. The
 production policy is a 14-day session with daily refresh, no session data
 cookie cache, Secure/HttpOnly/SameSite=Lax cookies, and same-origin mutation
 protection. Better Auth's standard session listing and revocation endpoints
-remain available under `/api/auth/*`; Conclave AX never receives or stores the
+remain available under `/api/auth/*`; Syntila never receives or stores the
 session token.
 
 Repository Settings -> Secrets and variables -> Actions:
@@ -248,7 +248,7 @@ Create a Cloudflare API token with only the permissions required to deploy Worke
 Then run:
 
 ```
-Actions -> Deploy Conclave AX App -> Run workflow
+Actions -> Deploy Syntila App -> Run workflow
 ```
 
 Before applying production D1 migrations or deploying Workers, the workflow
@@ -398,7 +398,7 @@ Before production backend deployment:
    backup/restore verification;
 5. enable API/CI ingress only after the release gates pass.
 
-Cloud owns orchestration and persistence. Conclave Workspace maintains the
+Cloud owns orchestration and persistence. Syntila Workspace maintains the
 outbound runtime channel; the generic Engine invokes the provider CLI locally.
 
 At that point the preferred topology is either:

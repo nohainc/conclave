@@ -1,4 +1,4 @@
-# Conclave AX email template architecture
+# Syntila email template architecture
 
 This document records the Phase 1 audit and the source-controlled template
 contract. Rendering is deliberately separate from sender resolution and
@@ -11,7 +11,7 @@ use the existing callbacks and delivery service until a later migration phase.
 | --- | --- | --- | --- | --- | --- |
 | Account verification | Better Auth `emailVerification.sendVerificationEmail` in `apps/cloud/src/auth/better-auth.ts` | `auth.verify-email.v1` | New account email; URL contains a time-limited verification token | Essential | Existing flow; renderer available |
 | Password recovery | Better Auth `emailAndPassword.sendResetPassword` | `auth.reset-password.v1` | Account email; URL contains a time-limited reset token | Essential | Existing flow; renderer available |
-| Email address change codes | Conclave `/api/auth/change-email/*` handlers in `apps/cloud/src/auth/better-auth.ts` | `auth.verify-email-code.v1` (`purpose: "email-change"`) | First the requested new address, then the existing account email; each gets a 10-minute 6-digit code | Essential | Existing flow; renderer available |
+| Email address change codes | Syntila `/api/auth/change-email/*` handlers in `apps/cloud/src/auth/better-auth.ts` | `auth.verify-email-code.v1` (`purpose: "email-change"`) | First the requested new address, then the existing account email; each gets a 10-minute 6-digit code | Essential | Existing flow; renderer available |
 | Email address change link (retired) | None; Better Auth `user.changeEmail` is disabled | `auth.confirm-email-change.v1` | Not sent | Essential | Renderer retained, unused |
 | Space invitation | `sendSpaceInvitationEmail` called by `handleCreateSpaceInvitation` | `space.invitation.v1` | Invitee email; invitation URL is scoped to the pending invitation and recipient | Essential | Existing flow; renderer available |
 | Invitation accepted | No current application event hook | `space.invitation-accepted.v1` | Appropriate inviter or Space owner after confirmed acceptance | Informational | Planned; renderer available |
@@ -49,9 +49,9 @@ email event.
 Aliolo's eight template functions map one-to-one to the eight authentication and
 membership IDs above: verification, password recovery, password changed,
 email-change verification, email changed, invitation, welcome, and account
-deletion. Conclave also keeps explicit contracts for invitation acceptance and
+deletion. Syntila also keeps explicit contracts for invitation acceptance and
 Space access revocation so those future event hooks can use the same layout. The
-Conclave implementation keeps that useful event separation while changing the
+Syntila implementation keeps that useful event separation while changing the
 implementation in three ways:
 
 1. A shared table-based layout owns branding and email-client compatibility.
@@ -59,7 +59,7 @@ implementation in three ways:
 3. Template identifiers and availability are explicit, so unsupported events do
    not acquire accidental triggers.
 
-The Aliolo HTML is not copied. Conclave uses the approved Conclave AX identity,
+The Aliolo HTML is not copied. Syntila uses the approved Syntila identity,
 neutral background, dark navy header, muted purple action, system-safe fonts,
 inline styles, and a readable text fallback. The official logo is served from
 the deployed email-safe public asset path, with a text identity fallback.
@@ -99,10 +99,10 @@ lifetime in minutes and state it in the message. The current configuration is
 60 minutes for all three flows; the renderer rejects a missing, zero,
 fractional, or negative lifetime rather than inventing one.
 
-The shared layout renders a dark Conclave header, the approved
+The shared layout renders a dark Syntila header, the approved
 `conclave_email_logo.png` asset, product name, event title, optional action
 button, copy-and-paste fallback link, security notice, and branded footer. The
-logo is served from the deployed Conclave app asset path and has an accessible
+logo is served from the deployed Syntila app asset path and has an accessible
 text/alt fallback; disabling images does not remove the product identity or
 instructions. The layout uses inline styles plus a narrow-screen media query,
 with system-safe fonts and natural word wrapping for long translated text.

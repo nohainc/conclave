@@ -56,7 +56,7 @@ provider conversation from Cloud history.
 | User AI request | `work_requests.input_json.originalRequest`, immutable execution snapshot, and request/Run associations. Not a `discussion_messages` row. |
 | Human Discussion | `discussion_messages`: author, Markdown body, references and timestamps. Separate from AI Work history. |
 | Executions | `runs`, `workflow_tasks`, task dependencies, `worker_assignments`, attempts and execution events/audit; a request can have multiple Steps and assignments. |
-| Worker responses | Assignment `output_json`; completed `workflow_tasks.output_json` stores Conclave StepResult; history API derives final answer from terminal Step. Step text is bounded to 96,000 characters in the runner. |
+| Worker responses | Assignment `output_json`; completed `workflow_tasks.output_json` stores Syntila StepResult; history API derives final answer from terminal Step. Step text is bounded to 96,000 characters in the runner. |
 | Execution metadata | Immutable Workflow/request snapshots, Run policy snapshot, assignment permission/config/input/output/error JSON, identities, model, timeouts, timestamps; StepResult includes Worker/Engine/Profile/tool version and model/effort attribution. |
 | Logical session identity | Deterministically derived in Cloud and carried as `sessionKey` with `sessionPolicy`; the dispatcher removes the key from persisted assignment input/config and stores `session_policy` separately. There is no Cloud provider-session registry. |
 | Actual CLI session/thread | Engine-owned local JSON mapping under Workspace `Workers/<workerId>/state`; provider CLI owns its native conversation data. Actual provider session IDs do not cross Local Worker Protocol into Cloud. |
@@ -101,7 +101,7 @@ not establish an immutable selection captured when the user first typed a draft.
 
 Model and effort are absent from the key. Changing either does not intentionally
 reset the logical session. Chat and Work remain isolated. Multi-step workflows
-pass bounded upstream StepResult text through Conclave prompts; they do not share
+pass bounded upstream StepResult text through Syntila prompts; they do not share
 the implementer's provider thread with the verifier.
 
 The Engine further partitions its mapping by logical Worker type, Profile

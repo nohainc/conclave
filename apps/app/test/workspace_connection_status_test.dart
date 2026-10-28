@@ -91,7 +91,7 @@ void main() {
       )));
       await tester.pumpAndSettle();
 
-      expect(find.text('Download Conclave Workspace'), findsNothing);
+      expect(find.text('Download Syntila Workspace'), findsNothing);
 
       await tester.pumpWidget(
         MaterialApp(

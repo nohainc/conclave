@@ -407,7 +407,7 @@ if (
       "=================================================================",
     );
     console.error(
-      " Conclave AX Branding System Repository Enforcement Failed!",
+      " Syntila Branding System Repository Enforcement Failed!",
     );
     console.error(
       "=================================================================",

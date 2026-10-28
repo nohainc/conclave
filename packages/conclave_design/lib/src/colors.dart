@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Semantic brand colors and design tokens for Conclave AX.
+/// Semantic brand colors and design tokens for Syntila.
 abstract final class ConclaveColors {
   // Brand Core
   static const primary = Color(0xff5e20f8);

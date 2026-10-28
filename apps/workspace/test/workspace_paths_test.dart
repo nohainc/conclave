@@ -59,7 +59,7 @@ void main() {
     expect(paths.updatesDirectory.path,
         '${home.path}/Library/Application Support/Conclave/Workspace/Updates');
     expect(paths.logsFile.path,
-        '${home.path}/Library/Logs/Conclave Workspace/workspace.log');
+        '${home.path}/Library/Logs/Syntila Workspace/workspace.log');
     expect(
         () => paths.validateWorkRootSeparation(
               Directory('${home.path}/Documents/Conclave'),

@@ -1,20 +1,20 @@
-# Conclave Protocol Boundaries
+# Syntila Protocol Boundaries
 
 **Status:** Current product boundary contract. Local Worker Protocol 4.1 is the Workspace-to-Engine contract; 4.0 remains a negotiated compatibility version.
-**Applies to:** Conclave AX, Conclave Cloud, Conclave Workspace, and the CLI Worker Engine.
+**Applies to:** Syntila, Syntila Cloud, Syntila Workspace, and the CLI Worker Engine.
 
-Conclave has three protocol boundaries. They share domain vocabulary, but each
+Syntila has three protocol boundaries. They share domain vocabulary, but each
 boundary has its own endpoints, authentication, transport, versioning, and wire
 schemas.
 
 ```text
-Conclave AX  <->  Conclave Cloud
+Syntila  <->  Syntila Cloud
                  Human Product Protocol
 
-Conclave Workspace  <->  Conclave Cloud
+Syntila Workspace  <->  Syntila Cloud
                        Workspace Runtime Protocol
 
-Conclave Workspace  <->  CLI Worker Engine process
+Syntila Workspace  <->  CLI Worker Engine process
                        Local Worker Protocol 4.1
 ```
 
@@ -27,7 +27,7 @@ authentication and contracts.
 
 ## 1. AX ↔ Cloud — Human Product Protocol
 
-**Endpoints:** Conclave AX and Conclave Cloud's human-facing API/realtime
+**Endpoints:** Syntila and Syntila Cloud's human-facing API/realtime
 endpoints.  
 **Authentication:** a human user session.  
 **Transport:** HTTPS APIs and browser realtime connections.  
@@ -59,7 +59,7 @@ required for machine participation.
 
 ## 2. Workspace ↔ Cloud — Workspace Runtime Protocol
 
-**Endpoints:** the Conclave Workspace runtime and Cloud's Workspace Gateway.  
+**Endpoints:** the Syntila Workspace runtime and Cloud's Workspace Gateway.  
 **Authentication:** a machine runtime credential bound to one Workspace
 runtime, sent as a Bearer credential in the `Authorization` header. Runtime
 credentials MUST NOT be accepted from WebSocket URL query parameters.
@@ -92,8 +92,8 @@ Engine and compatible official Tool Profile Release for that logical Worker.
 AX therefore does not need to know which Engine build or Profile implements a
 product Worker.
 
-Only Conclave Workspace speaks this protocol as a client. Cloud's Workspace
-Gateway is its server. Conclave AX is not a runtime client. CLI Worker Engine
+Only Syntila Workspace speaks this protocol as a client. Cloud's Workspace
+Gateway is its server. Syntila is not a runtime client. CLI Worker Engine
 processes are not runtime clients and MUST NOT connect to Cloud, invoke
 Workspace Gateway routes, or receive the Workspace runtime credential.
 Workspace translates between runtime messages and Local Worker Protocol 4.1
@@ -107,7 +107,7 @@ boundary.
 
 ## 3. Workspace ↔ CLI Worker Engine — Local Worker Protocol 4.1
 
-**Endpoints:** Conclave Workspace process supervisor and one generic CLI Worker Engine child process.  
+**Endpoints:** Syntila Workspace process supervisor and one generic CLI Worker Engine child process.  
 **Authentication:** local admission only; no Cloud/human credential is present.  
 **Transport:** versioned NDJSON over stdin/stdout.  
 **Contract ownership:** Workspace + shared protocol package; Engine implements it.
@@ -127,7 +127,7 @@ Worker Type, Engine version, Tool Profile definition/release/schema version,
 and capabilities. Probe results may report only the bounded provider tool name
 and version; executable paths are not part of the wire contract.
 Probe requests carry an Engine-enforced `timeoutMs` ceiling of at most 30
-seconds. For live probes, the Engine supplies the fixed Conclave test prompt
+seconds. For live probes, the Engine supplies the fixed Syntila test prompt
 and requires exact final text `OK`; Profiles can define only provider transport
 and output parsing.
 
@@ -145,7 +145,7 @@ Tool Profiles are not protocol peers. They are immutable behavior configuration 
 
 Provider credentials, provider session IDs, arbitrary Cloud executable paths, shell commands, and raw provider output are not Local Worker Protocol fields.
 
-Durable execute requests may carry version 1 `workerSession` metadata: Conclave
+Durable execute requests may carry version 1 `workerSession` metadata: Syntila
 session, Conversation, and Worker IDs plus a frozen context target revision.
 Workspace validates ownership before forwarding it; the Engine retains native
 handles in Workspace-local state only. Model and effort changes do not partition
@@ -159,7 +159,7 @@ boundary as caller-controlled values.
 
 ## Shared canonical domain vocabulary
 
-These names describe Conclave domain values used across boundaries:
+These names describe Syntila domain values used across boundaries:
 
 | Canonical name | Meaning |
 | --- | --- |
@@ -193,7 +193,7 @@ wire contracts.
 
 | Flow | Client | Server/process peer | Protocol | Credentials allowed |
 | --- | --- | --- | --- | --- |
-| Product and collaboration actions/read models | Conclave AX | Cloud human API/realtime | Human Product Protocol | Human session |
+| Product and collaboration actions/read models | Syntila | Cloud human API/realtime | Human Product Protocol | Human session |
 | Owner/account management | Workspace management CLI | Cloud management routes | Human Product Protocol, HTTPS management surface | Human session |
 | Inventory, assignments, progress, cancellation | Workspace runtime | Cloud Workspace Gateway | Workspace Runtime Protocol | Workspace runtime credential |
 | Local setup, readiness, execution, progress, result | Workspace supervisor | CLI Worker Engine process | Local Worker Protocol 4.1 | Bounded non-secret settings; no provider tokens or account secrets |
@@ -241,9 +241,9 @@ admission still belong to their existing Cloud/Workspace boundaries.
 
 
 For model replacement, version 1 `workerSession` may also contain optional version
-1 `bootstrap`: Conclave Conversation/context IDs, a frozen canonical history
+1 `bootstrap`: Syntila Conversation/context IDs, a frozen canonical history
 sequence, and bounded canonical history text. Cloud route modules build this
-snapshot from Conclave history; Workspace validates its scope and forwards it to
+snapshot from Syntila history; Workspace validates its scope and forwards it to
 the generic Engine. The Engine consumes it only for a new native session. Provider
 handles remain local. Strict older readers reject the additive field, requiring
 Workspace/Engine rollout before Cloud emits it. See

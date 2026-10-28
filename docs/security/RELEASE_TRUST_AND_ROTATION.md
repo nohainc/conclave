@@ -20,7 +20,7 @@ remain separate and continue to protect native application updates.
 
 ## Trust model
 
-Conclave Workspace verifies release metadata with Ed25519 public keys. Signing
+Syntila Workspace verifies release metadata with Ed25519 public keys. Signing
 seeds remain in release infrastructure and are never shipped in Workspace or
 Engine releases. Workspace release metadata binds the publisher, key ID,
 version, channel, platform/architecture, and archive digest.
@@ -30,7 +30,7 @@ separation. Workspace application signing material is never used as Profile
 data; V9 Profiles are authenticated through Cloud authorization and validated
 locally by canonical digest, schema, identity, and Engine compatibility.
 Apple Developer ID signing and notarization verify macOS origin/platform
-requirements; Conclave release metadata verification remains required.
+requirements; Syntila release metadata verification remains required.
 
 Production builds fail closed when no trusted public verification key is
 configured. Development fixture signing is separate and must never be promoted

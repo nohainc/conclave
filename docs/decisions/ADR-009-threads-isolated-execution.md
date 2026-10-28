@@ -72,12 +72,12 @@ state.
 
 The Workspace starts the generic CLI Worker Engine, which resolves a signed
 Tool Profile and invokes the provider CLI. The provider CLI manages Git
-repositories inside the directory. Conclave does not register or provision
+repositories inside the directory. Syntila does not register or provision
 repositories, create Git commits, or restore Git state after failed Work.
 
 ### Recovery
 
-Conclave preserves the Thread directory across Work Requests and failures
+Syntila preserves the Thread directory across Work Requests and failures
 but does not restore Git state after failed Work.
 
 Users and provider CLIs use normal Git mechanisms to commit, synchronize,
@@ -109,7 +109,7 @@ copy the directory; local data remains on its original Workspace.
 
 Rejected because two nested generic Chats do not express different semantics strongly enough. Discuss and Work have different authorization and side-effect rules.
 
-### Conclave-managed Source/repository registry
+### Syntila-managed Source/repository registry
 
 Deferred because it adds setup and repository-governance complexity that is not
 required for isolated AI work. Provider CLIs can clone and manage repositories

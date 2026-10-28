@@ -16,7 +16,7 @@ void main() {
 
     final first = await resolver.resolve(
       spaceId: 'space-a',
-      spaceName: 'Conclave AX',
+      spaceName: 'Syntila',
     );
     final second = await resolver.resolve(
       spaceId: 'space-a',
@@ -136,7 +136,7 @@ void main() {
 
     final resolved = await resolver.resolve(
       spaceId: 'space-a',
-      spaceName: 'Conclave AX',
+      spaceName: 'Syntila',
     );
     expect(resolved.path, endsWith('space-a'));
     expect(Directory('${resolved.path}/thread-a').existsSync(), isTrue);
@@ -159,7 +159,7 @@ void main() {
     ).withMutation<void>(
       spaceId: 'space-a',
       threadId: 'thread-a',
-      spaceName: 'Conclave AX',
+      spaceName: 'Syntila',
       leaseId: 'lease-a',
       fencingToken: 1,
       action: (_) async {},
@@ -169,7 +169,7 @@ void main() {
         File('${state.path}/space-fences/space-a/thread-a.json').existsSync(),
         isTrue);
     expect(
-        File('${work.path}/Conclave AX/.conclave-space-fence.json')
+        File('${work.path}/Syntila/.conclave-space-fence.json')
             .existsSync(),
         isFalse);
   });

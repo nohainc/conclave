@@ -16,7 +16,7 @@ Machines or containers, and on Windows.
 
 Provider CLIs (Claude Code, Codex, Gemini/AGY) authenticate through
 subscription logins stored in the user's home directory (`~/.claude`,
-`~/.codex`, `~/.gemini`, and platform equivalents). Conclave never manages
+`~/.codex`, `~/.gemini`, and platform equivalents). Syntila never manages
 provider credentials (ARCHITECTURE_V8), so whichever account runs the Worker
 Engine must be the account that logged in to the CLIs.
 
@@ -39,7 +39,7 @@ Service does not need. A system-level systemd unit is likewise not the default.
 ### 2.2 Credential ownership
 
 - The Service, the Worker Engine, and provider CLIs all run as the same
-  logged-in OS user. Conclave never copies, proxies, or stores provider CLI
+  logged-in OS user. Syntila never copies, proxies, or stores provider CLI
   credentials.
 - Provider credential directories must be persistent. Headless/container
   deployments must mount the user's home (or the CLI credential directories)
@@ -89,10 +89,10 @@ IPC is never a TCP/localhost listener.
 | --- | --- |
 | macOS | `~/Library/Application Support/Conclave/Workspace/` (existing) |
 | Linux | `$XDG_STATE_HOME/conclave/workspace/` (default `~/.local/state/...`) for registry, sessions, logs, runtime; `$XDG_DATA_HOME/conclave/workspace/` for Profiles and Engines; `$XDG_CACHE_HOME` for cache |
-| Windows | `%LOCALAPPDATA%\Conclave\Workspace\` |
+| Windows | `%LOCALAPPDATA%\Syntila\Workspace\` |
 
 Work Root remains user-chosen (default `~/Documents/Conclave` or
-`%USERPROFILE%\Documents\Conclave`; headless hosts must set it explicitly).
+`%USERPROFILE%\Documents\Syntila`; headless hosts must set it explicitly).
 `CONCLAVE_WORKSPACE_DATA_DIR` keeps its existing override semantics.
 
 ### 2.6 Headless management

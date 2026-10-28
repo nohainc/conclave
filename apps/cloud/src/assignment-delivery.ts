@@ -230,7 +230,7 @@ export function classifyStepAssignmentOutcome(input: {
     return {
       kind: "failed",
       message:
-        "The Workspace has not confirmed that the Worker stopped. Conclave is reconciling it; the step was not retried.",
+        "The Workspace has not confirmed that the Worker stopped. Syntila is reconciling it; the step was not retried.",
       retryable: false,
     };
   }

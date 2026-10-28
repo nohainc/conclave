@@ -12,7 +12,7 @@ Space Workflows tab. That selection creates or repairs the internal
 AX filters Workers from the selected Workflow Workspace, so Workflows is the
 single user-facing place for execution configuration.
 
-The grant table remains Conclave-owned security state. It is not a second user
+The grant table remains Syntila-owned security state. It is not a second user
 configuration surface: status, capability, permission, expiry, and revocation
 checks continue to protect new and historical execution assignments.
 

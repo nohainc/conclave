@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://conclaveax.com/schemas/conclave-message.schema.json",
-  "title": "Conclave current shared runtime contracts",
+  "title": "Syntila current shared runtime contracts",
   "description": "Execution error taxonomy, Workspace Runtime Protocol metadata, and realtime event metadata.",
   "x-execution-error-codes": [
     "worker_not_ready",

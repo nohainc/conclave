@@ -1,4 +1,4 @@
-# Conclave AX Workspaces UX and Data Contract
+# Syntila Workspaces UX and Data Contract
 
 **Status:** Current AX read model. Workspace ownership and desktop lifecycle follow [ADR-013](../decisions/ADR-013-desktop-auth-and-dual-transport.md) and [ADR-014](../decisions/ADR-014-workspace-desktop-lifecycle.md).
 
@@ -13,7 +13,7 @@ The top-level execution-capacity page is **Workspaces**. Each Workspace card gro
 - Worker inventory and readiness are reported by Workspace. AX does not probe provider CLIs or start assignments directly.
 - Space owners select the effective Workspace in the Space Workflows tab. Threads bind logical Worker IDs under Cloud authorization.
 - Stateful Threads use their selected Workflow Workspace. Stateless execution may use another authorized Workspace when the Work policy permits it.
-- Workspace registration and local recovery are managed by the Conclave Workspace desktop application.
+- Workspace registration and local recovery are managed by the Syntila Workspace desktop application.
 
 Filesystem terminology is explicit: a Workspace is the execution environment,
 the Application Data Root is private application-managed state, the Work Root
@@ -55,7 +55,7 @@ The Cloud Worker API is versionless. `GET /api/workers` returns safe inventory; 
 - `/workspaces/:workspaceId` opens the collection with the selected Workspace expanded and focused.
 - Workers appear only within their owning Workspace card.
 - The page may show connection state, safe machine facts, Worker readiness, and activity counts.
-- Empty state directs the user to install and sign in to Conclave Workspace, which registers the machine.
+- Empty state directs the user to install and sign in to Syntila Workspace, which registers the machine.
 - An offline registered Workspace remains visible as offline. Reconnection and ownership recovery are handled by the desktop app.
 - AX does not expose local Worker setup, credentials, process controls, local paths, or machine repair actions.
 

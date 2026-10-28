@@ -215,7 +215,7 @@ Future<Directory> _createBareRemote(Directory root) async {
   await source.create();
   await _git(source, ['init', '-q']);
   await _git(source, ['config', 'user.email', 'test@example.com']);
-  await _git(source, ['config', 'user.name', 'Conclave Test']);
+  await _git(source, ['config', 'user.name', 'Syntila Test']);
   await File('${source.path}${Platform.pathSeparator}README.md')
       .writeAsString('clean-room\n');
   await _git(source, ['add', 'README.md']);

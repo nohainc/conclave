@@ -275,9 +275,9 @@ void main() {
       expect(find.text('Connect Workspace'), findsNothing);
       expect(
           find.textContaining(
-              'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
+              'Download and register Syntila Workspace to make a Workspace and its Workers available here.'),
           findsOneWidget);
-      expect(find.text('Download Conclave Workspace'), findsNothing);
+      expect(find.text('Download Syntila Workspace'), findsNothing);
     });
 
     testWidgets('shows Workspace machine and Workers without extra details',
@@ -559,7 +559,7 @@ void main() {
       expect(find.text('Provider sign-in required'), findsNothing);
       expect(find.byIcon(Icons.warning_amber), findsOneWidget);
       expect(find.textContaining('authentication_required'), findsNothing);
-      expect(find.textContaining('Conclave Workspace'), findsNothing);
+      expect(find.textContaining('Syntila Workspace'), findsNothing);
     });
 
     testWidgets('disconnected Workspace stays read-only', (tester) async {
@@ -601,7 +601,7 @@ void main() {
 
       expect(
         find.text(
-          'No Workers are available for this Workspace yet. Configure Workers in Conclave Workspace on this computer.',
+          'No Workers are available for this Workspace yet. Configure Workers in Syntila Workspace on this computer.',
         ),
         findsOneWidget,
       );

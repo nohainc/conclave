@@ -1,6 +1,6 @@
 # Workspace storage and connection diagnostics
 
-Conclave Workspace prepares local storage before contacting Cloud. Work Root,
+Syntila Workspace prepares local storage before contacting Cloud. Work Root,
 runtime state, the log directory, and their permissions are checked locally;
 the app does not request a separate macOS “internet permission.” macOS App
 Sandbox remains disabled because Workspace launches the generic CLI Worker Engine and
@@ -20,7 +20,7 @@ The default layout is:
     Engines/     generic CLI Worker Engine
     Workers/     per-Worker state, sessions, and diagnostics
     Updates/     staged Workspace updates
-~/Library/Logs/Conclave Workspace/
+~/Library/Logs/Syntila Workspace/
     workspace.log
 ~/Documents/Conclave/
     <Space>/     user-owned Space Work Directories and Thread files

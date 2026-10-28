@@ -22,7 +22,7 @@ describe("email deployment configuration", () => {
             CONCLAVE_ENVIRONMENT: "production",
             CONCLAVE_EMAIL_FROM: "auth@auth.earthuc.com",
             CONCLAVE_EMAIL_FALLBACK_FROM: "vitalii@conclaveax.com",
-            CONCLAVE_EMAIL_FROM_NAME: "Conclave AX",
+            CONCLAVE_EMAIL_FROM_NAME: "Syntila",
           },
           send_email: [],
         }),

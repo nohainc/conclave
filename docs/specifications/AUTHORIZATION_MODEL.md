@@ -1,8 +1,8 @@
 # Authorization Model
 
-**Status:** Current security policy for Conclave AX, Cloud, Workspace ownership, Threads, and Tool Profiles.
+**Status:** Current security policy for Syntila, Cloud, Workspace ownership, Threads, and Tool Profiles.
 
-Cloud resolves the authenticated Better Auth session to an active Conclave user. It derives Space roles from `space_memberships`; it does not trust client-supplied organization or Workspace membership claims.
+Cloud resolves the authenticated Better Auth session to an active Syntila user. It derives Space roles from `space_memberships`; it does not trust client-supplied organization or Workspace membership claims.
 
 ## Space access
 
@@ -84,7 +84,7 @@ to the same Better Auth sign-in route as AX, refuses incomplete/MFA challenges,
 then issues only a `conclave.desktop.management` session using the existing
 single-use claim mechanism. Its temporary authentication cookie is not returned
 to the caller and the temporary web session is signed out. Passwords are never
-persisted by Workspace or Conclave application tables. Responses are no-store.
+persisted by Workspace or Syntila application tables. Responses are no-store.
 This does not transfer installation ownership or create a Profile Lab session;
 normal ownership and registration checks still apply.
 

@@ -29,7 +29,7 @@ extension ExecutionStatusToneHelpers on ExecutionStatusTone {
   }
 }
 
-/// Context model encapsulating state needed by the Conclave AX App Shell (Sidebar & HUD).
+/// Context model encapsulating state needed by the Syntila App Shell (Sidebar & HUD).
 class AxShellContext {
   const AxShellContext({
     required this.navigation,

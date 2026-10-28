@@ -3,7 +3,7 @@
 Cloudflare Access is optional infrastructure protection for staging,
 administrative, debug, and other internal environments. It is not the human
 authentication boundary for production AX. Production users sign in through
-Better Auth at `/api/auth/*`, and Conclave resolves that session to its own
+Better Auth at `/api/auth/*`, and Syntila resolves that session to its own
 Workspace and authorization model.
 
 ## Configure Access
@@ -13,11 +13,11 @@ Workspace and authorization model.
 3. Protect only the intended staging, admin, debug, or internal routes and
    keep the policy scoped to the appropriate operators.
 4. Keep production AX public and verify that disabling this Access
-   application does not affect Better Auth login or Conclave authorization.
+   application does not affect Better Auth login or Syntila authorization.
 
 ## Machine-to-machine API calls
 
-Machine and CI calls use their explicitly scoped Conclave credentials. Access
+Machine and CI calls use their explicitly scoped Syntila credentials. Access
 service tokens may protect separate internal administration routes, but they
 are not converted into human identities and are not accepted by the
 production application-auth path.

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Conclave AX - Local Stack Launcher
+# Syntila - Local Stack Launcher
 # ==============================================================================
 # Launches 2 dedicated terminal windows in parallel:
 #   1. Backend API: Cloudflare Wrangler with the local v8 D1 database
@@ -130,7 +130,7 @@ cat << EOF > "${RUNNER_API}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}"
-echo -e "\033[1m\033[0;34m[Conclave AX API Backend Logs]\033[0m ${API_MODE} | Base: ${API_URL}\n"
+echo -e "\033[1m\033[0;34m[Syntila API Backend Logs]\033[0m ${API_MODE} | Base: ${API_URL}\n"
 exec pnpm exec wrangler dev \\
   --config "${API_CONFIG}" \\
   --port "${PORT}" \\
@@ -162,7 +162,7 @@ cat << EOF > "${RUNNER_FLUTTER}"
 #!/usr/bin/env bash
 set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
-echo -e "\033[1m\033[0;32m[Conclave AX Flutter Web]\033[0m ${WEB_CONTROLS}\n"
+echo -e "\033[1m\033[0;32m[Syntila Flutter Web]\033[0m ${WEB_CONTROLS}\n"
 export FLUTTER_PREBUILT_ENGINE_VERSION="${FLUTTER_ENGINE_VERSION}"
 exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" ${WEB_BROWSER_FLAGS} --dart-define="CONCLAVE_API_URL=${API_URL}/api"
 EOF
@@ -191,9 +191,9 @@ spawn_terminal() {
 }
 
 # Launch both terminals in parallel
-spawn_terminal "${RUNNER_API}" "Conclave AX - API Backend"
-spawn_terminal "${RUNNER_FLUTTER}" "Conclave AX - Web App"
+spawn_terminal "${RUNNER_API}" "Syntila - API Backend"
+spawn_terminal "${RUNNER_FLUTTER}" "Syntila - Web App"
 
 # Print exactly 2 concise lines and exit immediately
-echo -e "${GREEN}✓ Conclave AX started in 2 new terminals (Backend & Frontend in parallel).${RESET}"
+echo -e "${GREEN}✓ Syntila started in 2 new terminals (Backend & Frontend in parallel).${RESET}"
 echo -e "${CYAN}• Web App:${RESET} ${BOLD}${WEB_URL}${RESET} | ${CYAN}API:${RESET} ${BOLD}${API_URL}${RESET} (${API_MODE})"

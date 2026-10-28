@@ -141,18 +141,18 @@ void main() {
     realtime.controller
         .add({'type': 'realtime.connection', 'status': 'reconnecting'});
     await tester.pump();
-    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+    expect(find.text('Live updates paused. Syntila is reconnecting.'),
         findsNothing);
 
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+    expect(find.text('Live updates paused. Syntila is reconnecting.'),
         findsNothing);
 
     realtime.controller
         .add({'type': 'realtime.connection', 'status': 'connected'});
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+    expect(find.text('Live updates paused. Syntila is reconnecting.'),
         findsNothing);
 
     realtime.controller
@@ -160,10 +160,10 @@ void main() {
     await tester.pump();
 
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+    expect(find.text('Live updates paused. Syntila is reconnecting.'),
         findsNothing);
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('Live updates paused. Conclave AX is reconnecting.'),
+    expect(find.text('Live updates paused. Syntila is reconnecting.'),
         findsOneWidget);
 
     realtime.controller

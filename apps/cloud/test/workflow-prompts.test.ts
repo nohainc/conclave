@@ -132,7 +132,7 @@ describe("Work v1 prompt profiles", () => {
       })),
     });
     expect(prompt.length).toBeLessThanOrEqual(96000);
-    expect(prompt).toContain("Content truncated by Conclave prompt limits.");
+    expect(prompt).toContain("Content truncated by Syntila prompt limits.");
     expect(prompt).not.toContain("UNBOUNDED_TAIL");
     expect(prompt).toContain("Do not change Git state.");
     expect(prompt).toContain("use Work mode");
@@ -342,7 +342,7 @@ describe("Work v1 prompt profiles", () => {
       originalRequest: "x".repeat(200_000),
     });
     expect(prompt.length).toBeLessThanOrEqual(96_000);
-    expect(prompt).toContain("Content truncated by Conclave prompt limits");
+    expect(prompt).toContain("Content truncated by Syntila prompt limits");
   });
 
   it("rejects a prompt profile version not admitted by the catalog", () => {

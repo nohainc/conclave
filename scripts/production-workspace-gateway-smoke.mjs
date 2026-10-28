@@ -21,8 +21,8 @@ const runId = process.env.GITHUB_RUN_ID
   : (process.env.CONCLAVE_SMOKE_RUN_ID ?? randomUUID());
 const ownerId = `gateway-smoke-user-${runId}`;
 const authSessionId = `gateway-smoke-auth-session-${runId}`;
-const workspaceClientName = `Conclave Workspace Production Smoke ${runId}`;
-const profileLabClientName = `Conclave Profile Lab Production Smoke ${runId}`;
+const workspaceClientName = `Syntila Workspace Production Smoke ${runId}`;
+const profileLabClientName = `Syntila Profile Lab Production Smoke ${runId}`;
 const authSessionToken = randomBytes(32).toString("base64url");
 const installationUuid = createHash("sha256")
   .update(`conclave-production-workspace-smoke:${runId}`)
@@ -353,7 +353,7 @@ async function createDisposableWebSession() {
   const email = `gateway-smoke-${runId}@example.invalid`;
   executeD1(
     `INSERT INTO users (id, email, display_name, status, created_at, updated_at) VALUES (${sqlString(ownerId)}, ${sqlString(email)}, 'Production Desktop Auth Smoke', 'active', ${sqlString(now)}, ${sqlString(now)});
-     INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at, user_agent) VALUES (${sqlString(authSessionId)}, ${sqlString(ownerId)}, ${sqlString(authSessionToken)}, '9999-12-31T23:59:59.999Z', ${sqlString(now)}, ${sqlString(now)}, 'Conclave production desktop auth smoke');`,
+     INSERT INTO auth_sessions (id, user_id, token, expires_at, created_at, updated_at, user_agent) VALUES (${sqlString(authSessionId)}, ${sqlString(ownerId)}, ${sqlString(authSessionToken)}, '9999-12-31T23:59:59.999Z', ${sqlString(now)}, ${sqlString(now)}, 'Syntila production desktop auth smoke');`,
   );
 }
 

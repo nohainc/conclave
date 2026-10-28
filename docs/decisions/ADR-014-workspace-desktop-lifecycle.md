@@ -1,4 +1,4 @@
-# ADR-014: Conclave Workspace Desktop Lifecycle, Locking, and Background Runtime
+# ADR-014: Syntila Workspace Desktop Lifecycle, Locking, and Background Runtime
 
 > **Superseded in part (2026-10).** This record describes the earlier Flutter `Workspace.app`/`SMAppService` design. The Flutter GUI was removed; Workspace is now a headless Dart service plus the `conclave-workspace` CLI, configured by `workspace.nano`. The current contract is [WORKSPACE_ARCHITECTURE.md](../architecture/WORKSPACE_ARCHITECTURE.md). Read this document as history.
 
@@ -9,7 +9,7 @@
 
 ## Context
 
-ADR-013 introduced two separate Cloud identities in Conclave Workspace:
+ADR-013 introduced two separate Cloud identities in Syntila Workspace:
 
 - a human desktop management session;
 - a Workspace runtime credential.
@@ -43,7 +43,7 @@ That creates several UX and security problems:
   the unlocked computer from changing Worker or Workspace settings;
 - "sign out", "disconnect", "lock", and "reset" currently risk being conflated.
 
-Conclave Workspace is a background execution runtime and a local management
+Syntila Workspace is a background execution runtime and a local management
 application. Those responsibilities need an explicit lifecycle.
 
 ## Decision
@@ -97,7 +97,7 @@ offline
 
 Human sign-in answers:
 
-> Which Conclave user is allowed to manage this local installation?
+> Which Syntila user is allowed to manage this local installation?
 
 Successful sign-in establishes only the desktop human management session.
 
@@ -169,7 +169,7 @@ section in the Workspace tab.
 
 This is a product simplification, not a limitation of the local Worker model.
 
-### 5. One connected installation is bound to one Conclave owner
+### 5. One connected installation is bound to one Syntila owner
 
 While a Workspace installation is connected/owned by User A, another user
 cannot become its active management owner.
@@ -212,7 +212,7 @@ credential.
 Disconnect does **not** make the installation available to a different account.
 
 A separate advanced operation, conceptually **Remove Workspace from account** or
-**Release ownership**, is required before another Conclave user can claim the
+**Release ownership**, is required before another Syntila user can claim the
 installation.
 
 That operation must require strong confirmation and local reauthentication.
@@ -257,12 +257,12 @@ an ownership conflict and cannot access management controls.
 A connected Workspace is intended to behave like a local execution service.
 
 After the user connects the Workspace, the app should offer/enable **Start
-Conclave Workspace at login**.
+Syntila Workspace at login**.
 
 On a normal OS-user login/restart:
 
 ~~~text
-Conclave Workspace starts in background
+Syntila Workspace starts in background
 -> load installation identity
 -> load runtime credential from secure storage
 -> start runtime
@@ -313,7 +313,7 @@ Locking:
 Locked UI:
 
 ~~~text
-Conclave Workspace
+Syntila Workspace
 
 Workspace is locked.
 Runtime is still connected.
@@ -324,7 +324,7 @@ Runtime is still connected.
 Use platform-native local authentication where available. On macOS use
 LocalAuthentication/Touch ID/device password.
 
-Do not create a separate Conclave PIN/password.
+Do not create a separate Syntila PIN/password.
 
 ### 12. Lock is local protection, not the primary machine security boundary
 
@@ -374,11 +374,11 @@ runtime surface.
 It may expose safe operational information/actions:
 
 ~~~text
-Conclave Workspace
+Syntila Workspace
 Connected · WebSocket
 0 assignments
 
-Open Conclave Workspace
+Open Syntila Workspace
 Lock Workspace
 Pause new work
 Diagnostics

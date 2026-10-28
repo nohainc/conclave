@@ -1,7 +1,7 @@
 {
-  "name": "Conclave AX",
-  "short_name": "Conclave AX",
-  "description": "Conclave AX gives families, friends, and teams one shared place to collaborate with AI. Create spaces, share AI access without sharing credentials, and keep conversations in context.",
+  "name": "Syntila",
+  "short_name": "Syntila",
+  "description": "Syntila gives families, friends, and teams one shared place to collaborate with AI. Create spaces, share AI access without sharing credentials, and keep conversations in context.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

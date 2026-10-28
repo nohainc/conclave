@@ -1,4 +1,4 @@
-// Interactive tabs and clipboard copy handlers for Conclave AX landing page
+// Interactive tabs and clipboard copy handlers for Syntila landing page
 (() => {
   // Live region for screen reader announcements
   let announcer = document.getElementById("site-live-announcer");

@@ -21,11 +21,11 @@ local directory and filesystem fencing rules those contracts use.
 
 ## Context
 
-Conclave does not manage Git repositories or repository registration. Provider
+Syntila does not manage Git repositories or repository registration. Provider
 CLIs, launched through the generic Engine, manage repositories inside a
 Thread's stable local directory.
 
-For the current product stage, that is more infrastructure than Conclave AX needs.
+For the current product stage, that is more infrastructure than Syntila needs.
 
 Provider CLIs can:
 - clone public and private repositories;
@@ -37,7 +37,7 @@ Provider CLIs can:
 - push;
 - work with multiple repositories in one task.
 
-Conclave's essential filesystem responsibility is therefore smaller:
+Syntila's essential filesystem responsibility is therefore smaller:
 
 > give every Thread a stable, isolated local directory and execute its assignments through the generic Engine inside that directory.
 
@@ -127,11 +127,11 @@ If a Workspace is revoked/deleted and the same local installation is later regis
 
 The supported product model remains:
 
-> one normal Conclave Workspace runtime per local OS-user installation.
+> one normal Syntila Workspace runtime per local OS-user installation.
 
 The runtime already uses one local configuration/data directory and an exclusive process lock.
 
-Conclave does not need motherboard IDs, MAC-address fingerprints, serial-number matching or another hardware identity system merely to preserve Thread storage.
+Syntila does not need motherboard IDs, MAC-address fingerprints, serial-number matching or another hardware identity system merely to preserve Thread storage.
 
 A technically advanced user may be able to run a second runtime with a different local data root; that is not the normal product workflow and does not change Thread path semantics.
 
@@ -196,7 +196,7 @@ Workspace use the same Thread directory.
 
 ### 9. Provider CLI-managed repositories
 
-Conclave does not require a Space Source registry for the initial model.
+Syntila does not require a Space Source registry for the initial model.
 
 Inside a Thread directory, a provider CLI may:
 - clone zero, one or many repositories;
@@ -217,7 +217,7 @@ Example:
       notes/
 ~~~
 
-Conclave does not automatically register, provision or own those repositories.
+Syntila does not automatically register, provision or own those repositories.
 
 ### 10. Git is the synchronization mechanism between Threads/machines
 
@@ -243,7 +243,7 @@ Coordination happens through normal Git mechanisms:
 - push;
 - pull requests.
 
-Conclave may recommend a dedicated branch per Thread, but the initial architecture does not require Conclave to create or manage branches.
+Syntila may recommend a dedicated branch per Thread, but the initial architecture does not require Syntila to create or manage branches.
 
 ### 11. Changing Workspace does not transfer files
 
@@ -252,7 +252,7 @@ The same logical Space/Thread path may exist on multiple physical machines, but 
 If a Thread changes Primary Workspace:
 - the destination Workspace resolves the same relative ID path;
 - if absent, it creates a new empty Thread directory;
-- Conclave does not copy local files automatically;
+- Syntila does not copy local files automatically;
 - the provider CLI/user reconstructs required state through Git, downloads or
   explicit instructions.
 
@@ -284,13 +284,13 @@ filesystem mutations. It is independent of Git repository ownership.
 
 ### 13. Git recovery remains local
 
-Because repository contents are provider CLI-managed, Conclave does not create
+Because repository contents are provider CLI-managed, Syntila does not create
 commits or restore Git state after failed Work. Git recovery remains with the
 user and provider CLI.
 
 Provider CLIs and users may use Git for those operations.
 
-Conclave may later observe Git repositories and report branch/HEAD/dirty metadata without turning repositories into user-managed Source objects.
+Syntila may later observe Git repositories and report branch/HEAD/dirty metadata without turning repositories into user-managed Source objects.
 
 ### 14. Lifecycle favors data preservation
 
@@ -320,7 +320,7 @@ This avoids destroying unpushed or otherwise valuable local work.
 
 ### Positive
 
-- simpler Conclave product and runtime;
+- simpler Syntila product and runtime;
 - no Source/repository-management UI required;
 - rename-safe by construction;
 - Workspace re-registration does not orphan local work;
@@ -331,7 +331,7 @@ This avoids destroying unpushed or otherwise valuable local work.
 
 ### Tradeoffs
 
-- Conclave does not initially know authoritative repository provenance;
+- Syntila does not initially know authoritative repository provenance;
 - automatic Git-state recovery is not provided;
 - provider CLIs/users are responsible for Git synchronization;
 - multiple Threads may duplicate repository clones;

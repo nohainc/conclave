@@ -5,7 +5,7 @@ import 'dart:io';
 import 'profile_lab_cloud_config.dart';
 
 const profileLabAudience = 'conclave.profile-lab.management';
-const profileLabClientName = 'Conclave Profile Lab';
+const profileLabClientName = 'Syntila Profile Lab';
 const profileLabAuthIntentContractVersion = '1.1';
 
 /// A verified, signed-in human session scoped exclusively to Profile Lab management.
@@ -295,11 +295,11 @@ class ProfileLabAuthClient {
           );
           return ProfileLabSession.fromJson(response);
         case 'denied':
-          throw StateError('This Conclave Profile Lab sign-in was denied.');
+          throw StateError('This Syntila Profile Lab sign-in was denied.');
         case 'expired':
         case 'claimed':
           throw StateError(
-            'This Conclave Profile Lab sign-in request is no longer available.',
+            'This Syntila Profile Lab sign-in request is no longer available.',
           );
         case 'pending':
           final waitUntil = DateTime.now().add(

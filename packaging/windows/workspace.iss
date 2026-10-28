@@ -9,20 +9,20 @@
 #endif
 [Setup]
 AppId={{77334D81-D586-4FF6-BC89-CB844B9A9D37}
-AppName=Conclave Workspace
+AppName=Syntila Workspace
 AppVersion={#AppVersion}
-AppPublisher=Conclave
+AppPublisher=Syntila
 VersionInfoVersion={#AppVersion}
-VersionInfoProductName=Conclave Workspace
-VersionInfoCompany=Conclave
-DefaultDirName={localappdata}\Programs\Conclave\Workspace
-DefaultGroupName=Conclave
+VersionInfoProductName=Syntila Workspace
+VersionInfoCompany=Syntila
+DefaultDirName={localappdata}\Programs\Syntila\Workspace
+DefaultGroupName=Syntila
 PrivilegesRequired=lowest
 MinVersion=10.0.17763
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
-OutputBaseFilename=Conclave-Workspace-{#AppVersion}-windows-x64-Setup
+OutputBaseFilename=Syntila-Workspace-{#AppVersion}-windows-x64-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -62,12 +62,12 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
   if WorkspaceRunning() then
-    Result := 'Stop the Workspace Service and close Conclave Workspace before installing. Your data will be preserved.';
+    Result := 'Stop the Workspace Service and close Syntila Workspace before installing. Your data will be preserved.';
 end;
 
 function InitializeUninstall(): Boolean;
 begin
   Result := not WorkspaceRunning();
   if not Result then
-    SuppressibleMsgBox('Stop the Workspace Service and close Conclave Workspace before uninstalling. Your data will be preserved.', mbError, MB_OK, IDOK);
+    SuppressibleMsgBox('Stop the Workspace Service and close Syntila Workspace before uninstalling. Your data will be preserved.', mbError, MB_OK, IDOK);
 end;

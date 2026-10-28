@@ -39,7 +39,7 @@ class AxHomeAnalyticsEvent {
 
 typedef AxHomeAnalyticsSink = void Function(AxHomeAnalyticsEvent event);
 
-/// Lightweight, product-discovery telemetry service for Conclave AX Home.
+/// Lightweight, product-discovery telemetry service for Syntila Home.
 ///
 /// Strictly measures discovery and navigation velocity ("Does Home help people get somewhere useful faster?"):
 /// - Home → Continue Thread

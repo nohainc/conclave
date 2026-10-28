@@ -2,7 +2,7 @@
 
 **Status:** Canonical architecture contract for V9 implementation
 **Date:** 2026-10-12
-**Scope:** Conclave Cloud, Profile Lab, Workspace, CLI Worker Engine, and the logical Worker catalog
+**Scope:** Syntila Cloud, Profile Lab, Workspace, CLI Worker Engine, and the logical Worker catalog
 
 This specification defines the V9 identity, publication, verification,
 activation, and execution-snapshot contract for Worker Profiles. It supersedes
@@ -14,7 +14,7 @@ requirements for V9 implementation work.
 
 ## 1. Core decision
 
-Conclave has exactly one centrally published Profile for each logical Worker.
+Syntila has exactly one centrally published Profile for each logical Worker.
 That Profile is the authoritative JSON definition of the Worker's behavior.
 
 ```text
@@ -22,11 +22,11 @@ Profile Lab operator
         |
         | validate, test, publish request
         v
-Conclave Cloud
+Syntila Cloud
         | one current published Profile + bounded history
         | atomic publication and authorization
         v
-Conclave Workspace / Service
+Syntila Workspace / Service
         | fetch -> verify -> cache -> activate
         v
 Generic CLI Worker Engine

@@ -1,7 +1,7 @@
 # Provider CLI fixtures
 
 These small fake CLIs exercise the signed ChatGPT and Gemini Tool Profiles
-through the generic Engine. They are test inputs, not Conclave Worker
+through the generic Engine. They are test inputs, not Syntila Worker
 executables or installable packages.
 
 `codex_profile_provider.dart` and `antigravity_profile_provider.dart` verify

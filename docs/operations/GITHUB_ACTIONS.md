@@ -1,6 +1,6 @@
 # GitHub Actions
 
-Conclave runs five workflows. Everything that gates a merge, a deploy, or a release goes through one aggregate check, `CI passed`.
+Syntila runs five workflows. Everything that gates a merge, a deploy, or a release goes through one aggregate check, `CI passed`.
 
 | Workflow | Runs when | Purpose |
 | --- | --- | --- |

@@ -8,19 +8,19 @@ resulting changes and evidence across multiple sessions.
 
 ## Vision
 
-Conclave helps people direct that work through persistent Spaces and
+Syntila helps people direct that work through persistent Spaces and
 Threads. People discuss intent, start constrained Workflows, observe
-execution, review changes and evidence, and decide what happens next. Conclave
+execution, review changes and evidence, and decide what happens next. Syntila
 keeps ownership of shared state and validates each transition.
 
-Conclave Cloud coordinates shared product state. Conclave Workspace provides
+Syntila Cloud coordinates shared product state. Syntila Workspace provides
 the local execution environment. Logical Workers run through a generic CLI
 Worker Engine and approved Tool Profiles, with provider CLI credentials staying
 on the user's machine.
 
 ## Quality philosophy
 
-Conclave does not guarantee AI correctness. It makes work inspectable and
+Syntila does not guarantee AI correctness. It makes work inspectable and
 acceptance evidence-based through:
 
 - explicit Thread state and execution policy;

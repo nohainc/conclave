@@ -1,5 +1,5 @@
 name: conclave_workspace
-description: Conclave AX Workspace headless service and CLI.
+description: Syntila Workspace headless service and CLI.
 publish_to: none
 version: 1.0.8
 

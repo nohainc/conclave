@@ -41,7 +41,7 @@ void main() {
       const input = '''
 Authorization: Bearer secret_bearer_token_xyz123
 API key detected: sk-12345678901234567890
-Conclave key: conclave_sec_998877665544332211
+Syntila key: conclave_sec_998877665544332211
 PEM Block:
 -----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7

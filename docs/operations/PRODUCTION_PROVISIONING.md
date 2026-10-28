@@ -1,7 +1,7 @@
 # Production provisioning
 
-This runbook provisions the Cloudflare resources required by Conclave AX and
-Conclave Cloud. It does not contain credentials. Run it from the
+This runbook provisions the Cloudflare resources required by Syntila and
+Syntila Cloud. It does not contain credentials. Run it from the
 repository root with a scoped Cloudflare API token and account ID.
 
 ## Resource names
@@ -100,7 +100,7 @@ Before production login:
 
 - configure Better Auth GitHub and Google OAuth credentials as Cloudflare
   Worker secrets;
-- create or provision Conclave Workspace memberships through the application;
+- create or provision Syntila Workspace memberships through the application;
 - configure production Cloud, Workspace runtime, and release-signing secrets;
 - rotate all values that were used for development or tests.
 

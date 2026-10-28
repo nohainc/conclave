@@ -37,7 +37,7 @@ const MAX_SECTION_CHARS = 24_000;
 const MAX_ATTACHMENT_COUNT = 10;
 const MAX_ATTACHMENT_CHARS = 12_000;
 const MAX_PROMPT_CHARS = 96_000;
-const TRUNCATION_MARKER = "\n[Content truncated by Conclave prompt limits.]";
+const TRUNCATION_MARKER = "\n[Content truncated by Syntila prompt limits.]";
 const stepLabels: Readonly<Record<StepKind, string>> = {
   chat: "Chat",
   research: "Research",
@@ -62,7 +62,7 @@ const profileInstructions: Readonly<
       "- Do not change Git state.",
       "- Do not install or update dependencies.",
       "- Do not perform implementation work.",
-      "If the user or supplied instructions ask you to modify or implement something, explain what should be changed but do not perform the change. Tell them to use Work mode if they want Conclave to perform the implementation.",
+      "If the user or supplied instructions ask you to modify or implement something, explain what should be changed but do not perform the change. Tell them to use Work mode if they want Syntila to perform the implementation.",
       "Return a clear natural-language response using Markdown where useful.",
     ].join("\n"),
   },

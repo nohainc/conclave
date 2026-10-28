@@ -1,6 +1,6 @@
 # Local and production environments
 
-Conclave has two environments. They never share a database, Cloud URL or Workspace state.
+Syntila has two environments. They never share a database, Cloud URL or Workspace state.
 
 | | Local | Production |
 |---|---|---|
@@ -10,7 +10,7 @@ Conclave has two environments. They never share a database, Cloud URL or Workspa
 | Workspace binary | `conclave-workspace-local` (built with `--local`) | `conclave-workspace` |
 | Workspace state (macOS) | `~/Library/Application Support/Conclave Local/Workspace/State` | `~/Library/Application Support/Conclave/Workspace/State` |
 
-The Workspace environment is chosen at build time (`CONCLAVE_WORKSPACE_ENVIRONMENT`). A local build uses the separate `Conclave Local` state folder and, when `workspace.nano` is created (`config init`, first run, or after `reset`), writes `cloud.url http://localhost:8787`. After that the service always connects to whatever `cloud.url` says, so check it with `conclave-workspace-local config show`. If the file was created by a different build, edit `cloud.url` or run `reset`.
+The Workspace environment is chosen at build time (`CONCLAVE_WORKSPACE_ENVIRONMENT`). A local build uses the separate `Syntila Local` state folder and, when `workspace.nano` is created (`config init`, first run, or after `reset`), writes `cloud.url http://localhost:8787`. After that the service always connects to whatever `cloud.url` says, so check it with `conclave-workspace-local config show`. If the file was created by a different build, edit `cloud.url` or run `reset`.
 
 ## Local stack
 

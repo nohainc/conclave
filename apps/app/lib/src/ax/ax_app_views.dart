@@ -562,7 +562,7 @@ extension _AxAppViews on _AxAppStateMixin {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _profileEditableValue(
-                        viewer?.displayName ?? 'Conclave user',
+                        viewer?.displayName ?? 'Syntila user',
                         tooltip: 'Edit name',
                         onEdit: _editDisplayName,
                         style: Theme.of(context)

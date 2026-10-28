@@ -1,4 +1,4 @@
-# Conclave Execution Activity V9
+# Syntila Execution Activity V9
 
 Phase 4 consolidates provider observations into one normalized activity stream.
 `assignment.activity` is the sole external activity transport. The legacy

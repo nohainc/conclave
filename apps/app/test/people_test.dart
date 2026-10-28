@@ -278,7 +278,7 @@ void main() {
         invitableSpaces: [
           AxPeopleSpace(
               id: 'C',
-              name: 'Conclave AX',
+              name: 'Syntila',
               permissions: AxSpacePermissions(chat: true),
               canInvite: true)
         ]);
@@ -297,7 +297,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(DropdownButtonFormField<String>).first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Conclave AX').last);
+    await tester.tap(find.text('Syntila').last);
     await tester.pumpAndSettle();
     source.afterInvite = () => source.rows = [
           const AxPerson(

@@ -780,8 +780,8 @@ class AxDesktopAuthIntentStatus {
   /// Resolve the application name from the server-controlled audience. The
   /// display label never trusts a caller-provided clientName.
   String? get applicationName => switch (audience) {
-        'conclave.desktop.management' => 'Conclave Workspace',
-        'conclave.profile-lab.management' => 'Conclave Profile Lab',
+        'conclave.desktop.management' => 'Syntila Workspace',
+        'conclave.profile-lab.management' => 'Syntila Profile Lab',
         _ => null,
       };
 

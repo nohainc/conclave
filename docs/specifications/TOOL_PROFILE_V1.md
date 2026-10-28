@@ -6,7 +6,7 @@
 
 ## 1. Purpose
 
-Tool Profile v1 is the declarative contract used by the generic Conclave CLI
+Tool Profile v1 is the declarative contract used by the generic Syntila CLI
 Worker Engine to integrate one approved local CLI tool.
 
 A Profile release is immutable, signed, independently versioned, provider/tool
@@ -94,7 +94,7 @@ the web app owns which workflows and Workers may be selected.
 
 The Antigravity starter uses `--mode plan` for Chat's provider-default policy
 and `--mode accept-edits` for Work's restricted policy. AGY does not expose a
-separate Conclave-style chat mode; plan mode is the closest provider mode and
+separate Syntila-style chat mode; plan mode is the closest provider mode and
 the web app remains responsible for workflow selection. See the official
 [sandbox contract](https://www.agy.dev/docs/sandbox/) and
 [execution modes](https://www.agy.dev/docs/cli/modes/).
@@ -226,7 +226,7 @@ retesting before publication. Engine compatibility bounds remain enforced.
   path bounds, expected executable name, and executable status again;
 - when `allowPathSearch` is true, Engine searches the inherited OS `PATH`
   independently of the environment keys passed through to the provider;
-- no Conclave-specific environment variable is required for discovery.
+- no Syntila-specific environment variable is required for discovery.
 
 Engine generic locations include the common user CLI directories under the OS
 home directory and standard system locations such as `/opt/homebrew/bin`,
@@ -279,7 +279,7 @@ Conceptual:
 
 Rules:
 - passthrough names must satisfy Engine environment policy;
-- reserved Conclave/Cloud secret variables cannot be requested;
+- reserved Syntila/Cloud secret variables cannot be requested;
 - complete parent environment inheritance is forbidden;
 - constant values are bounded;
 - approved placeholders may be used where the schema permits;
@@ -334,7 +334,7 @@ decision exhaustive. Values are never returned.
 
 ## 10. Live probe
 
-Live probe uses normal Profile execution with a Conclave-controlled test
+Live probe uses normal Profile execution with a Syntila-controlled test
 request and a hard 30-second timeout ceiling:
 
 ~~~text
@@ -640,7 +640,7 @@ policy changes as before.
 must include its own format in `compatibleFormatIds`; it may include an older
 format only when it declares that ID safe to resume. The Engine partitions
 session records by logical Worker, Profile definition, provider tool identity,
-and logical Conclave `sessionKey`. It resumes a stored provider ID only when
+and logical Syntila `sessionKey`. It resumes a stored provider ID only when
 the active Profile declares that stored format compatible. Otherwise it starts
 without the stored provider ID and replaces the local mapping after a
 successful new durable session. Profile release metadata never changes the
@@ -727,7 +727,7 @@ independently broaden local permissions.
 
 ## 22. Error mappings
 
-Profiles may map bounded provider evidence to stable Conclave issue codes.
+Profiles may map bounded provider evidence to stable Syntila issue codes.
 
 The approved `session_unavailable` stderr matcher identifies a missing or
 unavailable session/thread/conversation. Mapping it to `session_resume_failed`
@@ -876,18 +876,18 @@ Once a Profile release is published beyond draft:
 
 ### Draft testing lifecycle & signed-release invariant
 
-The profile testing workflow incorporates an iterative draft testing lifecycle inside **Conclave Profile Lab** (`apps/profile_lab`) without weakening production signed-release guarantees:
+The profile testing workflow incorporates an iterative draft testing lifecycle inside **Syntila Profile Lab** (`apps/profile_lab`) without weakening production signed-release guarantees:
 
 1. **Unsigned Local Draft Candidate (`LocalDraftProfileCandidate`):**
    - Represents a mutable, in-development draft profile stored locally in Profile Lab.
    - Evaluates `isSigned => false`.
    - Executed **strictly** within Profile Lab's isolated test sandbox via `PlatformProcessSupervisor`.
-   - **MUST NOT** enter Conclave Workspace's trusted profile store (`ToolProfileReleaseStore`), local worker registry, or Cloud scheduling.
+   - **MUST NOT** enter Syntila Workspace's trusted profile store (`ToolProfileReleaseStore`), local worker registry, or Cloud scheduling.
 
 2. **Admitted Cryptographic Release (`ToolProfileReleaseAdmission`):**
-   - Represents an immutable, published release signed by Conclave Cloud Ed25519 private key.
+   - Represents an immutable, published release signed by Syntila Cloud Ed25519 private key.
    - Evaluates `isSigned => true`.
-   - Conclave Workspace strictly requires `isSigned => true` for admission. Unsigned draft objects are rejected by static types and runtime verifiers (`WorkerTrustPolicy`).
+   - Syntila Workspace strictly requires `isSigned => true` for admission. Unsigned draft objects are rejected by static types and runtime verifiers (`WorkerTrustPolicy`).
 
 3. **Evidence-Bound Transition:**
    - The supported Profile Lab sandbox emits an execution-contract result after applicable Engine scenarios pass. Cloud checks the submitted contract's identity, canonical digest, reported version ranges, freshness, and scenario map, then stores it for lifecycle gating. This is an authenticated client assertion, not remote attestation that a local provider binary executed the scenarios; see the [evidence contract](TOOL_PROFILE_EVIDENCE_CONTRACT.md).
@@ -974,7 +974,7 @@ Profile mappings.
 
 
 When `model.executionOptions.modelSwitchSupported` is false, a different selected
-model requires a new native session bootstrapped from bounded canonical Conclave
+model requires a new native session bootstrapped from bounded canonical Syntila
 history. The generic Engine uses the Profile's existing first-invocation argument
 layout, without resume arguments; successful execution replaces the local native
 mapping while retaining the Conversation scope. Failure preserves the previous

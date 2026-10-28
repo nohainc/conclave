@@ -1,4 +1,4 @@
-# Conclave AX end-to-end fixture
+# Syntila end-to-end fixture
 
 This deliberately small repository contains a sample defect for execution-path
 acceptance tests:

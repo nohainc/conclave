@@ -20,7 +20,7 @@ store as ChatGPT. There is no Gemini executable or provider branch in Cloud.
 | Sessions | Codex thread ID | AGY `conversation_id`, resumed with `--conversation` |
 | Cancellation / timeout | Shared process supervision | Same; Profile additionally maps `--print-timeout` |
 | Chat execution | Cloud workflow policy | AGY uses `--mode plan` for the read-only Chat profile |
-| Authentication | Provider-owned local account | Provider-owned local account; no Conclave-managed credentials |
+| Authentication | Provider-owned local account | Provider-owned local account; no Syntila-managed credentials |
 
 Cloud's Worker inventory joins the matching published, non-revoked Profile
 release. It never uses an authoring template to widen execution options. Cloud
@@ -104,7 +104,7 @@ variant stays unavailable rather than being guessed.
 
 AGY documentation explicitly says workspace file writes can be auto-allowed in
 headless mode. `--sandbox` restricts terminal activity and `--mode plan` is not
-an independently verified filesystem boundary. Conclave therefore treats Chat
+an independently verified filesystem boundary. Syntila therefore treats Chat
 versus Work as a Cloud workflow decision, while the signed Profile selects the
 provider mode: Chat/provider-default uses `--mode plan`, and Work/restricted
 uses `--sandbox` with `--mode accept-edits`. No Worker or Profile capability

@@ -8,7 +8,7 @@
 > [WORKER_PROFILE_V9.md](WORKER_PROFILE_V9.md); its release channels, signed
 > Profile envelopes, and channel-based resolution are not active contracts.
 
-Conclave v1 initially provisions ChatGPT and Gemini as official Workers. The
+Syntila v1 initially provisions ChatGPT and Gemini as official Workers. The
 official Worker Catalog is Cloud-managed and dynamically delivered. Additional
 approved Worker Types can become available without a Workspace application
 release when they can be expressed through an existing Engine family and
@@ -265,7 +265,7 @@ Changing Profile release does not change the logical Worker ID.
 
 Provider authentication remains owned by the installed provider CLI.
 
-Conclave does not store/share provider subscription tokens in Cloud.
+Syntila does not store/share provider subscription tokens in Cloud.
 
 Examples:
 - ChatGPT/Codex uses its locally configured Codex authentication.
@@ -313,16 +313,16 @@ Only the first item is the product Worker identity.
 
 ## Dynamic catalog expansion & Profile Lab administration
 
-Architecture v8 permits a new approved logical Worker (such as `claude` or arbitrary CLI integrations) to be created and rolled out dynamically without modifying or redeploying Conclave Workspace or Conclave AX application source code.
+Architecture v8 permits a new approved logical Worker (such as `claude` or arbitrary CLI integrations) to be created and rolled out dynamically without modifying or redeploying Syntila Workspace or Syntila application source code.
 
 ### End-to-end creation flow:
-1. **Creation in Profile Lab:** An authorized maintainer launches Conclave Profile Lab (`apps/profile_lab`) and creates a new `worker_catalog` entry and `tool_profile_definitions` binding via Cloud admin REST endpoints (`POST /api/admin/workers/catalog` and `POST /api/admin/workers/definitions`).
+1. **Creation in Profile Lab:** An authorized maintainer launches Syntila Profile Lab (`apps/profile_lab`) and creates a new `worker_catalog` entry and `tool_profile_definitions` binding via Cloud admin REST endpoints (`POST /api/admin/workers/catalog` and `POST /api/admin/workers/definitions`).
 2. **Draft Authoring & Local Testing:** The maintainer authors an initial Draft Profile payload (`LocalDraftProfileCandidate`) and executes local passive probes, live probes, and diagnostic session tests directly against the provider CLI in Profile Lab's isolated test sandbox.
 3. **Evidence Capture & Signed Publication:** Profile Lab collects a verified `ToolProfileEvidenceContract` artifact and submits it to Cloud (`POST /api/admin/workers/definitions/:id/releases`). Cloud verifies evidence, signs the profile payload using Ed25519, and creates an immutable `tool_profile_releases` row.
 4. **Channel Promotion:** The maintainer promotes the release to the `testing` channel (`POST /api/admin/workers/definitions/:id/channels/testing`).
 5. **Dynamic Workspace & AX Discovery:**
    - **Workspace:** On next periodic catalog sync (`GET /api/workspace-runtime/workers/catalog`), Workspace dynamically discovers the new `WorkerDescriptor`, downloads the signed Tool Profile (`ToolProfileReleaseAdmission`), configures the local Worker slot, verifies local provider CLI readiness, and syncs safe readiness to Cloud.
-   - **Conclave AX:** On next catalog fetch (`GET /api/workers/catalog`), AX automatically renders the new Worker in Workspaces inventory, and Threads can bind task roles to it immediately.
+   - **Syntila:** On next catalog fetch (`GET /api/workers/catalog`), AX automatically renders the new Worker in Workspaces inventory, and Threads can bind task roles to it immediately.
    - **Execution:** When AX dispatches a Thread step to the new Worker, Cloud schedules the task to the ready Workspace, and Workspace executes it using the generic CLI Worker Engine (`engines/cli_worker`) configured by the signed Tool Profile.
 
 Zero lines of application source code in `apps/workspace` or `apps/app` contain hardcoded Worker Type identities.

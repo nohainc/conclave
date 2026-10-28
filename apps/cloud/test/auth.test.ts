@@ -144,7 +144,7 @@ describe("IdentityService", () => {
     });
   });
 
-  it("configures Better Auth against the clean Conclave core tables", () => {
+  it("configures Better Auth against the clean Syntila core tables", () => {
     const options = buildBetterAuthOptions({
       CONCLAVE_DB: {} as D1Database,
       CONCLAVE_ENVIRONMENT: "development",
@@ -263,13 +263,13 @@ describe("IdentityService", () => {
     );
     for (const message of messages) {
       expect(message).toMatchObject({
-        from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+        from: { email: "conclave@conclaveax.com", name: "Syntila" },
         to: "person@example.com",
       });
     }
     expect(messages.map((message) => message.subject)).toEqual([
-      "Verify your Conclave AX email address",
-      "Reset your Conclave AX password",
+      "Verify your Syntila email address",
+      "Reset your Syntila password",
     ]);
     expect(messages[0]?.text).toContain("https://app.conclave.test/verify");
     expect(messages[0]?.text).toContain("This link is valid for 60 minutes.");
@@ -288,9 +288,9 @@ describe("IdentityService", () => {
       from: { email: string; name: string };
     };
     expect(welcomeMessage).toMatchObject({
-      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+      from: { email: "conclave@conclaveax.com", name: "Syntila" },
       to: "person@example.com",
-      subject: "Welcome to Conclave AX — your account is ready",
+      subject: "Welcome to Syntila — your account is ready",
     });
     expect(welcomeMessage.text).toContain("Congratulations");
     expect(welcomeMessage.text).toContain("https://app.conclave.test");
@@ -344,8 +344,8 @@ describe("IdentityService", () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0]?.[0]).toMatchObject({
       to: "removed@example.com",
-      subject: "Your Conclave AX account was deleted",
-      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+      subject: "Your Syntila account was deleted",
+      from: { email: "conclave@conclaveax.com", name: "Syntila" },
       text: expect.stringContaining("Hi Ada"),
       html: expect.stringContaining("Account deleted"),
     });
@@ -456,7 +456,7 @@ describe("IdentityService", () => {
 
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1]?.[0]).toMatchObject({
-      from: { email: "vitalii@conclaveax.com", name: "Conclave AX" },
+      from: { email: "vitalii@conclaveax.com", name: "Syntila" },
     });
   });
 
@@ -805,7 +805,7 @@ describe("IdentityService", () => {
       expect(sentMessage.to).toBe("newuser@example.com");
       expect(sentMessage.from).toEqual({
         email: "conclave@conclaveax.com",
-        name: "Conclave AX",
+        name: "Syntila",
       });
       const stored = verifications.get("signup-otp:newuser@example.com");
       expect(stored).toBeDefined();

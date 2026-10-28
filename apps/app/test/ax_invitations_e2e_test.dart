@@ -145,7 +145,7 @@ void main() {
     const invite = AxSpaceInvitation(
       id: 'pinv-hero-1',
       spaceId: 'proj-collab',
-      spaceName: 'Conclave AX Development',
+      spaceName: 'Syntila Development',
       email: 'ulikossnokia@gmail.com',
       role: 'collaborator',
       status: 'pending',
@@ -173,10 +173,10 @@ void main() {
 
     // 1. Zero-space recipient with pending invitation renders NewUserHome with Join a Space priority card
     expect(find.byType(HomePage), findsOneWidget);
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     expect(find.text('Join a Space'), findsOneWidget);
     expect(find.text('You have 1 invitation.'), findsOneWidget);
-    expect(find.text('Conclave AX Development'), findsWidgets);
+    expect(find.text('Syntila Development'), findsWidgets);
     expect(find.text('Accept'), findsWidgets);
 
     // 2. Click Accept invitation
@@ -187,7 +187,7 @@ void main() {
     // 3. Verify instantaneous navigation into accepted Space without app reload
     expect(dataSource.acceptCalls, 1);
     expect(find.byType(NewThreadPage), findsOneWidget);
-    expect(find.text('Conclave AX Development'), findsWidgets);
+    expect(find.text('Syntila Development'), findsWidgets);
     expect(browser.current.path, '/spaces/proj-collab');
 
     // Drain toast timer

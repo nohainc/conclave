@@ -118,7 +118,7 @@ void main() {
       WorkspaceRegistrationErrorKind.workspaceOwnedByOtherAccount,
     );
     expect(
-        foreignOwner.toString(), contains('owned by another Conclave account'));
+        foreignOwner.toString(), contains('owned by another Syntila account'));
 
     final legacyConflict = WorkspaceRegistrationException.fromError(
       statusCode: 409,

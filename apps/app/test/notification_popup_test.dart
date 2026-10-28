@@ -66,7 +66,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(source.readIds, ['home-failed']);
     // Return Home through the brand button.
-    await tester.tap(find.byTooltip('Conclave AX — Home'));
+    await tester.tap(find.byTooltip('Syntila — Home'));
     await tester.pumpAndSettle();
     expect(find.text('Thread failed'), findsNothing);
     await tester.tap(find.byTooltip('Notifications'));

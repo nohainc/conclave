@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:conclave_workspace/worker_trust_policy.dart';
 
-const fixturePublisher = 'Conclave Test';
+const fixturePublisher = 'Syntila Test';
 const fixtureKeyId = 'test-ed25519-v1';
 final fixtureSeed =
     Uint8List.fromList(List<int>.generate(32, (index) => index));

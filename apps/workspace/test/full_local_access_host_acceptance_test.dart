@@ -139,7 +139,7 @@ Future<void> _runHostAcceptance(Map<String, Object?> evidence) async {
       git,
       [
         '-c',
-        'user.name=Conclave Host Acceptance',
+        'user.name=Syntila Host Acceptance',
         '-c',
         'user.email=host-acceptance@conclave.invalid',
         'commit',

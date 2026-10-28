@@ -1,4 +1,4 @@
-# Conclave AX Branding
+# Syntila Branding
 
 The approved logo supplied on October 7, 2026 is preserved byte-for-byte in
 `assets/branding/conclave_source.png` (1268 × 1240, transparent RGBA).

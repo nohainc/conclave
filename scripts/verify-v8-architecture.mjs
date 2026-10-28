@@ -62,7 +62,7 @@ const architectureProhibitions = [
   ["browser/Web AI Worker", "browser_or_web_ai_worker: true"],
   ["Interactive Connector", "interactive_connector: true"],
   [
-    "Conclave-managed provider credentials",
+    "Syntila-managed provider credentials",
     "conclave_managed_provider_credentials: true",
   ],
   ["agent-managed runtime", "agent_runtime: true"],

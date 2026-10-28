@@ -65,7 +65,7 @@ class SleepInhibitor {
             ? ['-i', '-w', '$pid']
             : [
                 '--what=sleep:idle',
-                '--who=Conclave Workspace',
+                '--who=Syntila Workspace',
                 '--why=Workspace service is running',
                 '--mode=block',
                 'sleep',

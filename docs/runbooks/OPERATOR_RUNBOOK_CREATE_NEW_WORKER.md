@@ -1,6 +1,6 @@
 # Operator Runbook: Creating a Worker and Initial Profile
 
-**Surface:** Conclave Profile Lab (`apps/profile_lab`)  
+**Surface:** Syntila Profile Lab (`apps/profile_lab`)  
 **Scope:** Register a logical Worker, create its first local Draft, test through the generic CLI Worker Engine, and sync the Cloud Draft.
 
 ## Prerequisites

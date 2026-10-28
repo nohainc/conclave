@@ -5,7 +5,7 @@
 The product hierarchy is now Space → Thread → Conversation. This is a domain
 rename across the existing v8 execution path, not a new execution architecture.
 Spaces replace Projects; Threads replace Workstreams. Logical Workers, signed
-Tool Profiles, Workspace ownership and Conclave-owned canonical history retain
+Tool Profiles, Workspace ownership and Syntila-owned canonical history retain
 their responsibilities.
 
 ## Phase audit

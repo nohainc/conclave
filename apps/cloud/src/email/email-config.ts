@@ -1,6 +1,6 @@
 const DEFAULT_PRIMARY_SENDER = "conclave@conclaveax.com";
 const DEFAULT_FALLBACK_SENDER = "vitalii@conclaveax.com";
-const DEFAULT_DISPLAY_NAME = "Conclave AX";
+const DEFAULT_DISPLAY_NAME = "Syntila";
 const LEGACY_SENDER = "auth@auth.earthuc.com";
 
 const EMAIL_ADDRESS_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

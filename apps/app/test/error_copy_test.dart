@@ -33,7 +33,7 @@ void main() {
             services: const DefaultPlatformServices(),
             dataSource: _FailedReadModels())));
     await tester.pumpAndSettle();
-    expect(find.text('Conclave AX could not load live data'), findsOneWidget);
+    expect(find.text('Syntila could not load live data'), findsOneWidget);
     await tester.tap(find.text('Copy error'));
     await tester.pump();
     expect(copied, contains('ambiguous column name: updated_at'));

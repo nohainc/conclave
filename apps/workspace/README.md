@@ -1,6 +1,6 @@
-# Conclave Workspace
+# Syntila Workspace
 
-Conclave Workspace is the machine-side execution and security runtime. It is a
+Syntila Workspace is the machine-side execution and security runtime. It is a
 headless Dart service plus a management CLI; there is no desktop GUI.
 
 It maintains the Cloud connection, owns application-managed runtime state,
@@ -8,10 +8,10 @@ resolves the user-owned local Work Root, and creates/resolves one stable
 working directory per Space shared by its Threads, manages logical Workers and
 local provider credentials, resolves current Tool Profiles, launches the generic
 CLI Worker Engine, enforces local permissions, supervises execution, and reports
-safe readiness/status back to Conclave Cloud.
+safe readiness/status back to Syntila Cloud.
 
 Spaces, Threads, Discuss, Work orchestration, Space membership and remote
-scheduling policy belong in Conclave AX. The authoritative ownership and
+scheduling policy belong in Syntila. The authoritative ownership and
 lifecycle contract is the
 [Workspace architecture](../../docs/architecture/WORKSPACE_ARCHITECTURE.md).
 
@@ -28,7 +28,7 @@ unified binary and by source-mode development; `bin/conclave_workspace_cli.dart`
 is the CLI-only entry point. The runtime is composed in
 `lib/workspace_runtime.dart`.
 
-Users install only Conclave Workspace. Workspace manages the bundled generic
+Users install only Syntila Workspace. Workspace manages the bundled generic
 Engine and current Tool Profiles; provider CLI software is installed separately
 by its provider.
 
@@ -91,9 +91,9 @@ for the headless architecture.
 ## Storage
 
 The Workspace is an execution environment, not a directory. Its private
-Application Data Root is resolved automatically under the Conclave application
+Application Data Root is resolved automatically under the Syntila application
 family root (`~/Library/Application Support/Conclave/` on macOS, XDG state on
-Linux, `%LOCALAPPDATA%\Conclave` on Windows). The user Work Root is separate and
+Linux, `%LOCALAPPDATA%\Syntila` on Windows). The user Work Root is separate and
 defaults to `~/Documents/Conclave`; Space Work Directories live beneath it and
 are configured through `folders.work` in `workspace.nano`. Space directory names
 are human-readable, while a private registry and marker bind each directory to
@@ -120,7 +120,7 @@ logging and Cloud reconciliation limits.
 The supported product-facing Worker slots are **ChatGPT**, powered by Codex CLI
 (`codex`), and **Gemini**, powered by Antigravity CLI (`agy`). Each Workspace has
 one local Worker slot for each logical Worker Type. The corresponding CLI owns
-sign-in, credential storage, and billing mode; Conclave checks whether the CLI
+sign-in, credential storage, and billing mode; Syntila checks whether the CLI
 can execute and does not request or store provider credentials. See
 [ADR-015](../../docs/decisions/ADR-015-first-party-worker-v1-contract.md).
 
@@ -162,7 +162,7 @@ This changes only the local display name.
 (`conclave-workspace`, the `workspace` symlink and `assets/engines/conclave-agent`)
 signed with the hardened-runtime entitlements in
 `packaging/macos/workspace-helper.entitlements`, plus
-`Conclave-Workspace-<version>-macos.zip`. There is no `.app` and no `SMAppService`;
+`Syntila-Workspace-<version>-macos.zip`. There is no `.app` and no `SMAppService`;
 `--install` copies the bundle to `~/.local/lib` and links the commands into
 `~/.local/bin`, and `conclave-workspace service install` writes the LaunchAgent.
 An Apple identity is optional for local use (ad-hoc signatures are used when none

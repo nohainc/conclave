@@ -328,7 +328,7 @@ class DesktopAuthClient {
   Future<DesktopAuthIntent> createIntent() async {
     final json =
         await _requestJson('POST', _api('/desktop-auth/intents'), body: {
-      'clientName': 'Conclave Workspace',
+      'clientName': 'Syntila Workspace',
       'contractVersion': desktopAuthIntentContractVersion,
     });
     final intent = DesktopAuthIntent.fromJson(json);
@@ -393,11 +393,11 @@ class DesktopAuthClient {
           );
           return DesktopHumanSession.fromJson(response);
         case 'denied':
-          throw StateError('This Conclave Workspace sign-in was denied.');
+          throw StateError('This Syntila Workspace sign-in was denied.');
         case 'expired':
         case 'claimed':
           throw StateError(
-              'This Conclave Workspace sign-in request is no longer available.');
+              'This Syntila Workspace sign-in request is no longer available.');
         case 'pending':
           final waitUntil = DateTime.now().add(Duration(
             milliseconds: intent.pollIntervalMs.clamp(1000, 10000),
@@ -411,7 +411,7 @@ class DesktopAuthClient {
       }
     }
     throw StateError(
-        'This Conclave Workspace sign-in request expired. Start sign-in again.');
+        'This Syntila Workspace sign-in request expired. Start sign-in again.');
   }
 
   Future<void> validateSession(DesktopHumanSession session) async {

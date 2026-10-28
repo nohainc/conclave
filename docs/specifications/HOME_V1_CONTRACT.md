@@ -1,15 +1,15 @@
-# Conclave AX Home Contract (v1)
+# Syntila Home Contract (v1)
 
 ## Overview
 
-The Conclave AX **Home** surface is the personal collaboration and attention hub for a user across all their Spaces.
+The Syntila **Home** surface is the personal collaboration and attention hub for a user across all their Spaces.
 
 Home is **not** a metrics dashboard of infrastructure counts (e.g. number of Spaces, connected Workspaces, ready Workers, or idle execution queues). Infrastructure and entity management reside in their dedicated navigation areas (Spaces, Workspaces, Workers, Runs).
 
 Instead, Home answers three fundamental questions for the user:
 1. **What needs my attention?**
 2. **What was I working on with my team and AI?**
-3. **What is new in Conclave and in my connected AI tools?**
+3. **What is new in Syntila and in my connected AI tools?**
 
 ```text
 HOME
@@ -21,7 +21,7 @@ HOME
 │    └── Recent relevant Threads with collaboration context
 │
 ├── 3. What's New
-│    └── Conclave product release updates and feature announcements
+│    └── Syntila product release updates and feature announcements
 │
 └── 4. AI Updates
      └── Model and capability updates relevant to available Workers
@@ -68,7 +68,7 @@ HOME
 ### 4. AI Updates
 - **Purpose:** Relevant model and capability changes for supported AI Workers.
 - **Relevance Filter:** Scoped strictly to the Workers connected or available to the user's spaces (e.g., ChatGPT model upgrades shown only to users with ChatGPT Workers enabled).
-- **Not Generic AI Industry News:** Covers only changes that directly affect what the user can execute inside Conclave AX (e.g., *"GPT-5 is now available in your ChatGPT Worker"* vs generic press announcements).
+- **Not Generic AI Industry News:** Covers only changes that directly affect what the user can execute inside Syntila (e.g., *"GPT-5 is now available in your ChatGPT Worker"* vs generic press announcements).
 
 ---
 
@@ -97,7 +97,7 @@ HomePage (Dispatcher)
     │           ├── (Priority if invitations.isNotEmpty) Join a Space card
     │           ├── ("or" divider if invitations.isNotEmpty)
     │           ├── Create your first Space card
-    │           ├── How Conclave AX works (value foundation cards)
+    │           ├── How Syntila works (value foundation cards)
     │           └── Advanced local execution (Want to use AI or tools running on your computer?)
     │
     └── isNewUser == false (spaces.isNotEmpty)
@@ -105,7 +105,7 @@ HomePage (Dispatcher)
                 ├── 1. For You (attention items + pending invitations)
                 ├── 2. Running Now (if active runs)
                 ├── 3. Continue Working (active threads)
-                ├── 4. What's New in Conclave (product updates)
+                ├── 4. What's New in Syntila (product updates)
                 └── 5. AI Updates (scoped model updates)
 ```
 
@@ -121,7 +121,7 @@ HomePage (Dispatcher)
           ↓
   Advanced local execution if required
   ```
-  - Dedicated header: `Welcome to Conclave AX` / `Bring your people and AI together.`
+  - Dedicated header: `Welcome to Syntila` / `Bring your people and AI together.`
   - **Priority Invitation Card** (when `invitations.isNotEmpty`):
     - Displays `Join a Space` with count badge (*"You have N invitations."*).
     - Inlines invitations with direct `Accept` and `Decline` actions.
@@ -129,15 +129,15 @@ HomePage (Dispatcher)
   - **Primary Space Action**:
     - `Create your first Space` (*"Start a shared space for people, conversations and AI."*).
     - `Create Space →` action button.
-  - **How Conclave AX works** value foundation:
+  - **How Syntila works** value foundation:
     - `People first`: Invite teammates, family, and collaborators to work together with shared AI.
     - `Private credentials`: Share AI access without exposing private keys.
     - `Shared conversations`: Maintain shared space context across members.
   - **Advanced Local Execution Path** (visually secondary at bottom):
     - Title: *"Want to use AI or tools running on your computer?"*
-    - Description: *"Connect Conclave Workspace to make local Workers available to your Spaces."*
+    - Description: *"Connect Syntila Workspace to make local Workers available to your Spaces."*
     - Action: `Connect Workspace →`
-  - Completely omits established dashboard sections (`For you`, `Continue working`, `What's new in Conclave`, `AI updates`).
+  - Completely omits established dashboard sections (`For you`, `Continue working`, `What's new in Syntila`, `AI updates`).
 
 ### 2. EstablishedUserHome
 - **Condition:** Active when `spaces.isNotEmpty`.
@@ -145,7 +145,7 @@ HomePage (Dispatcher)
   - **For You**: Prioritizes attention items, thread input requests, and pending invitations.
   - **Running Now**: Conditionally visible when active runs exist.
   - **Continue Working**: Clickable Thread cards with the last message and its sender.
-  - **What's New in Conclave**: Official product updates.
+  - **What's New in Syntila**: Official product updates.
   - **AI Updates**: Scoped AI capability news for available worker types.
   - Strictly omits onboarding cards and getting-started tutorials.
 
@@ -188,7 +188,7 @@ AxHomeAttentionItem
 
 Home is designed as a **pure projection** of already synchronized client-side state:
 - **No Reload Storms on Navigation:** Navigating `Space A → Home → Space B → Home` consumes shared in-memory stores (`store.spaces`, `store.workspaces`, `store.executionChanges`, `store.invitations`, `store.catalogs.workers`, `store.notifications`, `store.productUpdateReadStates`) via reactive `ListenableBuilder` and `AxQueryBuilder`.
-- **Zero Independent Server Reloads:** Opening Home never triggers independent HTTP fetch bursts for entities that are already managed by Conclave's background sync engine.
+- **Zero Independent Server Reloads:** Opening Home never triggers independent HTTP fetch bursts for entities that are already managed by Syntila's background sync engine.
 
 ---
 
@@ -249,7 +249,7 @@ AxUserProductUpdateState
 
 ## AI Capability Updates as Distinct Domain Model (Phase 16)
 
-AI and model capability changes are **distinct** from generic Conclave application releases. Model additions, deprecations, tool profile updates, and provider capability adjustments are modeled independently.
+AI and model capability changes are **distinct** from generic Syntila application releases. Model additions, deprecations, tool profile updates, and provider capability adjustments are modeled independently.
 
 ### 1. AiCapabilityUpdate Domain Model
 ```text
@@ -308,7 +308,7 @@ Home Surface
 
 ## Separation of Model Discovery from Editorial Updates (Phase 18)
 
-Not every capability change requires a human-authored news article. Conclave distinguishes:
+Not every capability change requires a human-authored news article. Syntila distinguishes:
 1. **System-Generated Discovery Updates (`AxAiCapabilityUpdateSource.systemGenerated`):**
    - Automatically synthesized when Tool Profile or provider model discovery detects newly available or retired models (e.g. `[A, B] -> [A, B, C]`).
    - Title: `New model available` / `Model retired`.
@@ -444,7 +444,7 @@ Archive Management Scope
 
 ## Integrated Invitation UX & Single Source of Truth (Phase 25)
 
-Invitations remain prominent across Conclave AX without maintaining disparate, disconnected invitation models or state pools.
+Invitations remain prominent across Syntila without maintaining disparate, disconnected invitation models or state pools.
 
 ```text
 AxSpaceInvitation Reactive Stream
@@ -534,7 +534,7 @@ Offline Home State
 
 ## Notifications Cleanup & Normalized Domain Terminology (Phase 29)
 
-Home and the Notification Center utilize a normalized domain model structured strictly around the five fundamental Conclave entities:
+Home and the Notification Center utilize a normalized domain model structured strictly around the five fundamental Syntila entities:
 
 ```text
 Normalized Notification Domain
@@ -592,7 +592,7 @@ When a user's access to a Space, Workspace, or Worker is revoked, the user must 
 
 ## Home API / Read Projection Model (Phase 31)
 
-To provide an efficient startup request for web and client applications while strictly preserving proper domain ownership, Conclave exposes a purpose-built read model endpoint:
+To provide an efficient startup request for web and client applications while strictly preserving proper domain ownership, Syntila exposes a purpose-built read model endpoint:
 
 ```http
 GET /api/home
@@ -676,7 +676,7 @@ The response aggregates five focused slices into a single unified JSON payload:
 
 ## Realtime Updates & Reactive Home Hydration (Phase 32)
 
-Home reacts dynamically and immediately to live Conclave transport and realtime domain events without requiring any manual user refresh:
+Home reacts dynamically and immediately to live Syntila transport and realtime domain events without requiring any manual user refresh:
 
 ```text
 Realtime Domain Event Flow
@@ -695,7 +695,7 @@ Realtime Domain Event Flow
 
 ## Canonical Scenario Testing Matrix (Phase 33)
 
-The Conclave AX Home surface is formally verified against a 20-point canonical test matrix ensuring complete domain correctness, lifecycle handling, authorization guarantees, and responsive rendering across all form factors:
+The Syntila Home surface is formally verified against a 20-point canonical test matrix ensuring complete domain correctness, lifecycle handling, authorization guarantees, and responsive rendering across all form factors:
 
 | # | Scenario | Expected Behavior | Verification Status |
 |---|---|---|---|
@@ -709,7 +709,7 @@ The Conclave AX Home surface is formally verified against a 20-point canonical t
 | 8 | **Work completes** | "Running now" card disappears; completion review item appears in "For You" with "Open →" | Verified (`home_page_test.dart`) |
 | 9 | **Recent Thread** | Active unarchived threads render in "Continue working" with space name, title, collaborators, and snippet | Verified (`home_page_test.dart`) |
 | 10 | **Archived Thread** | Archived threads (`archived: true`) and archived spaces are filtered out from "Continue working" | Verified (`home_page_test.dart`) |
-| 11 | **Product update** | Published `AxProductUpdate` renders in "What's new in Conclave" and increments unread badge count | Verified (`home_page_test.dart`) |
+| 11 | **Product update** | Published `AxProductUpdate` renders in "What's new in Syntila" and increments unread badge count | Verified (`home_page_test.dart`) |
 | 12 | **Old/read update** | Read updates (`AxUserProductUpdateState.isSeen / isRead`) do not show unread badge count | Verified (`home_page_test.dart`) |
 | 13 | **ChatGPT model added** | Relevant AI Update appears in "AI updates" when user has ChatGPT Worker configured | Verified (`home_page_test.dart`) |
 | 14 | **Gemini update without access** | Gemini update is hidden when user does not have access to Gemini Worker | Verified (`home_page_test.dart`) |

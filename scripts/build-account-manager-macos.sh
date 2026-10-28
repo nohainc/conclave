@@ -2,7 +2,7 @@
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 swift build --package-path "$repo_root/apps/account_manager" -c release
-app="$repo_root/apps/account_manager/build/Conclave Accounts.app"
+app="$repo_root/apps/account_manager/build/Syntila Accounts.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$repo_root/apps/account_manager/.build/release/AccountManager" "$app/Contents/MacOS/AccountManager"
 printf '%s\n' "$repo_root" > "$app/Contents/Resources/repository.txt"
@@ -12,7 +12,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>AccountManager</string>
 <key>CFBundleIdentifier</key><string>com.conclaveax.accounts</string>
-<key>CFBundleName</key><string>Conclave Accounts</string>
+<key>CFBundleName</key><string>Syntila Accounts</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>0.1.0</string>
 <key>CFBundleVersion</key><string>1</string>

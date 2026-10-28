@@ -21,7 +21,7 @@ validation. Runtime messages inside transport envelopes remain the existing
 | Provider CLI authentication state | Authenticate the locally installed provider CLI | That provider CLI only | The provider CLI's own local configuration or OS credential store |
 
 The human and runtime credentials are separate branded types and schemas. A
-provider CLI's authentication state is outside Conclave's credential model: it
+provider CLI's authentication state is outside Syntila's credential model: it
 has no Cloud or Workspace Runtime Protocol schema and must never appear in a
 Cloud request, inventory projection, desktop human-auth response, or runtime
 event. No credential is a substitute for another.

@@ -352,7 +352,7 @@ class AllowedFolderRegistry {
             'protected',
             protected == workRoot.path
                 ? 'Work Root folders are already available to their Spaces.'
-                : 'Conclave application data cannot be allowed.');
+                : 'Syntila application data cannot be allowed.');
       }
     }
   }

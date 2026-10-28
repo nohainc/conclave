@@ -1,6 +1,6 @@
 # Diagnostic Events v1
 
-Conclave execution diagnostics use one bounded, provider-neutral event shape
+Syntila execution diagnostics use one bounded, provider-neutral event shape
 across AX, Cloud, the Workspace service, the CLI Worker Engine, Tool Profiles,
 and provider adapters. The event is evidence for correlation and triage; it is
 not conversational output and must never contain user prompts or provider

@@ -4,7 +4,7 @@
 
 ## Context
 
-Conclave collaboration and local execution have different security boundaries.
+Syntila collaboration and local execution have different security boundaries.
 Sharing a local execution environment as the collaboration boundary can grant
 more machine access than a person needs to contribute to a Space.
 

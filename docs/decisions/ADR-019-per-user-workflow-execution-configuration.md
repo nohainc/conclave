@@ -5,7 +5,7 @@
 **Supersedes:** ADR-016's Thread execution bindings and fallback policy. Workspace
 readiness, Space grants, scheduling permissions, and local safety ownership remain.
 
-Conclave owns fixed, versioned Workflow definitions. Users configure how those
+Syntila owns fixed, versioned Workflow definitions. Users configure how those
 Workflows execute globally, independent of Space and Thread selection.
 
 ```text

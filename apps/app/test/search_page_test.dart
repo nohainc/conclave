@@ -17,7 +17,7 @@ void main() {
         spaces: [
           const AxSpace(
             id: 'proj-1',
-            name: 'Conclave Core',
+            name: 'Syntila Core',
             branch: 'main',
             lastActivity: 'now',
             threads: [

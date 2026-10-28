@@ -1,4 +1,4 @@
-# Conclave AX
+# Syntila
 
 **AI execution and orchestration ecosystem where models and AI tools plan,
 delegate, build, review, test, and iterate toward verified outcomes.**
@@ -10,9 +10,9 @@ Primary domain: **conclaveax.com**
 Architecture v8 is the active implementation target.
 
 ~~~text
-Conclave AX
--> Conclave Cloud
--> Conclave Workspace
+Syntila
+-> Syntila Cloud
+-> Syntila Workspace
 -> generic CLI Worker Engine
 -> signed Tool Profile
 -> provider CLI
@@ -30,13 +30,13 @@ are implementation details shown only in Advanced Diagnostics.
 
 ## Applications
 
-- **Conclave AX** — Flutter Web application for Spaces, Threads, Chat
+- **Syntila** — Flutter Web application for Spaces, Threads, Chat
   (discussion) and Work.
-- **Conclave Cloud** — TypeScript/Cloudflare collaboration, scheduling,
+- **Syntila Cloud** — TypeScript/Cloudflare collaboration, scheduling,
   Workspace Gateway, Worker catalog and Profile release control plane.
-- **Conclave Workspace** — headless Dart execution/security service and
+- **Syntila Workspace** — headless Dart execution/security service and
   management CLI (`conclave-workspace`) for macOS, Linux and Windows.
-- **Conclave Profile Lab** — internal macOS Flutter/Dart engineering desktop
+- **Syntila Profile Lab** — internal macOS Flutter/Dart engineering desktop
   application for Worker and Tool Profile authoring, testing, and lifecycle
   management.
 - **CLI Worker Engine** — one standalone Dart console executable used for
@@ -104,7 +104,7 @@ Neither mode runs migrations or deploys production code.
 
 ## Work v1
 
-Conclave defines fixed canonical Steps:
+Syntila defines fixed canonical Steps:
 
 ~~~text
 Research
@@ -125,13 +125,13 @@ Full Cycle
 ~~~
 
 Threads bind those Steps to logical Workers. Users do not build arbitrary
-Workflow graphs or edit Conclave's internal orchestration prompts in v1.
+Workflow graphs or edit Syntila's internal orchestration prompts in v1.
 
 ## Technology stack
 
-- Flutter + Dart for AX; pure Dart (no Flutter) for the Conclave Workspace
+- Flutter + Dart for AX; pure Dart (no Flutter) for the Syntila Workspace
   service and CLI.
-- TypeScript for Conclave Cloud.
+- TypeScript for Syntila Cloud.
 - Dart AOT for the generic CLI Worker Engine.
 - Cloudflare Workers + Workflows + Durable Objects.
 - Cloudflare D1 for structured state.
@@ -173,14 +173,14 @@ The Engine:
 
 Profiles cannot disable Engine/Workspace security invariants.
 
-Provider secrets never enter Conclave Cloud.
+Provider secrets never enter Syntila Cloud.
 
 ## Read first
 
 - [Architecture](ARCHITECTURE.md)
 - [Architecture v8](docs/architecture/ARCHITECTURE_V8.md)
 - [ADR-018: Generic CLI Worker Engine and Tool Profiles](docs/decisions/ADR-018-generic-cli-worker-engine-and-tool-profiles.md)
-- [ADR-019: Conclave Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
+- [ADR-019: Syntila Profile Lab Architecture Contract](docs/decisions/ADR-019-conclave-profile-lab.md)
 - [Tool Profile v1](docs/specifications/TOOL_PROFILE_V1.md)
 - [Architecture v8 implementation plan](docs/roadmaps/ARCHITECTURE_V8_IMPLEMENTATION.md)
 - [Work v1 contract](docs/specifications/WORK_V1_CONTRACT.md)

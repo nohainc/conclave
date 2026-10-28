@@ -202,7 +202,7 @@ public localhost API.
 
 ## Filesystem ownership
 
-Conclave-owned runtime state is under:
+Syntila-owned runtime state is under:
 
 ```text
 ~/Library/Application Support/Conclave/Workspace/
@@ -471,9 +471,9 @@ Service or `0600` file credential store; see the
   with an existing legacy `~/.conclave-workspace` root kept in place.
 - Windows: per-user logon task in the interactive session (not a Service
   Control Manager service); named-pipe IPC restricted to the owning user;
-  DPAPI secret store; `%LOCALAPPDATA%\Conclave\Workspace`.
+  DPAPI secret store; `%LOCALAPPDATA%\Syntila\Workspace`.
 - On every platform the Service, Engine, and provider CLIs run as the same
-  user that owns the CLI logins; Conclave never manages provider credentials.
+  user that owns the CLI logins; Syntila never manages provider credentials.
 - Headless operation is primary. Hosts are configured through `workspace.nano`
   and managed through the `conclave-workspace` client over authenticated local
   IPC. Existing Cloud email/password sign-in works in the terminal without a

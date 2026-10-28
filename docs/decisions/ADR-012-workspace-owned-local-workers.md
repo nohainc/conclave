@@ -4,13 +4,13 @@
 
 ## Context
 
-Conclave needs a stable boundary between Cloud scheduling and machine-local execution. Provider credentials, filesystem access, installed tools, and process lifecycle belong to the machine that performs the work.
+Syntila needs a stable boundary between Cloud scheduling and machine-local execution. Provider credentials, filesystem access, installed tools, and process lifecycle belong to the machine that performs the work.
 
 ## Decision
 
 ### Workspace owns local execution
 
-Conclave Workspace is the persistent machine runtime and security supervisor. It owns the Work Root, local Worker readiness and activation, local permissions, Profile admission/cache, Engine process supervision, cancellation, logs, and diagnostics.
+Syntila Workspace is the persistent machine runtime and security supervisor. It owns the Work Root, local Worker readiness and activation, local permissions, Profile admission/cache, Engine process supervision, cancellation, logs, and diagnostics.
 
 A Workspace is a Cloud resource with one owner. A local Worker belongs to exactly one Workspace and is synchronized to Cloud only as safe inventory and readiness evidence.
 

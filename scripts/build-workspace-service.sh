@@ -18,7 +18,7 @@ for arg in "$@"; do
       cat <<'USAGE'
 Usage: scripts/build-workspace-service.sh [--local|--production]
 
-Builds the unified Conclave Workspace service and bundled CLI Worker Engine.
+Builds the unified Syntila Workspace service and bundled CLI Worker Engine.
 
 Options:
   --local       Build for local Cloud development (http://localhost:8787).
@@ -78,7 +78,7 @@ dart compile exe ${TARGET_FLAGS[@]+"${TARGET_FLAGS[@]}"} \
   --packages="$WORKSPACE_DIR/.dart_tool/package_config.json" \
   bin/conclave_workspace.dart \
   -o "$OUT_DIR/$OUTPUT_NAME"
-echo "Built unified Conclave Workspace at $OUT_DIR/$OUTPUT_NAME"
+echo "Built unified Syntila Workspace at $OUT_DIR/$OUTPUT_NAME"
 if [[ "${CONCLAVE_BUILD_TARGET_OS:-}" == linux ]]; then
   node "$ROOT/scripts/workspace-build-manifest.mjs" record "$OUT_DIR" "$VERSION"
 fi

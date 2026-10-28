@@ -24,7 +24,7 @@ describe("Recipient Invitations API", () => {
     // Seed space owned by vitalii
     sqlite.exec(`
       INSERT INTO spaces (id, name, owner_user_id, created_at, updated_at)
-      VALUES ('proj-1', 'Conclave AX Development', 'user-vitalii', '${now}', '${now}');
+      VALUES ('proj-1', 'Syntila Development', 'user-vitalii', '${now}', '${now}');
       INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
       VALUES ('pm-1', 'proj-1', 'user-vitalii', 'owner', '${now}', '${now}');
     `);
@@ -123,7 +123,7 @@ describe("Recipient Invitations API", () => {
       expect(body.invitations[0]).toMatchObject({
         id: "pinv-1",
         spaceId: "proj-1",
-        spaceName: "Conclave AX Development",
+        spaceName: "Syntila Development",
         email: "ulikossnokia@gmail.com",
         role: "collaborator",
         status: "pending",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Builds the pure-Dart Conclave Workspace for macOS: the unified
+# Builds the pure-Dart Syntila Workspace for macOS: the unified
 # `conclave-workspace` binary (CLI + service, also reachable as `workspace`)
 # and the generic CLI Worker Engine (`conclave-agent`). There is no .app: the
 # service is a user LaunchAgent that the binary itself registers with
@@ -31,7 +31,7 @@ if [[ "$BUILD_ALL" == "1" ]]; then
 fi
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Conclave Workspace macOS builds must run on macOS." >&2
+  echo "Syntila Workspace macOS builds must run on macOS." >&2
   exit 1
 fi
 
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $(basename "$0") [options]"
       echo ""
-      echo "Builds the Conclave Workspace service/CLI and Worker Engine for macOS."
+      echo "Builds the Syntila Workspace service/CLI and Worker Engine for macOS."
       echo "Run scripts/test-workspace-macos.sh separately for analysis and tests."
       echo ""
       echo "Options:"
@@ -129,12 +129,12 @@ fi
 
 VERSION="${CONCLAVE_WORKSPACE_VERSION:-$(awk '/^version:/ {print $2; exit}' "$WORKSPACE_DIR/pubspec.yaml")}"
 if [[ -z "$VERSION" ]]; then
-  echo "Could not determine Conclave Workspace version." >&2
+  echo "Could not determine Syntila Workspace version." >&2
   exit 1
 fi
 
 PUBLIC_RELEASE_ROOTS="$(node "$ROOT/scripts/resolve-build-release-trust.mjs")"
-echo "Building Conclave Workspace $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
+echo "Building Syntila Workspace $VERSION for macOS (mode: $MODE, environment: $TARGET_ENV)"
 cd "$WORKSPACE_DIR"
 if [[ "$PREPARED" == "1" ]]; then
   [[ -f .dart_tool/package_config.json && ( -x assets/engines/conclave-agent || -x assets/engines/conclave_cli_worker_engine ) ]] || {
@@ -180,7 +180,7 @@ codesign "${SIGN_ARGS[@]}" --identifier "conclave-workspace" "$BUNDLE/conclave-w
 
 bash "$ROOT/scripts/verify-workspace-service-bundle.sh" "$BUNDLE"
 
-ZIP="$DIST_DIR/Conclave-Workspace-$VERSION-macos$ZIP_SUFFIX.zip"
+ZIP="$DIST_DIR/Syntila-Workspace-$VERSION-macos$ZIP_SUFFIX.zip"
 ditto -c -k --sequesterRsrc --keepParent "$BUNDLE" "$ZIP"
 
 if [[ -n "${CONCLAVE_MACOS_NOTARY_PROFILE:-}" ]]; then

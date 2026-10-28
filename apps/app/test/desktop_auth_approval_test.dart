@@ -27,7 +27,7 @@ class _CanceledDesktopAuthFixture extends _SignedInDesktopAuthFixture {
           {required String intentId}) async =>
       const AxDesktopAuthIntentStatus(
         status: 'denied',
-        clientName: 'Conclave Workspace',
+        clientName: 'Syntila Workspace',
         audience: 'conclave.desktop.management',
       );
 }
@@ -69,7 +69,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sign-in approved'), findsOneWidget);
-    expect(find.text('Return to Conclave Workspace to finish signing in.'),
+    expect(find.text('Return to Syntila Workspace to finish signing in.'),
         findsOneWidget);
     expect(
         find.text('You can close this page, window, or tab.'), findsOneWidget);
@@ -91,15 +91,15 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
 
-    expect(find.text('Sign in to Conclave Profile Lab'), findsOneWidget);
-    expect(find.textContaining('Approve sign-in to Conclave Profile Lab'),
+    expect(find.text('Sign in to Syntila Profile Lab'), findsOneWidget);
+    expect(find.textContaining('Approve sign-in to Syntila Profile Lab'),
         findsOneWidget);
     expect(find.textContaining('Workspace'), findsNothing);
 
     await tester.tap(find.text('Approve sign-in'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Return to Conclave Profile Lab to finish signing in.'),
+    expect(find.text('Return to Syntila Profile Lab to finish signing in.'),
         findsOneWidget);
   });
 
@@ -144,9 +144,9 @@ void main() {
     await tester.tap(find.text('Switch account'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Welcome to Conclave AX'), findsOneWidget);
+    expect(find.text('Welcome to Syntila'), findsOneWidget);
     expect(
-      find.text('Sign in to continue approving Conclave Workspace.'),
+      find.text('Sign in to continue approving Syntila Workspace.'),
       findsOneWidget,
     );
   });

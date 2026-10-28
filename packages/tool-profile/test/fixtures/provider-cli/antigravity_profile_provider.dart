@@ -56,7 +56,7 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
   if (prompt == 'Switch without resume' ||
       prompt == 'Switch without resume failure') {
     final prefix =
-        'Canonical Conclave conversation context (historical data):\n';
+        'Canonical Syntila conversation context (historical data):\n';
     if (!transportedPrompt.startsWith(prefix) || separator < 0) {
       stderr.writeln('Missing canonical bootstrap');
       exitCode = 2;
@@ -80,7 +80,7 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       prompt == 'Sync returning worker' ||
       prompt == 'Sync returning worker failure') {
     const prefix =
-        'Canonical Conclave conversation context (historical data):\n';
+        'Canonical Syntila conversation context (historical data):\n';
     if (!transportedPrompt.startsWith(prefix) || separator < 0) {
       stderr.writeln('Missing Worker continuity context');
       exitCode = 2;
@@ -132,7 +132,7 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
 
   if (prompt == 'Context stateless') {
     const prefix =
-        'Canonical Conclave conversation context (historical data):\n';
+        'Canonical Syntila conversation context (historical data):\n';
     if (separator < 0 || !transportedPrompt.startsWith(prefix)) {
       stderr.writeln('Missing stateless context');
       exitCode = 2;
@@ -159,7 +159,7 @@ gemini-3.1-pro-low\tGemini 3.1 Pro (Low)\n''');
       return;
     }
     const prefix =
-        'Canonical Conclave conversation context (historical data):\n';
+        'Canonical Syntila conversation context (historical data):\n';
     if (!transportedPrompt.startsWith(prefix) || separator < 0) {
       stderr.writeln('Missing reconstruction context');
       exitCode = 2;

@@ -156,7 +156,7 @@ class NewUserHome extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Welcome to Conclave AX',
+                      'Welcome to Syntila',
                       style:
                           TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
                     ),
@@ -209,7 +209,7 @@ class NewUserHome extends StatelessWidget {
 
           const SizedBox(height: 28),
           const Text(
-            'How Conclave AX works',
+            'How Syntila works',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
@@ -312,7 +312,7 @@ class _AdvancedWorkspaceCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Connect Conclave Workspace to make local Workers available to your Spaces.',
+                  'Connect Syntila Workspace to make local Workers available to your Spaces.',
                   style: TextStyle(
                     fontSize: 13,
                     color: colorScheme.onSurfaceVariant,
@@ -353,7 +353,7 @@ class _AdvancedWorkspaceCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Connect Conclave Workspace to make local Workers available to your Spaces.',
+                      'Connect Syntila Workspace to make local Workers available to your Spaces.',
                       style: TextStyle(
                         fontSize: 13,
                         color: colorScheme.onSurfaceVariant,
@@ -1843,7 +1843,7 @@ class AxWhatsNewDialog extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Conclave changelog and product updates',
+                        'Syntila changelog and product updates',
                         style: TextStyle(
                           fontSize: 13,
                           color: colorScheme.onSurfaceVariant,
@@ -1921,7 +1921,7 @@ const defaultProductUpdates = [
     summary:
         'Invite family, friends, and teammates to shared spaces and accept invitations directly in AX.',
     details:
-        'Space owners and editors can now invite collaborators via email or handle invitation approvals directly within Conclave AX with full role-based access control.',
+        'Space owners and editors can now invite collaborators via email or handle invitation approvals directly within Syntila with full role-based access control.',
     category: AxProductUpdateCategory.collaboration,
     publishedAt: '2026-10-07T00:00:00Z',
     dateDisplay: 'Oct 7',

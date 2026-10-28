@@ -1,6 +1,6 @@
 # AX Markdown Selection Validation
 
-Conclave AX renders authored and Worker Markdown through the shared
+Syntila renders authored and Worker Markdown through the shared
 `ConclaveMarkdownBody` widget. Each message owns one Flutter `SelectionArea`;
 `MarkdownBody.selectable` remains disabled so paragraphs, lists, tables, and
 the custom syntax-highlighted code block participate in the same selection
@@ -40,14 +40,14 @@ for iteration; release mode is required to check the production web rendering
 path.
 
 ```bash
-cd /Users/vitaliinoha/Documents/Conclave/Conclave
+cd /Users/vitaliinoha/Documents/Conclave/Syntila
 ./scripts/start-local.sh
 ```
 
 For a release-mode browser check:
 
 ```bash
-cd /Users/vitaliinoha/Documents/Conclave/Conclave
+cd /Users/vitaliinoha/Documents/Conclave/Syntila
 ./scripts/start-local.sh --web-release
 ```
 

@@ -5,7 +5,7 @@ import 'workspace_registration_models.dart';
 
 /// Owns the on-disk layout for the Workspace desktop runtime.
 ///
-/// The application data root is private Conclave state. User-owned files are
+/// The application data root is private Syntila state. User-owned files are
 /// resolved separately by [WorkRootResolver] and never live below this tree.
 class WorkspacePaths {
   WorkspacePaths(this.stateDirectory, {PlatformRuntime? platform})

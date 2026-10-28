@@ -28,7 +28,7 @@ It installs binaries under `/usr/lib/conclave-workspace`, and symlinks under
 
 ```bash
 conclave-workspace setup
-# Enter your existing Conclave Cloud email and password at the prompts.
+# Enter your existing Syntila Cloud email and password at the prompts.
 # Password input is hidden. Never pass it as a command-line argument.
 conclave-workspace status
 sudo loginctl enable-linger "$USER"

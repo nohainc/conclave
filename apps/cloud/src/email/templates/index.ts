@@ -125,7 +125,7 @@ function renderVerifyEmail(input: VerifyEmailInput): RenderedEmailContent {
     input.expiresInMinutes,
     "expiresInMinutes",
   );
-  const subject = "Verify your Conclave AX email address";
+  const subject = "Verify your Syntila email address";
   return {
     templateId: "auth.verify-email.v1",
     subject,
@@ -135,12 +135,12 @@ function renderVerifyEmail(input: VerifyEmailInput): RenderedEmailContent {
       variant: "action-required",
       eyebrow: "Account security",
       title: "Verify your email address",
-      intro: `Welcome to Conclave AX, ${recipientName}. Confirm your email address to finish setting up your account.`,
+      intro: `Welcome to Syntila, ${recipientName}. Confirm your email address to finish setting up your account.`,
       bodyHtml: validityHtml(expiration),
       bodyText: `Confirm your email address to finish setting up your account.\n\n${validityText(expiration)}`,
       action: { label: "Verify email address", url: verificationUrl },
       securityNotice:
-        "If you did not create a Conclave AX account, you can safely ignore this email.",
+        "If you did not create a Syntila account, you can safely ignore this email.",
     }),
   };
 }
@@ -159,7 +159,7 @@ function renderVerifyEmailCode(
   );
   const emailChange = input.purpose === "email-change";
   const codeValidityText = `This code is valid for ${expiration} ${expiration === 1 ? "minute" : "minutes"}.`;
-  const subject = `${verificationCode} is your Conclave AX verification code`;
+  const subject = `${verificationCode} is your Syntila verification code`;
   return {
     templateId: "auth.verify-email-code.v1",
     subject,
@@ -172,12 +172,12 @@ function renderVerifyEmailCode(
         ? "Confirm your email change"
         : "Verify your email address",
       intro: emailChange
-        ? `Hi ${recipientName}. Enter the one-time verification code below to confirm changing the email address on your Conclave AX account.`
-        : `Welcome to Conclave AX, ${recipientName}. Enter the one-time verification code below to finish creating your account.`,
+        ? `Hi ${recipientName}. Enter the one-time verification code below to confirm changing the email address on your Syntila account.`
+        : `Welcome to Syntila, ${recipientName}. Enter the one-time verification code below to finish creating your account.`,
       bodyHtml: `<div style="margin:24px 0 8px;padding:18px 24px;background:#f4f1ff;border:1px solid #dcd5ff;border-radius:10px;text-align:center;font-family:Courier,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#172033;">${escapeHtml(verificationCode)}</div><p style="margin:16px 0 0;color:#435066;font-size:15px;line-height:24px;">${escapeHtml(codeValidityText)}</p>`,
       bodyText: `Enter the one-time verification code below to ${emailChange ? "confirm your email change" : "finish creating your account"}:\n\n${verificationCode}\n\n${codeValidityText}`,
       securityNotice:
-        "If you did not request a Conclave AX verification code, you can safely ignore this email.",
+        "If you did not request a Syntila verification code, you can safely ignore this email.",
     }),
   };
 }
@@ -189,7 +189,7 @@ function renderResetPassword(input: ResetPasswordInput): RenderedEmailContent {
     input.expiresInMinutes,
     "expiresInMinutes",
   );
-  const subject = "Reset your Conclave AX password";
+  const subject = "Reset your Syntila password";
   return {
     templateId: "auth.reset-password.v1",
     subject,
@@ -199,9 +199,9 @@ function renderResetPassword(input: ResetPasswordInput): RenderedEmailContent {
       variant: "action-required",
       eyebrow: "Account security",
       title: "Reset your password",
-      intro: `Hi ${recipientName}, use the button below to choose a new Conclave AX password.`,
+      intro: `Hi ${recipientName}, use the button below to choose a new Syntila password.`,
       bodyHtml: validityHtml(expiration),
-      bodyText: `Use the button below to choose a new Conclave AX password.\n\n${validityText(expiration)}`,
+      bodyText: `Use the button below to choose a new Syntila password.\n\n${validityText(expiration)}`,
       action: { label: "Reset password", url: resetUrl },
       securityNotice:
         "If you did not request a password reset, you can safely ignore this email.",
@@ -215,7 +215,7 @@ function renderPasswordChanged(
   const recipientName = safeName(input.recipientName);
   const changedAt = dateLabel(input.changedAt);
   const detail = changedAt ? ` at ${escapeHtml(changedAt)}` : "";
-  const subject = "Your Conclave AX password was changed";
+  const subject = "Your Syntila password was changed";
   return {
     templateId: "auth.password-changed.v1",
     subject,
@@ -225,10 +225,10 @@ function renderPasswordChanged(
       variant: "security-notice",
       eyebrow: "Account security",
       title: "Password changed",
-      intro: `Hi ${recipientName}, your Conclave AX password was changed${detail}.`,
+      intro: `Hi ${recipientName}, your Syntila password was changed${detail}.`,
       bodyHtml:
         '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">If you did not make this change, secure your account immediately by signing in and changing your password again.</p>',
-      bodyText: `Your Conclave AX password was changed${changedAt ? ` at ${changedAt}` : ""}. If you did not make this change, secure your account immediately.`,
+      bodyText: `Your Syntila password was changed${changedAt ? ` at ${changedAt}` : ""}. If you did not make this change, secure your account immediately.`,
       securityNotice: "This is an account-security notification.",
     }),
   };
@@ -244,7 +244,7 @@ function renderConfirmEmailChange(
     input.expiresInMinutes,
     "expiresInMinutes",
   );
-  const subject = "Confirm your Conclave AX email change";
+  const subject = "Confirm your Syntila email change";
   return {
     templateId: "auth.confirm-email-change.v1",
     subject,
@@ -254,9 +254,9 @@ function renderConfirmEmailChange(
       variant: "action-required",
       eyebrow: "Account security",
       title: "Confirm your email change",
-      intro: `Hi ${recipientName}, confirm changing your Conclave AX email address to ${newEmail}.`,
+      intro: `Hi ${recipientName}, confirm changing your Syntila email address to ${newEmail}.`,
       bodyHtml: validityHtml(expiration),
-      bodyText: `Confirm changing your Conclave AX email address to ${newEmail}.\n\n${validityText(expiration)}`,
+      bodyText: `Confirm changing your Syntila email address to ${newEmail}.\n\n${validityText(expiration)}`,
       action: { label: "Confirm email change", url: confirmationUrl },
       securityNotice:
         "If you did not request this change, you can safely ignore this email and keep your current address.",
@@ -269,7 +269,7 @@ function renderEmailChanged(input: EmailChangedInput): RenderedEmailContent {
   const newEmail = safeEmail(input.newEmail, "newEmail");
   const changedAt = dateLabel(input.changedAt);
   const detail = changedAt ? ` at ${escapeHtml(changedAt)}` : "";
-  const subject = "Your Conclave AX email address was changed";
+  const subject = "Your Syntila email address was changed";
   return {
     templateId: "auth.email-changed.v1",
     subject,
@@ -279,10 +279,10 @@ function renderEmailChanged(input: EmailChangedInput): RenderedEmailContent {
       variant: "security-notice",
       eyebrow: "Account security",
       title: "Email address changed",
-      intro: `Hi ${recipientName}, your Conclave AX email address is now ${newEmail}${detail}.`,
+      intro: `Hi ${recipientName}, your Syntila email address is now ${newEmail}${detail}.`,
       bodyHtml:
         '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">If you did not make this change, secure your account immediately.</p>',
-      bodyText: `Your Conclave AX email address is now ${newEmail}${changedAt ? ` at ${changedAt}` : ""}. If you did not make this change, secure your account immediately.`,
+      bodyText: `Your Syntila email address is now ${newEmail}${changedAt ? ` at ${changedAt}` : ""}. If you did not make this change, secure your account immediately.`,
       securityNotice: "This is an account-security notification.",
     }),
   };
@@ -309,7 +309,7 @@ function renderInvitation(input: SpaceInvitationInput): RenderedEmailContent {
       title: "You have been invited to a Space",
       intro: `<strong>${inviterName}</strong> invited you to join <strong>${spaceName}</strong> as a <strong>${role}</strong>.`,
       bodyHtml: `<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">Sign in with <strong>${recipientEmail}</strong> to accept the invitation.</p>`,
-      bodyText: `${inviterNameValue} invited you to join "${spaceNameValue}" as a ${roleValue} on Conclave AX.\n\nSign in with ${input.recipientEmail.trim()} to accept.`,
+      bodyText: `${inviterNameValue} invited you to join "${spaceNameValue}" as a ${roleValue} on Syntila.\n\nSign in with ${input.recipientEmail.trim()} to accept.`,
       action: { label: "View invitation", url: invitationUrl },
       securityNotice:
         "If you were not expecting this invitation, you can safely ignore this email.",
@@ -376,7 +376,7 @@ function renderAccessRevoked(
 function renderWelcome(input: WelcomeInput): RenderedEmailContent {
   const recipientName = safeName(input.recipientName);
   const appUrl = safeUrl(input.appUrl, "appUrl");
-  const subject = "Welcome to Conclave AX — your account is ready";
+  const subject = "Welcome to Syntila — your account is ready";
   return {
     templateId: "auth.welcome.v1",
     subject,
@@ -384,16 +384,16 @@ function renderWelcome(input: WelcomeInput): RenderedEmailContent {
       templateId: "auth.welcome.v1",
       subject,
       variant: "confirmation",
-      eyebrow: "Welcome to Conclave AX",
+      eyebrow: "Welcome to Syntila",
       title: "Congratulations! Your account is ready",
-      intro: `Congratulations, ${recipientName}! Your Conclave AX account has been created and your email address is verified.`,
+      intro: `Congratulations, ${recipientName}! Your Syntila account has been created and your email address is verified.`,
       bodyHtml:
         '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">Your workspace for AI collaboration and execution is ready. Create or join a Space, connect a Workspace, and start your first conversation.</p>',
       bodyText:
-        "Congratulations! Your Conclave AX account has been created and your email address is verified.\n\nYour workspace for AI collaboration and execution is ready. Create or join a Space, connect a Workspace, and start your first conversation.",
-      action: { label: "Open Conclave AX", url: appUrl },
+        "Congratulations! Your Syntila account has been created and your email address is verified.\n\nYour workspace for AI collaboration and execution is ready. Create or join a Space, connect a Workspace, and start your first conversation.",
+      action: { label: "Open Syntila", url: appUrl },
       securityNotice:
-        "You are receiving this email because a new Conclave AX account was created with this email address.",
+        "You are receiving this email because a new Syntila account was created with this email address.",
     }),
   };
 }
@@ -405,7 +405,7 @@ function renderAccountDeleted(
   const deletedAt = dateLabel(input.deletedAt);
   const detail = deletedAt ? ` at ${escapeHtml(deletedAt)}` : "";
   const appUrl = input.appUrl ? safeUrl(input.appUrl, "appUrl") : undefined;
-  const subject = "Your Conclave AX account was deleted";
+  const subject = "Your Syntila account was deleted";
   return {
     templateId: "auth.account-deleted.v1",
     subject,
@@ -415,11 +415,11 @@ function renderAccountDeleted(
       variant: "security-notice",
       eyebrow: "Account security",
       title: "Account deleted",
-      intro: `Hi ${recipientName}, your Conclave AX account was deleted${detail}.`,
+      intro: `Hi ${recipientName}, your Syntila account was deleted${detail}.`,
       bodyHtml:
-        '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">If you did not request this, contact Conclave AX support as soon as possible.</p>',
-      bodyText: `Your Conclave AX account was deleted${deletedAt ? ` at ${deletedAt}` : ""}. If you did not request this, contact Conclave AX support as soon as possible.`,
-      ...(appUrl ? { action: { label: "Open Conclave AX", url: appUrl } } : {}),
+        '<p style="margin:20px 0 0;color:#435066;font-size:15px;line-height:24px;">If you did not request this, contact Syntila support as soon as possible.</p>',
+      bodyText: `Your Syntila account was deleted${deletedAt ? ` at ${deletedAt}` : ""}. If you did not request this, contact Syntila support as soon as possible.`,
+      ...(appUrl ? { action: { label: "Open Syntila", url: appUrl } } : {}),
       securityNotice: "This is an account-security notification.",
     }),
   };

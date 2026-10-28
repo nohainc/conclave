@@ -235,7 +235,7 @@ void main() {
     expect(() => malformed.deltaAfter(0, 0), throwsFormatException);
   });
 
-  test('session context carries only validated Conclave metadata', () {
+  test('session context carries only validated Syntila metadata', () {
     final context = WorkerSessionContext(
         id: 'session-A',
         conversationId: 'conversation-A',

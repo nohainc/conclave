@@ -1,4 +1,4 @@
-# Conclave CLI Worker Engine
+# Syntila CLI Worker Engine
 
 Standalone Dart console process implementing the generic Protocol 4.1 runtime.
 The Engine loads one immutable Tool Profile payload and verifies its runtime
@@ -24,10 +24,10 @@ locations first, then Engine-owned OS baseline locations, then the inherited
 `PATH` when the Profile allows PATH search. The Engine keeps a bounded cached
 path in its state directory and verifies the expected executable name and
 executable status again before reuse. Discovery uses standard OS home variables;
-it does not require Conclave-specific environment variables.
+it does not require Syntila-specific environment variables.
 
 The Engine admits bounded Profile payloads and rejects unsafe discovery paths,
-reserved Conclave/cloud environment names, oversized rule and selector sets,
+reserved Syntila/cloud environment names, oversized rule and selector sets,
 and unsupported sandbox policy names. The provider process receives only
 declared environment variables, with 64 variables, 64 KiB per value, and 256
 KiB total limits. Provider stdout/stderr, stdin, session identifiers, and
@@ -67,7 +67,7 @@ and `usage_limit_reached` errors through a terminal status, so a terminal result
 with an empty error string does not hide the earlier limit signal. Informational
 rate-limit events and successful answers discussing limits are not failures.
 
-The local Conclave/Engine request `work-request-144a4fdf-f00f-40aa-9a53-57d4c946bdaf`
+The local Syntila/Engine request `work-request-144a4fdf-f00f-40aa-9a53-57d4c946bdaf`
 failed on 2026-10-21 with a Claude usage-limit error; its stored assignment was
 previously normalized to `execution_failed`. This change does not rewrite past
 requests, retry automatically, clear sessions, or bypass provider limits.

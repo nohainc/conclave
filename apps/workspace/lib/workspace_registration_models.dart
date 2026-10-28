@@ -86,7 +86,7 @@ class WorkspaceRegistrationResult {
 
 /// Safe machine facts submitted during authenticated Workspace registration.
 ///
-/// Under the Conclave safety contract, this payload contains only safe,
+/// Under the Syntila safety contract, this payload contains only safe,
 /// non-sensitive platform metadata and runtime capabilities. It MUST NEVER
 /// contain API keys, credentials, cookies, private paths, or filesystem contents.
 class SafeMachineFacts {
@@ -274,7 +274,7 @@ class WorkspaceRegistrationException implements Exception {
         (statusCode != null && statusCode >= 500)) {
       return WorkspaceRegistrationException(
         kind: WorkspaceRegistrationErrorKind.cloudUnavailable,
-        message: 'Unable to connect to Conclave Cloud.',
+        message: 'Unable to connect to Syntila Cloud.',
         action: 'Check your internet connection or verify the Cloud URL.',
         statusCode: statusCode,
         serverError: serverError,
@@ -285,7 +285,7 @@ class WorkspaceRegistrationException implements Exception {
       return WorkspaceRegistrationException(
         kind: WorkspaceRegistrationErrorKind.workspaceOwnedByOtherAccount,
         message:
-            'This Workspace installation is owned by another Conclave account.',
+            'This Workspace installation is owned by another Syntila account.',
         action:
             'Sign in as its current owner, then disconnect and release ownership before switching accounts.',
         statusCode: statusCode,
@@ -373,8 +373,8 @@ class WorkspaceRegistrationException implements Exception {
     if (statusCode == 401) {
       return WorkspaceRegistrationException(
         kind: WorkspaceRegistrationErrorKind.authenticationRequired,
-        message: 'Sign in to Conclave again to connect this Workspace.',
-        action: 'Sign in to your Conclave account and retry.',
+        message: 'Sign in to Syntila again to connect this Workspace.',
+        action: 'Sign in to your Syntila account and retry.',
         statusCode: statusCode,
         serverError: serverError,
         serverCode: serverCode,
@@ -383,7 +383,7 @@ class WorkspaceRegistrationException implements Exception {
     if (statusCode == 403) {
       return WorkspaceRegistrationException(
         kind: WorkspaceRegistrationErrorKind.accessDenied,
-        message: 'Your Conclave account cannot register this Workspace.',
+        message: 'Your Syntila account cannot register this Workspace.',
         action: 'Check account access and try again.',
         statusCode: statusCode,
         serverError: serverError,

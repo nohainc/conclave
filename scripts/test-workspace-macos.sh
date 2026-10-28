@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE_DIR="$ROOT/apps/workspace"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Conclave Workspace macOS tests must run on macOS." >&2
+  echo "Syntila Workspace macOS tests must run on macOS." >&2
   exit 1
 fi
 
@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "Usage: $(basename "$0") [options]"
       echo ""
-      echo "Runs static analysis and the test suite for the Conclave Workspace."
+      echo "Runs static analysis and the test suite for the Syntila Workspace."
       echo ""
       echo "Options:"
       echo "  --help, -h  Show this help message"
@@ -32,7 +32,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Running Conclave Workspace macOS analysis and tests"
+echo "Running Syntila Workspace macOS analysis and tests"
 cd "$WORKSPACE_DIR"
 dart pub get
 echo "Running static analysis..."

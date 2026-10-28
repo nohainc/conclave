@@ -96,7 +96,7 @@ An offline Cloud connection does not mean the service process has failed.
 
 ## Service controls and display cache
 
-Workspace.app presents separate Workspace Service and Conclave Cloud sections.
+Workspace.app presents separate Workspace Service and Syntila Cloud sections.
 Register/start/stop/restart/unregister and process inspection use the host
 manager. Once the service is usable, Cloud connect/disconnect/reconnect,
 Worker operations, configuration, and diagnostics use authenticated IPC; the

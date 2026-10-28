@@ -745,7 +745,7 @@ void main() {
   test('reads non-secret desktop sign-in status for browser cleanup', () async {
     final client = _JsonClient({
       'status': 'denied',
-      'clientName': 'Conclave Profile Lab',
+      'clientName': 'Syntila Profile Lab',
       'audience': 'conclave.profile-lab.management',
     }, statusCode: 200);
     final api = AxApiClient(
@@ -757,7 +757,7 @@ void main() {
       await api.loadDesktopAuthIntentStatus(intentId: 'intent-a'),
       const AxDesktopAuthIntentStatus(
         status: 'denied',
-        clientName: 'Conclave Profile Lab',
+        clientName: 'Syntila Profile Lab',
         audience: 'conclave.profile-lab.management',
       ),
     );

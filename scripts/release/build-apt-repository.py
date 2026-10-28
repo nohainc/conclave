@@ -64,10 +64,10 @@ def build(output, packages, key):
     release = output / 'dists/stable/Release'
     # No Valid-Until: a vendor repo can have quiet release periods. HTTPS and
     # signed metadata protect transport; renew metadata on each release.
-    release.write_text('Origin: Conclave\nLabel: Conclave Workspace\nSuite: stable\nCodename: stable\n'
+    release.write_text('Origin: Syntila\nLabel: Syntila Workspace\nSuite: stable\nCodename: stable\n'
                        f'Date: {format_datetime(now, usegmt=True)}\n'
                        'Architectures: amd64 arm64\nComponents: main\nAcquire-By-Hash: yes\n'
-                       'Description: Conclave Workspace packages\nSHA256:\n' + '\n'.join(hashes) + '\n')
+                       'Description: Syntila Workspace packages\nSHA256:\n' + '\n'.join(hashes) + '\n')
     public_key = subprocess.check_output(['gpg', '--batch', '--export', key])
     if not public_key:
         raise ValueError('Signing key has no exportable public key')

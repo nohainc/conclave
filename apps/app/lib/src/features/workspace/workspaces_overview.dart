@@ -52,7 +52,7 @@ class WorkspacesOverview extends StatelessWidget {
                   Text('No Workspaces connected'),
                   SizedBox(height: 8),
                   Text(
-                      'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
+                      'Download and register Syntila Workspace to make a Workspace and its Workers available here.'),
                 ],
               ),
             )

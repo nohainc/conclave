@@ -2,7 +2,7 @@
 
 **Contract ID:** `work:v1`
 **Status:** Frozen
-**Scope:** Work composer and built-in Workflow semantics in Conclave AX
+**Scope:** Work composer and built-in Workflow semantics in Syntila
 
 ## Thread authored-content contract
 
@@ -165,9 +165,9 @@ model, Workspace, or execution permission.
 The product flow is:
 
 ~~~text
-Conclave defines canonical Steps
+Syntila defines canonical Steps
       ↓
-Conclave defines valid built-in Workflows
+Syntila defines valid built-in Workflows
       ↓
 User Workflow Configuration supplies execution defaults and step overrides
       ↓
@@ -267,7 +267,7 @@ interface BuiltinWorkflowStep {
 `implementation_plan`, `thread_changes`, `test_report`, and
 `verification_report`. Step definitions set their required capabilities,
 read/write policy, execution class, timeout, internal prompt profile, fixed
-upstream inputs, and result semantics. These values are owned by Conclave and
+upstream inputs, and result semantics. These values are owned by Syntila and
 are part of the immutable Workflow version.
 
 ## Before submission
@@ -349,9 +349,9 @@ Work instructions (Direct for historical v1) plus a short hidden instruction to 
 Thread and return the result. Other Workflows begin with their fixed
 StepKind instructions and include only the authorized handoff data for that
 Step.
-Profiles are internal, versioned Conclave instructions used by Cloud's prompt
+Profiles are internal, versioned Syntila instructions used by Cloud's prompt
 renderer. They are not a user-facing template language: users cannot edit the
-Conclave instructions, insert macros, or control handoff composition. Users
+Syntila instructions, insert macros, or control handoff composition. Users
 can specialize a run only through the bounded Space, Thread, and
 Step-specific additional-instruction fields defined below.
 
@@ -438,9 +438,9 @@ separate durable scope for each Work Request and Step:
 Step's session; Verify never resumes Implement's session, even when both use
 the same Worker. The provider's actual session identifier remains local to the
 Worker; downstream prompt handoff is always the bounded upstream
-`StepResult.text` rendered by Conclave.
+`StepResult.text` rendered by Syntila.
 
-Every completed Step uses the same Conclave-owned `StepResult` wrapper:
+Every completed Step uses the same Syntila-owned `StepResult` wrapper:
 
 ```ts
 interface StepResult {
@@ -462,7 +462,7 @@ interface StepResult {
 ```
 
 The Worker final answer is plain text in `text`; Workers do not produce an
-arbitrary JSON schema for Step-specific results. Conclave supplies attribution
+arbitrary JSON schema for Step-specific results. Syntila supplies attribution
 and optional structured metadata only when it can derive them reliably. A
 following Step receives the upstream result text (conceptually
 `previousStep.text`) along with its other fixed inputs; result metadata and
@@ -470,8 +470,8 @@ provider conversation history are not appended to the prompt.
 
 When a Workflow completes, its final Work answer is the terminal Step's text;
 for `full_cycle:v1` this is Verify's report. The timeline keeps the ordered
-Step states and selected Worker attribution as Conclave's execution summary.
-When the Test report contains recognizable pass/fail/skip counts, Conclave
+Step states and selected Worker attribution as Syntila's execution summary.
+When the Test report contains recognizable pass/fail/skip counts, Syntila
 surfaces those counts separately as a short Test summary.
 
 ## Run details and observability
@@ -869,9 +869,9 @@ catalog, grant, and readiness checks still determine whether it can execute.
 `threadInstructions` is an optional Thread-wide text field, bounded to
 4,000 characters. Space instructions remain in Space settings, and each
 Step may have additional instructions in its Worker binding. These three
-user-editable instruction levels are appended after Conclave's immutable
+user-editable instruction levels are appended after Syntila's immutable
 StepKind guidance. The run-specific request remains a separate labeled input;
-handoff data continues to be selected and supplied by Conclave.
+handoff data continues to be selected and supplied by Syntila.
 
 AX may offer a one-click suggested setup using Ready Workers available through
 Space Workspace grants. The mixed ChatGPT/Gemini suggestion and single-Worker
@@ -885,12 +885,12 @@ execution model, and users may edit every binding afterward.
 - arbitrary step ordering;
 - arbitrary macros or user-composed Workflow definitions;
 - user-defined step dependencies;
-- user-editable Conclave system prompts;
+- user-editable Syntila system prompts;
 - custom conditional branches.
 
 Workflow selection does not override AX-owned Step binding/model/fallback
 policy, Cloud authorization, Workspace readiness, local permissions, or
-Thread execution rules. The Work request text remains user input; Conclave
+Thread execution rules. The Work request text remains user input; Syntila
 system prompts and the meaning of each `StepKind` remain product-owned.
 
 ## Workflow source
@@ -933,11 +933,11 @@ Immutable older history remains cached.
 
 ### Work timeline sender attribution
 
-Preparation and queued/waiting execution notices display Conclave with its logo.
+Preparation and queued/waiting execution notices display Syntila with its logo.
 Once the current Step is running, its worker display name and worker-type icon
-replace Conclave on the same response row, before final result text arrives.
+replace Syntila on the same response row, before final result text arrives.
 Completed result rows retain their worker identity. System error notices retain
-Conclave attribution. Icons use locally bundled provider assets for known worker
+Syntila attribution. Icons use locally bundled provider assets for known worker
 types; unknown types use the worker initial. Identity comes from immutable Step
 metadata, never inferred from model names or response text.
 

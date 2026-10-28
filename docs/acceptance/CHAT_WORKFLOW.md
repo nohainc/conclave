@@ -74,7 +74,7 @@ these labels at phone and desktop widths.
 ## Timeline icon sizing and touch selection
 
 Sender marks use a 24 × 24 logical-pixel footprint for human avatars,
-AI model/Worker icons (including initial-avatar fallbacks), and the Conclave
+AI model/Worker icons (including initial-avatar fallbacks), and the Syntila
 logo. Footer action glyphs use 16 logical pixels for messages, requests, and
 responses. On touch platforms, the date/menu row stays visible;
 message-body long press remains available for selecting text rather than

@@ -129,8 +129,8 @@ export const STEP_KINDS = [
 export type StepKind = (typeof STEP_KINDS)[number];
 
 /**
- * Conclave-owned transport for a completed Workflow Step. Workers return plain
- * text; structured fields here are attribution or metadata Conclave can verify.
+ * Syntila-owned transport for a completed Workflow Step. Workers return plain
+ * text; structured fields here are attribution or metadata Syntila can verify.
  */
 export interface StepResult {
   readonly text: string;

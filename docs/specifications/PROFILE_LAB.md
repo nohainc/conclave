@@ -29,7 +29,7 @@ not an active API, storage, or runtime contract.
 
 ## 1. Executive Summary
 
-Conclave Profile Lab is an internal macOS desktop application (`apps/profile_lab`) dedicated to authoring, validating, sandbox testing, publishing, promoting, rolling back, and revoking Conclave Tool Profiles and Logical Workers.
+Syntila Profile Lab is an internal macOS desktop application (`apps/profile_lab`) dedicated to authoring, validating, sandbox testing, publishing, promoting, rolling back, and revoking Syntila Tool Profiles and Logical Workers.
 
 Under Architecture v8, provider-specific Worker executables are replaced by one generic CLI Worker Engine (`engines/cli_worker`) configured by signed, immutable Tool Profiles. Vendor CLI tools evolve rapidly. Profile Lab is the operational control surface that enables engineers and maintainers to keep provider CLI integrations up to date without releasing new Workspace application binaries.
 
@@ -43,11 +43,11 @@ The Profile Draft Assistant uses a Cloud-trusted Stable Worker Profile and the l
 
 ## 2. Product Boundaries & Architecture Surfaces
 
-Conclave enforces a strict separation across four distinct product surfaces:
+Syntila enforces a strict separation across four distinct product surfaces:
 
 ```text
 +-----------------------+      +-----------------------+      +-----------------------+
-|      Conclave AX      |      |   Conclave Workspace  |      |  Conclave Profile Lab |
+|      Syntila      |      |   Syntila Workspace  |      |  Syntila Profile Lab |
 +-----------------------+      +-----------------------+      +-----------------------+
 | Human orchestration   |      | Local Work Root &     |      | Profile engineering   |
 | Spaces & Threads|      | reliable execution    |      | Draft authoring       |
@@ -57,16 +57,16 @@ Conclave enforces a strict separation across four distinct product surfaces:
            \                               |                             /
             \                              |                            /
              +---------------------------------------------------------+
-             |                     Conclave Cloud                      |
+             |                     Syntila Cloud                      |
              | Authoritative state, Worker catalog, signing boundary   |
              +---------------------------------------------------------+
 ```
 
 ### Boundary Rules:
-1. **Conclave AX:** Web application for human space orchestration. Displays catalog workers and local readiness. Exposes zero profile editing or administration.
-2. **Conclave Cloud:** Multi-tenant authoritative backend. Manages `worker_catalog`, `tool_profile_definitions`, `tool_profile_releases`, release channels, and Ed25519 cryptographic signatures. Executes zero provider tools.
-3. **Conclave Workspace:** Background-first native desktop machine runtime. Manages local Work Roots, process tree execution, and local worker readiness. Consumes **only** cryptographically signed, admitted Tool Profile Releases.
-4. **Conclave Profile Lab:** Administrative desktop engineering application. Authors and tests unsigned local Draft Profile candidates against installed provider CLIs in an isolated sandbox. Exposes full release lifecycle management. **Never registers as an execution Workspace, never accepts Work assignments, and never owns Space Work Roots.**
+1. **Syntila:** Web application for human space orchestration. Displays catalog workers and local readiness. Exposes zero profile editing or administration.
+2. **Syntila Cloud:** Multi-tenant authoritative backend. Manages `worker_catalog`, `tool_profile_definitions`, `tool_profile_releases`, release channels, and Ed25519 cryptographic signatures. Executes zero provider tools.
+3. **Syntila Workspace:** Background-first native desktop machine runtime. Manages local Work Roots, process tree execution, and local worker readiness. Consumes **only** cryptographically signed, admitted Tool Profile Releases.
+4. **Syntila Profile Lab:** Administrative desktop engineering application. Authors and tests unsigned local Draft Profile candidates against installed provider CLIs in an isolated sandbox. Exposes full release lifecycle management. **Never registers as an execution Workspace, never accepts Work assignments, and never owns Space Work Roots.**
 
 ---
 
@@ -86,7 +86,7 @@ Generic CLI Worker Engine (`engines/cli_worker`)
 Provider CLI (local executable binary)
 ```
 
-No Worker identity (such as `chatgpt` or `gemini`) is hardcoded in Profile Lab, Workspace, or AX. Conclave Cloud is the sole authority for catalog descriptors and profile bindings. Adding a new Worker in Profile Lab makes it discoverable by Workspaces and selectable in AX without application redeployment or code modifications.
+No Worker identity (such as `chatgpt` or `gemini`) is hardcoded in Profile Lab, Workspace, or AX. Syntila Cloud is the sole authority for catalog descriptors and profile bindings. Adding a new Worker in Profile Lab makes it discoverable by Workspaces and selectable in AX without application redeployment or code modifications.
 
 The Create Worker form starts new catalog entries in the `testing` release stage and offers only `testing`, `beta`, or `stable`. Worker and Profile capability arrays are not authored here; workflow eligibility and access policy are Cloud-owned. The v8 development cutover removed releases that contained the retired top-level `capabilities` field. New drafts and releases are rejected if they contain that field.
 
@@ -282,7 +282,7 @@ This status does not claim that all real-provider workflows pass or that a deplo
 
 Model-backed assistance is limited to proposing Draft edits within this human-controlled lifecycle:
 - AI models propose state changes by generating draft candidate JSON payloads.
-- Conclave owns persistent state, validates JSON schemas against `TOOL_PROFILE_LIMITS`, and enforces signature verification.
+- Syntila owns persistent state, validates JSON schemas against `TOOL_PROFILE_LIMITS`, and enforces signature verification.
 - The operator consents before Draft context and bounded diagnostics are sent, reviews the proposal diff, and explicitly applies it to the local Draft.
 - Qualification, publication, signing, Stable promotion, rollback, and revocation remain separate human-controlled Cloud workflows.
 - Proposal output is not qualification or acceptance evidence. Cloud's evidence contract is an authenticated assertion validated and bound to a release; it is not device attestation or independent proof of local execution.

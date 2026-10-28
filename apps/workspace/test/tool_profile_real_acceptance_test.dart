@@ -190,7 +190,7 @@ Directory _repositoryRoot() {
     }
     final parent = current.parent;
     if (parent.path == current.path) {
-      throw StateError('Could not locate the Conclave repository root.');
+      throw StateError('Could not locate the Syntila repository root.');
     }
     current = parent;
   }

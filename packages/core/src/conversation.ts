@@ -198,7 +198,7 @@ export const CONVERSATION_HISTORY_KINDS = [
 export type ConversationHistoryKind =
   (typeof CONVERSATION_HISTORY_KINDS)[number];
 
-/** Conclave-owned canonical facts; provider session state is never history. */
+/** Syntila-owned canonical facts; provider session state is never history. */
 export interface ConversationHistoryEntry {
   readonly id: string;
   readonly conversationId: string;

@@ -1,6 +1,6 @@
 # Operator Runbook: Updating a Worker Profile
 
-**Surface:** Conclave Profile Lab (`apps/profile_lab`)  
+**Surface:** Syntila Profile Lab (`apps/profile_lab`)  
 **Scope:** Edit and test a Worker candidate, publish one current Profile, and
 recover safely through Cloud history.
 

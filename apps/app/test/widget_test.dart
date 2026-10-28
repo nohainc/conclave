@@ -75,7 +75,7 @@ void main() {
     expect(find.text('No chat messages yet'), findsOneWidget);
     await tester.tap(find.text('AI History'));
     await tester.pumpAndSettle();
-    expect(find.text('What should Conclave do?'), findsNothing);
+    expect(find.text('What should Syntila do?'), findsNothing);
     expect(find.text('lease'), findsNothing);
     expect(find.text('fencing token'), findsNothing);
     expect(find.text('Durable Object'), findsNothing);

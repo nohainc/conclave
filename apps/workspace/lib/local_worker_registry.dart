@@ -23,7 +23,7 @@ enum WorkerReadinessState {
   signInRequired('sign_in_required', 'Sign in required'),
   runtimeUnavailable(
     'worker_runtime_unavailable',
-    'Conclave integration needs attention',
+    'Syntila integration needs attention',
   ),
   testFailed('test_failed', 'Test failed');
 

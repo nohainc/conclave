@@ -130,7 +130,7 @@ AxSnapshot axFixtureSnapshot() => const AxSnapshot(
         AxEvent(
             time: '09:40',
             title: 'Goal created',
-            detail: 'Build a useful Conclave Ax UI',
+            detail: 'Build a useful Syntila Ax UI',
             kind: 'goal'),
         AxEvent(
             time: '09:40',

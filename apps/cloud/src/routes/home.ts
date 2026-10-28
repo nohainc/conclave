@@ -264,7 +264,7 @@ export async function handleGetHomeReadModel(
     {
       id: "up-conclave-v8",
       slug: "conclave-v8-architecture",
-      title: "Conclave v8 Architecture",
+      title: "Syntila v8 Architecture",
       summary:
         "Provider-independent CLI Worker Engine with centrally published Worker Profiles.",
       category: "workflow",
@@ -275,7 +275,7 @@ export async function handleGetHomeReadModel(
       id: "up-desktop-workspace",
       slug: "workspace-pairing",
       title: "Seamless Workspace Pairing",
-      summary: "Connect local environments securely to your Conclave Spaces.",
+      summary: "Connect local environments securely to your Syntila Spaces.",
       category: "collaboration",
       publishedAt: "2026-10-06T00:00:00Z",
       status: "published",

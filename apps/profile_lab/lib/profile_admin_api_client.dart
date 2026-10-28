@@ -8,7 +8,7 @@ import 'models/profile_admin_read_models.dart';
 
 export 'models/profile_admin_read_models.dart';
 
-/// HTTP Client for Conclave Cloud Profile Admin API endpoints.
+/// HTTP Client for Syntila Cloud Profile Admin API endpoints.
 ///
 /// Profile Lab communicates exclusively via this authenticated API client
 /// and never connects directly to Cloudflare D1.

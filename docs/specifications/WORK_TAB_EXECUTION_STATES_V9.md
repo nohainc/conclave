@@ -8,9 +8,9 @@ Cloud computes `executionPhase` per step from the latest `worker_assignments` ro
 
 | Phase | Evidence | Label | Sub-line |
 | --- | --- | --- | --- |
-| submitted | no assignment | Submitted | Request received by Conclave |
+| submitted | no assignment | Submitted | Request received by Syntila |
 | waiting_for_service | status `created` | Queued | Waiting for the Workspace Service to be ready |
-| delivering | `dispatched` | Queued | Request delivered to Conclave Service |
+| delivering | `dispatched` | Queued | Request delivered to Syntila Service |
 | delivered | `acknowledged`, no queue/permit evidence | Queued | Command received · Worker accepted request |
 | queued | `acknowledged` + permit required or startup stage waiting/queued | Queued | All parallel slots are busy; starting when one is free |
 | starting | start permit issued, or stage slot_reserved/engine_spawned/engine_initialized | Starting | Starting provider CLI |

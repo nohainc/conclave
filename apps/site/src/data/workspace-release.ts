@@ -16,7 +16,7 @@ export interface WorkspaceReleaseManifest {
  * consume one release manifest instead of carrying independent links.
  */
 export const workspaceRelease: WorkspaceReleaseManifest = {
-  productName: "Conclave Workspace",
+  productName: "Syntila Workspace",
   version: "1.0.3",
   targets: [
     {

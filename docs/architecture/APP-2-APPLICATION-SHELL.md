@@ -1,6 +1,6 @@
 # APP-2: Application shell extraction
 
-The Conclave AX application has an app-level shell boundary at
+The Syntila application has an app-level shell boundary at
 `apps/app/lib/src/app_shell.dart` and an app routing boundary at
 `apps/app/lib/src/router.dart`.
 

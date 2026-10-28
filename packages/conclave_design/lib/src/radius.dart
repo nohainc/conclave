@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Border radius constants for Conclave AX.
+/// Border radius constants for Syntila.
 abstract final class ConclaveRadius {
   static const double xs = 4.0;
   static const double sm = 6.0;

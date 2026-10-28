@@ -495,7 +495,7 @@ extension _ThreadActions on _ThreadPageState {
           content: Text(
             folderExists
                 ? 'A folder with this Space’s name already exists on your '
-                    'Workspace and is not empty. Conclave will not create a '
+                    'Workspace and is not empty. Syntila will not create a '
                     'second folder. Use the existing folder for this Space?'
                 : 'The previous execution may already have made changes. '
                     'Retrying can repeat them.',

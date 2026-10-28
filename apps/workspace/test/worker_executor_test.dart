@@ -341,7 +341,7 @@ void main() {
         'workerTypeId': 'test-worker',
         'spaceId': 'space-1',
         'threadId': 'thread-1',
-        'spaceName': 'Conclave AX',
+        'spaceName': 'Syntila',
         'executionClass': 'stateless_read',
       },
     );
@@ -354,8 +354,8 @@ void main() {
       }),
     );
     expect(first.workingDirectory.path, second.workingDirectory.path);
-    expect(first.workingDirectory.path, endsWith('Conclave AX'));
-    expect(Directory('${root.path}/work/Conclave AX/thread-1').existsSync(),
+    expect(first.workingDirectory.path, endsWith('Syntila'));
+    expect(Directory('${root.path}/work/Syntila/thread-1').existsSync(),
         isFalse);
   });
 
@@ -394,7 +394,7 @@ void main() {
       resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
     );
     final first =
-        await firstHandler.prepareAssignmentScope(context('Conclave'));
+        await firstHandler.prepareAssignmentScope(context('Syntila'));
     final repository = Directory(
         '${first.workingDirectory.path}${Platform.pathSeparator}checkout');
     await repository.create();
@@ -406,7 +406,7 @@ void main() {
       '-c',
       'user.email=test@example.com',
       '-c',
-      'user.name=Conclave Test',
+      'user.name=Syntila Test',
       'commit',
       '-qm',
       'initial'
@@ -417,7 +417,7 @@ void main() {
       resolveLogicalWorker: (workerId) => assignmentWorker(workerId),
     );
     final second = await secondHandler.prepareAssignmentScope(
-      context('Renamed Conclave'),
+      context('Renamed Syntila'),
     );
     expect(second.workingDirectory.path, first.workingDirectory.path);
     expect(

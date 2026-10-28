@@ -3,7 +3,7 @@ import {
   spaceMemberPermissions,
   type SpaceMemberPermissions,
 } from "./space-permissions.js";
-/** Security primitives for current Conclave identities and resources. */
+/** Security primitives for current Syntila identities and resources. */
 
 export const SPACE_ROLES = ["owner", "collaborator", "viewer"] as const;
 export type SpaceRole = (typeof SPACE_ROLES)[number];
@@ -175,9 +175,9 @@ export async function resolveSpaceSecurityContextFromIdentity(
       avatar_url: string | null;
       status: string;
     }>();
-  if (!userRow) throw new AuthenticationError("Conclave user not found");
+  if (!userRow) throw new AuthenticationError("Syntila user not found");
   if (!["active", "suspended", "deactivated"].includes(userRow.status)) {
-    throw new AuthenticationError("Invalid Conclave user status");
+    throw new AuthenticationError("Invalid Syntila user status");
   }
   const user: AuthenticatedUser = {
     id: userRow.id,

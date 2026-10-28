@@ -46,7 +46,7 @@ for sender in conclave@conclaveax.com vitalii@conclaveax.com; do
     "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/email/sending/send" \
     --header "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
     --header "Content-Type: application/json" \
-    --data "$(node -e 'const [sender, recipient] = process.argv.slice(1); console.log(JSON.stringify({to: recipient, from: `Conclave AX <${sender}>`, subject: `Conclave AX sender smoke test (${sender})`, text: `Controlled sender verification for ${sender}.`}))' "$sender" "$EMAIL_TEST_RECIPIENT")"
+    --data "$(node -e 'const [sender, recipient] = process.argv.slice(1); console.log(JSON.stringify({to: recipient, from: `Syntila <${sender}>`, subject: `Syntila sender smoke test (${sender})`, text: `Controlled sender verification for ${sender}.`}))' "$sender" "$EMAIL_TEST_RECIPIENT")"
 done
 ```
 
@@ -54,7 +54,7 @@ Record the response for each sender. A successful API response means the
 message was accepted by Cloudflare; it does not prove inbox delivery. Confirm
 the following in the recipient mailbox and message headers:
 
-- the visible sender is `Conclave AX` with the expected address;
+- the visible sender is `Syntila` with the expected address;
 - the message arrives at the intended mailbox and at an external-domain test
   mailbox when one is available;
 - SPF, DKIM, and DMARC pass for `conclaveax.com`;

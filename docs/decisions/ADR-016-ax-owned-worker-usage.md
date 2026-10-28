@@ -10,7 +10,7 @@ would prevent Space/Thread execution policy management.
 
 ## Context
 
-Conclave Workspace owns machine-local execution readiness: it knows whether
+Syntila Workspace owns machine-local execution readiness: it knows whether
 ChatGPT/Codex and Gemini/Antigravity can run on that machine. Actual use of a
 Worker is a Space decision. AX and Cloud already own Space membership,
 Workspace grants, Thread policy, scheduling state, model selection, and
@@ -49,7 +49,7 @@ catalog. Cloud stores the Thread configuration and snapshots the selected
 Workflow, resolved Step bindings, request, instructions, and internal Step
 Prompt Profile versions on each Work Request. Cloud composes each prompt from
 that immutable snapshot and the fixed handoff contract. Prompt Profiles are
-Conclave implementation data, not a user-editable template or macro language.
+Syntila implementation data, not a user-editable template or macro language.
 The [Work v1 Contract](../specifications/WORK_V1_CONTRACT.md) is authoritative
 for catalog, configuration, snapshot, and prompt semantics.
 
@@ -78,7 +78,7 @@ The selected Worker's Workspace is derived from its stable Worker ID and
 validated against an active Space Workspace Grant. Binding IDs are closed to
 `direct`, `research`, `plan`, `implement`, `test`, and `verify`. Local
 credentials, permission names, paths, and raw CLI output are never part of this
-config. Conclave does not add arbitrary task roles, dependencies, or fallback
+config. Syntila does not add arbitrary task roles, dependencies, or fallback
 to any eligible Worker.
 
 ## Migration and compatibility

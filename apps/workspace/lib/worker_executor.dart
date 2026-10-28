@@ -169,7 +169,7 @@ Future<void> _materializeWorkRequestInputs({
 
 /// Provider-independent guidance attached to every Space execution.
 /// It describes the local directory contract without exposing paths or
-/// turning Git operations into a Conclave-managed subsystem.
+/// turning Git operations into a Syntila-managed subsystem.
 const threadExecutionGuidance = <String>[
   'This directory is the Space persistent working area shared by its Threads.',
   'Reuse existing files and repositories when they are present.',

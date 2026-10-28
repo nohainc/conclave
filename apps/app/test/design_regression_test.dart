@@ -29,7 +29,7 @@ void main() {
                 children: [
                   ConclaveBrand.logoMark(size: 28),
                   const SizedBox(width: 10),
-                  const Text('Conclave AX', style: ConclaveTypography.wordmark),
+                  const Text('Syntila', style: ConclaveTypography.wordmark),
                 ],
               ),
             ),
@@ -38,8 +38,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Conclave AX'), findsOneWidget);
-      final textWidget = tester.widget<Text>(find.text('Conclave AX'));
+      expect(find.text('Syntila'), findsOneWidget);
+      final textWidget = tester.widget<Text>(find.text('Syntila'));
       expect(textWidget.style?.fontSize, ConclaveTypography.wordmark.fontSize);
       expect(textWidget.style?.fontWeight, FontWeight.w700);
       expect(textWidget.style?.letterSpacing, -0.32);
@@ -95,8 +95,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // The app mark remains the Home link without a wordmark.
-      expect(find.byTooltip('Conclave AX — Home'), findsOneWidget);
-      expect(find.text('Conclave AX'), findsNothing);
+      expect(find.byTooltip('Syntila — Home'), findsOneWidget);
+      expect(find.text('Syntila'), findsNothing);
 
       // Profile item at bottom
       expect(find.text('Vitalii Noha'), findsOneWidget);
@@ -463,7 +463,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
               body: Column(
                 children: [
                   ConclaveBrand.logoMark(size: 32),
-                  const Text('Conclave AX', style: ConclaveTypography.wordmark),
+                  const Text('Syntila', style: ConclaveTypography.wordmark),
                   ElevatedButton(
                     onPressed: () {
                       setState(() {
@@ -483,7 +483,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       // Light theme active
-      expect(Theme.of(tester.element(find.text('Conclave AX'))).brightness,
+      expect(Theme.of(tester.element(find.text('Syntila'))).brightness,
           Brightness.light);
 
       // Toggle theme to dark
@@ -491,7 +491,7 @@ This is standard body paragraph text with **bold** and `inline_code`.
       await tester.pumpAndSettle();
 
       // Dark theme active
-      expect(Theme.of(tester.element(find.text('Conclave AX'))).brightness,
+      expect(Theme.of(tester.element(find.text('Syntila'))).brightness,
           Brightness.dark);
     });
   });

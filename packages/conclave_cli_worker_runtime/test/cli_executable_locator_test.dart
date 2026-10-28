@@ -46,7 +46,7 @@ void main() {
   });
 
   test(
-    'finds Codex from an Engine baseline path without Conclave variables',
+    'finds Codex from an Engine baseline path without Syntila variables',
     () async {
       final home = '${temporary.path}${Platform.pathSeparator}home';
       final location =

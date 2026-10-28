@@ -266,7 +266,7 @@ export async function handleDesktopPasswordSignIn(
         method: "POST",
         headers,
         body: JSON.stringify({
-          clientName: "Conclave Headless Workspace",
+          clientName: "Syntila Headless Workspace",
           contractVersion: "1.1",
         }),
       }),
@@ -508,7 +508,7 @@ export async function handleApproveDesktopAuthIntent(
   if (!identity)
     throw new HttpError(
       401,
-      "Sign in to Conclave AX before approving desktop sign-in",
+      "Sign in to Syntila before approving desktop sign-in",
     );
   await provisionConclaveUser(env.CONCLAVE_DB, identity);
   const body: unknown = await request.json().catch(() => ({}));
@@ -590,7 +590,7 @@ export async function handleClaimDesktopAuthIntent(
   )
     .bind(intent.userId)
     .first<{ userId: string; email: string; displayName: string }>();
-  if (!user) throw new HttpError(403, "Conclave account is unavailable");
+  if (!user) throw new HttpError(403, "Syntila account is unavailable");
 
   if (
     intent.audience === DESKTOP_PROFILE_LAB_AUDIENCE &&

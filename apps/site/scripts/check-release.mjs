@@ -75,7 +75,7 @@ const requiredHomepageContent = [
   "Threads",
   "Share access. Keep credentials private.",
   "One conversation. Everyone stays in context.",
-  "Open Conclave AX",
+  "Open Syntila",
 ];
 for (const content of requiredHomepageContent) {
   if (!home.includes(content))

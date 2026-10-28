@@ -247,7 +247,7 @@ class SearchPage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     query.trim().isEmpty
-                        ? 'Showing all items across Conclave AX'
+                        ? 'Showing all items across Syntila'
                         : 'Found ${results.length} ${results.length == 1 ? "result" : "results"} for "${query.trim()}"',
                     style: TextStyle(
                       fontSize: 13,

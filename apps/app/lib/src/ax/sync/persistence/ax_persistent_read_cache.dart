@@ -29,7 +29,7 @@ class AxPersistentReadCache {
   Object? lastError;
   String? get userId => _user;
 
-  /// Call only after Cloud authenticated this exact Conclave user ID.
+  /// Call only after Cloud authenticated this exact Syntila user ID.
   Future<bool> hydrate(String userId) async {
     if (userId.isEmpty) return false;
     if (_user == userId) return false;

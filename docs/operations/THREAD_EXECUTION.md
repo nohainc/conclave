@@ -49,7 +49,7 @@ execution directory before starting the generic CLI Worker Engine. Chat,
 Research and Implement prompts include these local paths; Plan receives
 attachment metadata. File delivery is provider-independent: reading each file
 format depends on the selected CLI/model's capabilities and Profile permissions.
-Conclave does not extract PDF/image contents or confirm that a provider read a
+Syntila does not extract PDF/image contents or confirm that a provider read a
 file. Selected chips clear after submission. Sent user messages retain file names and
 sizes in Conversation and AI History, including after refresh; these are
 attachment records, not per-file processing receipts. History responses expose

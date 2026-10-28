@@ -269,7 +269,7 @@ class GlobalAppMenu extends StatelessWidget {
           leadingIcon: ConclaveBrand.logoMark(size: 16),
           onPressed: onOpenAbout,
           child: const Text(
-            'About Conclave AX',
+            'About Syntila',
             style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
           ),
         ),

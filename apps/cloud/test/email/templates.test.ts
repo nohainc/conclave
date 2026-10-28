@@ -41,8 +41,8 @@ describe("email template architecture", () => {
         { approvedOrigins: [EMAIL_PREVIEW_ORIGIN] },
       );
       expect(rendered.templateId).toBe(template.id);
-      expect(rendered.html).toContain("Conclave AX");
-      expect(rendered.text).toContain("Conclave AX");
+      expect(rendered.html).toContain("Syntila");
+      expect(rendered.text).toContain("Syntila");
       expect(rendered.html).not.toContain("preview-secret");
     }
   });
@@ -88,7 +88,7 @@ describe("email template architecture", () => {
     for (const rendered of cases) {
       expect(rendered.subject.length).toBeGreaterThan(10);
       expect(rendered.html).toContain("<!doctype html>");
-      expect(rendered.html).toContain("Conclave AX");
+      expect(rendered.html).toContain("Syntila");
       expect(rendered.html).toContain(
         "https://app.conclaveax.com/assets/assets/branding/conclave_email_logo.png",
       );
@@ -96,7 +96,7 @@ describe("email template architecture", () => {
         "@media only screen and (max-width:620px)",
       );
       expect(rendered.html).toContain("prefers-color-scheme:dark");
-      expect(rendered.text).toContain("Conclave AX");
+      expect(rendered.text).toContain("Syntila");
       expect(rendered.html.length).toBeGreaterThan(200);
       expect(rendered.text.length).toBeGreaterThan(40);
     }
@@ -235,8 +235,8 @@ describe("email template architecture", () => {
     expect(transport.messages).toHaveLength(1);
     expect(transport.messages[0]).toMatchObject({
       to: "ada@example.com",
-      subject: "Welcome to Conclave AX — your account is ready",
-      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+      subject: "Welcome to Syntila — your account is ready",
+      from: { email: "conclave@conclaveax.com", name: "Syntila" },
     });
   });
 
@@ -257,7 +257,7 @@ describe("email template architecture", () => {
       "https://app.conclaveax.com/verify?token=a&next=/home",
     );
     expect(action.text).toContain(
-      "If you did not create a Conclave AX account",
+      "If you did not create a Syntila account",
     );
     expect(action.text).toContain("This link is valid for 60 minutes.");
   });
@@ -310,7 +310,7 @@ describe("email template architecture", () => {
     });
     expect(rendered.html).toContain("max-width:600px");
     expect(rendered.html).toContain("max-width:620px");
-    expect(rendered.html).toContain('alt="Conclave AX"');
+    expect(rendered.html).toContain('alt="Syntila"');
     expect(rendered.html).toContain('content="light dark"');
     expect(rendered.text).toContain("Research Research");
   });

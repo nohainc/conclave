@@ -64,7 +64,7 @@ void main() {
     await repository.create();
     await runGit(repository, ['init', '-q']);
     await runGit(repository, ['config', 'user.email', 'test@example.com']);
-    await runGit(repository, ['config', 'user.name', 'Conclave Test']);
+    await runGit(repository, ['config', 'user.name', 'Syntila Test']);
     await runGit(repository, [
       'remote',
       'add',
@@ -98,7 +98,7 @@ void main() {
     await repository.create();
     await runGit(repository, ['init', '-q']);
     await runGit(repository, ['config', 'user.email', 'test@example.com']);
-    await runGit(repository, ['config', 'user.name', 'Conclave Test']);
+    await runGit(repository, ['config', 'user.name', 'Syntila Test']);
     await File('${repository.path}${Platform.pathSeparator}file.txt')
         .writeAsString('content\n');
     await runGit(repository, ['add', 'file.txt']);

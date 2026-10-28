@@ -330,10 +330,10 @@ describe("desktop auth multi-audience migration", () => {
     };
 
     const workspaceSession = await createAndClaim({
-      clientName: "Conclave Workspace",
+      clientName: "Syntila Workspace",
     });
     const profileLabSession = await createAndClaim({
-      clientName: "Conclave Profile Lab",
+      clientName: "Syntila Profile Lab",
       audience: "conclave.profile-lab.management",
     });
 

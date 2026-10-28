@@ -252,7 +252,7 @@ final class WorkerDiagnosticStore {
       }
     }
     final report = StringBuffer()
-      ..writeln('Conclave Worker diagnostic report')
+      ..writeln('Syntila Worker diagnostic report')
       ..writeln('Generated: ${DateTime.now().toUtc().toIso8601String()}')
       ..writeln('Sensitive Worker input and free-form output are omitted.')
       ..writeln();

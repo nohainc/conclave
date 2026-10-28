@@ -85,7 +85,7 @@ export const EXECUTION_PHASE_LABELS: Readonly<Record<ExecutionPhase, string>> =
 export const EXECUTION_PHASE_DETAILS: Readonly<
   Record<ExecutionPhase, string | null>
 > = {
-  submitted: "Request received by Conclave",
+  submitted: "Request received by Syntila",
   waiting_for_service: "Waiting for the Workspace Service to be ready",
   delivering: "Sending to your Workspace",
   delivered: "Worker accepted the request",

@@ -7,11 +7,11 @@ import {
 } from "../src/email/email-config.js";
 
 describe("centralized email sender configuration", () => {
-  it("uses the Conclave primary and Vitalii fallback by default", () => {
+  it("uses the Syntila primary and Vitalii fallback by default", () => {
     expect(resolveEmailSenderConfig({})).toEqual({
       primary: "conclave@conclaveax.com",
       fallback: "vitalii@conclaveax.com",
-      displayName: "Conclave AX",
+      displayName: "Syntila",
     });
   });
 
@@ -20,12 +20,12 @@ describe("centralized email sender configuration", () => {
       resolveEmailSenderConfig({
         CONCLAVE_EMAIL_FROM: "Primary@Example.com ",
         CONCLAVE_EMAIL_FALLBACK_FROM: "fallback@example.com",
-        CONCLAVE_EMAIL_FROM_NAME: " Conclave Test ",
+        CONCLAVE_EMAIL_FROM_NAME: " Syntila Test ",
       }),
     ).toEqual({
       primary: "primary@example.com",
       fallback: "fallback@example.com",
-      displayName: "Conclave Test",
+      displayName: "Syntila Test",
     });
   });
 
@@ -68,7 +68,7 @@ describe("centralized email sender configuration", () => {
     });
     expect(send).toHaveBeenCalledWith({
       to: "person@example.com",
-      from: { email: "conclave@conclaveax.com", name: "Conclave AX" },
+      from: { email: "conclave@conclaveax.com", name: "Syntila" },
       subject: "Subject",
       text: "Body",
     });
@@ -92,7 +92,7 @@ describe("centralized email sender configuration", () => {
     });
     expect(send).toHaveBeenNthCalledWith(2, {
       to: "person@example.com",
-      from: { email: "vitalii@conclaveax.com", name: "Conclave AX" },
+      from: { email: "vitalii@conclaveax.com", name: "Syntila" },
       subject: "Subject",
     });
   });

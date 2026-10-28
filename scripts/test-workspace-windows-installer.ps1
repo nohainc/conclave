@@ -4,12 +4,12 @@ Set-StrictMode -Version Latest
 $Root = Split-Path $PSScriptRoot -Parent
 $Installer = @(Get-ChildItem (Join-Path $Root 'dist/conclave-workspace/installer/*Setup.exe'))
 if ($Installer.Count -ne 1) { throw 'Expected exactly one installer.' }
-$Target = Join-Path $env:LOCALAPPDATA 'Programs/Conclave/Workspace-Installer-Test'
+$Target = Join-Path $env:LOCALAPPDATA 'Programs/Syntila/Workspace-Installer-Test'
 function Run-Setup {
     $Process = Start-Process $Installer[0].FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$Target`"") -Wait -PassThru
     if ($Process.ExitCode -ne 0) { throw "Setup failed: $($Process.ExitCode)" }
 }
-$State = Join-Path $env:LOCALAPPDATA 'Conclave/Workspace/installer-preservation-test.txt'
+$State = Join-Path $env:LOCALAPPDATA 'Syntila/Workspace/installer-preservation-test.txt'
 New-Item -ItemType Directory -Force (Split-Path $State -Parent) | Out-Null
 $Sentinel = [guid]::NewGuid().ToString()
 Set-Content $State $Sentinel

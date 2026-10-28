@@ -4,14 +4,14 @@
 
 ## Target
 
-Conclave uses one generic isolated CLI Worker Engine for approved local CLI
+Syntila uses one generic isolated CLI Worker Engine for approved local CLI
 integrations. Signed Tool Profiles describe bounded provider CLI behavior.
 Cloud owns shared state, authorization, catalog and releases; Workspace
 resolves the logical Worker and Profile, supervises the Engine, and owns the
 local process tree.
 
 ```text
-Conclave AX -> Conclave Cloud -> Conclave Workspace
+Syntila -> Syntila Cloud -> Syntila Workspace
                                   -> CLI Worker Engine
                                   -> signed Tool Profile
                                   -> provider CLI

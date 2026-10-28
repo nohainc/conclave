@@ -86,7 +86,7 @@ D1 stores identifiers, relationships, statuses, compact JSON contracts, provenan
 
 ## Canonical Conversation history
 
-Conclave D1 owns the append-only Conversation history: original user messages,
+Syntila D1 owns the append-only Conversation history: original user messages,
 completed Worker responses, workflow/execution facts, important artifact events,
 and context revision events. Transactional triggers record these facts alongside
 source changes. Source execution cleanup preserves history; deleting its owning
@@ -208,7 +208,7 @@ successfully consumed request revision and history sequence. See
 ### Structured context assembly
 
 The provider-independent Context Engine materializes versioned context facts from
-Conclave's canonical history and immutable Work Request configuration. Workflow
+Syntila's canonical history and immutable Work Request configuration. Workflow
 state comes from the scoped Work Request and its tasks at dispatch. No additional
 table or Phase 16 migration is introduced; native sessions remain Workspace-owned.
 See [Phase 16](CONVERSATION_CONTINUITY_V1.md#phase-16--provider-independent-context-engine).

@@ -20,7 +20,7 @@ abstract final class ConclaveBrandAssets {
   static const logoPng64 = 'assets/branding/conclave_logo_64.png';
   static const logoPng32 = 'assets/branding/conclave_logo_32.png';
 
-  /// Renders the official Conclave AX logo mark.
+  /// Renders the official Syntila logo mark.
   static Widget logoMark({
     double size = 28,
     BorderRadius? borderRadius,

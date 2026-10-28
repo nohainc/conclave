@@ -4,7 +4,7 @@ set -euo pipefail
 : "${CONCLAVE_APT_URL:?}" "${CONCLAVE_APT_SIGNING_FINGERPRINT:?}" "${CONCLAVE_WORKSPACE_VERSION:?}"
 [[ "$CONCLAVE_APT_URL" == https://* ]] || { echo 'Public repository must use HTTPS.' >&2; exit 1; }
 if dpkg-query -W -f='${Status}' conclave-workspace 2>/dev/null | grep -q 'install ok installed'; then
-  echo 'Use a fresh test host; Conclave Workspace is already installed.' >&2
+  echo 'Use a fresh test host; Syntila Workspace is already installed.' >&2
   exit 1
 fi
 TEMP="$(mktemp -d /tmp/conclave-public-apt.XXXXXX)"

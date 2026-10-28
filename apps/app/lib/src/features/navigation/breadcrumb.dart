@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../navigation/ax_navigation.dart';
 import 'ax_shell_context.dart';
 
-/// Route-aware breadcrumb widget for Conclave AX HUD.
+/// Route-aware breadcrumb widget for Syntila HUD.
 class AppBreadcrumb extends StatelessWidget {
   const AppBreadcrumb({
     super.key,
@@ -124,7 +124,7 @@ class AppBreadcrumb extends StatelessWidget {
           _breadcrumbText('Search', isCurrent: true),
         ],
       AxRouteKind.login || AxRouteKind.desktopAuthApproval => [
-          _breadcrumbText('Conclave AX', isCurrent: true),
+          _breadcrumbText('Syntila', isCurrent: true),
         ],
     };
 

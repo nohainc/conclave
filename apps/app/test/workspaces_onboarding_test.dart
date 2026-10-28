@@ -26,10 +26,10 @@ void main() {
     expect(find.text('No Workspaces connected'), findsOneWidget);
     expect(
       find.text(
-          'Download and register Conclave Workspace to make a Workspace and its Workers available here.'),
+          'Download and register Syntila Workspace to make a Workspace and its Workers available here.'),
       findsOneWidget,
     );
-    expect(find.text('Download Conclave Workspace'), findsNothing);
+    expect(find.text('Download Syntila Workspace'), findsNothing);
     expect(find.byType(TextField), findsNothing);
   });
 

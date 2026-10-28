@@ -5,7 +5,7 @@ import 'speech_dictation.dart';
 
 /// Mic toggle with a language menu that writes browser speech recognition into [controller] at
 /// the cursor. The user reviews and sends the text; no audio leaves the page
-/// through Conclave. Hidden when the browser has no speech recognition.
+/// through Syntila. Hidden when the browser has no speech recognition.
 class DictationButton extends StatefulWidget {
   const DictationButton({
     super.key,

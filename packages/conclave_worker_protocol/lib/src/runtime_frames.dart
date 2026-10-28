@@ -445,7 +445,7 @@ final class ProbeResult extends WorkerFrame {
   }
 }
 
-/// Conclave-owned identity and context target. Native handles are local-only.
+/// Syntila-owned identity and context target. Native handles are local-only.
 final class ConversationBootstrap {
   ConversationBootstrap(
       {required this.conversationId,

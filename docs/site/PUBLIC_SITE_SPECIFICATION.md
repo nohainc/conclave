@@ -1,10 +1,10 @@
-# Conclave AX Public Website
+# Syntila Public Website
 
 **Status:** Current public-site contract; **Canonical domain:** `https://conclaveax.com`
 
 ## Purpose
 
-The public site explains Conclave AX and directs visitors to the authenticated
+The public site explains Syntila and directs visitors to the authenticated
 application. It does not implement application workflows or own user, Space,
 Thread, Workspace, or Worker state.
 
@@ -12,39 +12,39 @@ Thread, Workspace, or Worker state.
 | --- | --- | --- |
 | `conclaveax.com` | Public Astro website | None |
 | `www.conclaveax.com` | Redirect to the canonical domain | None |
-| `app.conclaveax.com` | Authenticated Conclave AX application | Better Auth |
+| `app.conclaveax.com` | Authenticated Syntila application | Better Auth |
 
 The public site links to `https://app.conclaveax.com`. It does not proxy or
-embed the application. Conclave Cloud provides application APIs, authentication,
-authorization, and orchestration. Conclave Workspace is the local desktop
+embed the application. Syntila Cloud provides application APIs, authentication,
+authorization, and orchestration. Syntila Workspace is the local desktop
 runtime that supervises provider CLI execution.
 
 ## Visitor outcomes
 
 The site should help a visitor understand:
 
-1. What Conclave AX does.
-2. How Spaces, Threads, Conclave Cloud, and Conclave Workspace relate.
+1. What Syntila does.
+2. How Spaces, Threads, Syntila Cloud, and Syntila Workspace relate.
 3. How local provider CLI execution and Tool Profiles fit into the system.
 4. Where to start.
 
-The primary call to action is **Open Conclave AX**. A secondary **See how it
+The primary call to action is **Open Syntila**. A secondary **See how it
 works** action links to public explanatory content.
 
 ## Product explanation
 
-Conclave AX is where people discuss work, direct Threads, and review
-execution evidence. Conclave Cloud owns shared product state and authorization.
+Syntila is where people discuss work, direct Threads, and review
+execution evidence. Syntila Cloud owns shared product state and authorization.
 A Space may use a Workspace through an explicit Space-to-Workspace Grant.
-Conclave Workspace runs locally and supervises the CLI Worker Engine, which
+Syntila Workspace runs locally and supervises the CLI Worker Engine, which
 invokes a locally installed provider CLI using an approved Tool Profile.
 
 ```text
-Conclave AX -> Conclave Cloud -> Space / Thread policy
+Syntila -> Syntila Cloud -> Space / Thread policy
                                       |
                              Space-to-Workspace Grant
                                       v
-                           Conclave Workspace
+                           Syntila Workspace
                                       |
                          CLI Worker Engine + Profile
                                       |
@@ -54,13 +54,13 @@ Conclave AX -> Conclave Cloud -> Space / Thread policy
 The site must describe visible execution, evidence, and user control without
 promising that an AI result is correct. Logical Workers such as ChatGPT and
 Gemini are product capabilities backed by local CLI integrations. Provider
-authentication stays with the provider CLI on the user's machine; Conclave
+authentication stays with the provider CLI on the user's machine; Syntila
 does not store provider credentials in Cloud product tables.
 
 ## Navigation and legal routes
 
 Keep navigation shallow. Product, How it works, Workers, Security, and Open
-Conclave AX are suitable initial destinations. The footer may link to the
+Syntila are suitable initial destinations. The footer may link to the
 public source repository, Privacy, and Terms. Legal routes must contain the
 current service notices before public account creation.
 
@@ -72,9 +72,9 @@ required to explain the current product.
 Public security content may explain these boundaries:
 
 - Better Auth establishes the human application session.
-- Conclave Cloud enforces Space, Workspace, Thread, and Profile policy.
+- Syntila Cloud enforces Space, Workspace, Thread, and Profile policy.
 - A Space can use a Workspace only through an explicit grant.
-- Conclave Workspace supervises local provider processes and keeps provider
+- Syntila Workspace supervises local provider processes and keeps provider
   credentials local.
 - Tool Profiles are signed, bounded configuration interpreted by the generic
   CLI Worker Engine.
@@ -85,7 +85,7 @@ availability and provider claims.
 
 ## Public terminology
 
-Use **Conclave AX**, **Conclave Cloud**, **Conclave Workspace**, **Space**,
+Use **Syntila**, **Syntila Cloud**, **Syntila Workspace**, **Space**,
 **Thread**, **Worker**, **CLI Worker Engine**, and **Tool Profile** for the
 current product. Avoid retired product concepts and implementation names in
 public copy. Provider names may appear when they match the current catalog and
@@ -122,7 +122,7 @@ part of launch validation.
 
 ## Analytics and security headers
 
-Marketing analytics are separate from Conclave Cloud telemetry. Any enabled
+Marketing analytics are separate from Syntila Cloud telemetry. Any enabled
 analytics sends only aggregate event name, public path, and timestamp. When the
 configured endpoint is absent, no analytics requests are sent. Do not send
 cookies, user identifiers, Space or Workspace identifiers, credentials, or
@@ -134,7 +134,7 @@ from asset responses. Analytics endpoints must be same-origin.
 
 ## Visual system
 
-Use the established Conclave AX visual system: warm neutral surfaces, ink text,
+Use the established Syntila visual system: warm neutral surfaces, ink text,
 muted purple accents, crisp borders, and compact monospace details. Prefer
 existing tokens and Astro components over one-off section styles. Do not rely
 on decorative gradients, robot imagery, or animation to explain the product.

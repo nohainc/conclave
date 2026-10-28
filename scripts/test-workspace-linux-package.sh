@@ -19,7 +19,7 @@ cleanup() {
 trap cleanup EXIT
 export GNUPGHOME="$TEST_ROOT/gnupg"
 mkdir -m 700 "$GNUPGHOME"
-gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Conclave package test <test@example.invalid>' ed25519 sign 1d
+gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Syntila package test <test@example.invalid>' ed25519 sign 1d
 KEY="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1=="fpr" {print $10; exit}')"
 # Deliberately label the same fixture payload as an older package for upgrade
 # acceptance; production packaging otherwise requires a matching build manifest.

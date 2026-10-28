@@ -195,7 +195,7 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-                'This permanently deletes your Conclave account and signs you out on every device. This action cannot be undone.'),
+                'This permanently deletes your Syntila account and signs you out on every device. This action cannot be undone.'),
             const SizedBox(height: 12),
             Text('Type ${widget.email} to confirm.'),
             const SizedBox(height: 8),

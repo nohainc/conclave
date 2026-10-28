@@ -17,7 +17,7 @@ export interface ProvisioningDatabase {
 }
 
 /**
- * Initialize Conclave application state after Better Auth has authenticated
+ * Initialize Syntila application state after Better Auth has authenticated
  * the human. Workspace registration is not created as a side effect of
  * sign-in; Workspace creation is an explicit user action.
  */

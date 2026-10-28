@@ -82,7 +82,7 @@ class LinuxWorkspaceServiceManager implements WorkspaceServiceManager {
 
   String unitContents() => '''
 [Unit]
-Description=Conclave Workspace Service
+Description=Syntila Workspace Service
 After=network-online.target
 Wants=network-online.target
 

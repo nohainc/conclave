@@ -37,7 +37,7 @@ type WorkspaceOwnershipFailureCode =
   | "release_required";
 
 const otherAccountOwnershipMessage =
-  "This Workspace installation is owned by another Conclave account. Sign in as its current owner, then disconnect and release ownership before switching accounts.";
+  "This Workspace installation is owned by another Syntila account. Sign in as its current owner, then disconnect and release ownership before switching accounts.";
 
 function workspaceOwnershipFailure(
   code: WorkspaceOwnershipFailureCode,

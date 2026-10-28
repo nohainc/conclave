@@ -53,7 +53,7 @@ abstract final class AxExecutionPhase {
 
   /// Fixed sub-line separating command delivery from provider execution.
   static String? detail(String phase) => switch (phase) {
-        submitted => 'Request received by Conclave',
+        submitted => 'Request received by Syntila',
         waitingForService => 'Waiting for the Workspace Service to be ready',
         delivering => 'Sending to your Workspace',
         delivered => 'Worker accepted the request',

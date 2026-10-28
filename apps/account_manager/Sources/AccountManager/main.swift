@@ -99,7 +99,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Conclave Accounts").font(.title2.bold())
+                Text("Syntila Accounts").font(.title2.bold())
                 Picker("Database", selection: $model.environment) {
                     Text("Local").tag("local")
                     Text("Production").tag("production")
@@ -145,7 +145,7 @@ struct ContentView: View {
                         metric("Work requests", account.requests)
                         metric("Failed requests", account.failed_requests)
                     }.padding(.vertical)
-                    Text("Lifetime activity recorded by Conclave. Messages counts thread discussion messages; Chat/Work request prompts are excluded.").font(.caption).foregroundStyle(.secondary)
+                    Text("Lifetime activity recorded by Syntila. Messages counts thread discussion messages; Chat/Work request prompts are excluded.").font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Button(account.status == "suspended" ? "Unlock account" : "Lock account") { prepare(account.status == "suspended" ? "unlock" : "lock", account) }
                             .disabled(model.busy || account.status == "deactivated")
@@ -172,7 +172,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Confirm \(pending ?? "") · \(model.environment.capitalized)").font(.title2.bold())
                 Text(target?.email ?? "").font(.headline)
-                Text(pending == "reset" ? "Request an email containing a time-limited password reset link. Email delivery is not guaranteed by the request response." : "This changes access to Conclave. Locking revokes human sessions; work already running is not cancelled.")
+                Text(pending == "reset" ? "Request an email containing a time-limited password reset link. Email delivery is not guaranteed by the request response." : "This changes access to Syntila. Locking revokes human sessions; work already running is not cancelled.")
                 if pending != "lock" {
                     TextField("Retype the account email", text: $confirmation)
                 }
@@ -196,5 +196,5 @@ struct ContentView: View {
 }
 
 @main struct AccountManagerApp: App {
-    var body: some Scene { WindowGroup("Conclave Accounts") { ContentView() } }
+    var body: some Scene { WindowGroup("Syntila Accounts") { ContentView() } }
 }

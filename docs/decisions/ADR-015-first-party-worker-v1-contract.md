@@ -11,7 +11,7 @@ Threads need stable user-facing Worker identities that survive provider CLI upda
 
 ### Catalog and cardinality
 
-Conclave v1 initially provisions these official Workers:
+Syntila v1 initially provisions these official Workers:
 
 | Worker Type ID | Name | Official Profile | Provider CLI | Slots per Workspace |
 | --- | --- | --- | --- | --- |
@@ -27,7 +27,7 @@ IDs, Engine versions, and provider executable names are implementation details.
 
 ### Authentication and billing
 
-Provider authentication and any provider subscription/API mode remain local to the provider CLI. Conclave does not collect provider credentials or choose a billing mode for the user.
+Provider authentication and any provider subscription/API mode remain local to the provider CLI. Syntila does not collect provider credentials or choose a billing mode for the user.
 
 ### Readiness and activation
 

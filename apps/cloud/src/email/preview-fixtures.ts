@@ -41,7 +41,7 @@ export const emailPreviewFixtures: Readonly<{
   },
   "space.invitation.v1": {
     inviterName: "Grace Hopper",
-    spaceName: "Conclave AX Research Space",
+    spaceName: "Syntila Research Space",
     role: "collaborator",
     invitationUrl: `${EMAIL_PREVIEW_ORIGIN}/?invitation=preview-invitation`,
     recipientEmail: "ada@example.com",
@@ -49,12 +49,12 @@ export const emailPreviewFixtures: Readonly<{
   "space.invitation-accepted.v1": {
     recipientName: "Grace Hopper",
     memberName: "Ada Lovelace",
-    spaceName: "Conclave AX Research Space",
+    spaceName: "Syntila Research Space",
     role: "collaborator",
   },
   "space.access-revoked.v1": {
     recipientName: "Ada Lovelace",
-    spaceName: "Conclave AX Research Space",
+    spaceName: "Syntila Research Space",
     reason: "Membership ended",
   },
   "auth.welcome.v1": {

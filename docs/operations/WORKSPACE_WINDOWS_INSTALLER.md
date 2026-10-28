@@ -15,7 +15,7 @@ The workflow pins compiler 6.7.3 from the official release with a SHA-256 check.
 `apps/workspace/pubspec.yaml`; prerelease versions require an explicit packaging
 policy before they can be packaged.
 
-The installer copies the complete canonical bundle, including the unified CLI/service and bundled Engine, to `%LOCALAPPDATA%\Programs\Conclave\Workspace` and adds a Windows uninstall entry. It requires no administrator rights.
+The installer copies the complete canonical bundle, including the unified CLI/service and bundled Engine, to `%LOCALAPPDATA%\Programs\Syntila\Workspace` and adds a Windows uninstall entry. It requires no administrator rights.
 A stable AppId enables in-place upgrades. Silent installation supports
 `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`.
 

@@ -8,7 +8,7 @@ import 'execution_health.dart';
 import 'app_menu.dart';
 import 'ax_shell_context.dart';
 
-/// Canonical Top Application Header Bar (HUD) for Conclave AX.
+/// Canonical Top Application Header Bar (HUD) for Syntila.
 class AppTopHud extends StatefulWidget implements PreferredSizeWidget {
   const AppTopHud({
     super.key,
@@ -140,7 +140,7 @@ class _AppTopHudState extends State<AppTopHud> {
               children: [
                 if (widget.compact)
                   IconButton(
-                    tooltip: 'Conclave AX — Spaces',
+                    tooltip: 'Syntila — Spaces',
                     onPressed: () =>
                         widget.onNavigateTo(const AxNavigation.spaces()),
                     icon: ConclaveBrand.logoMark(size: 28),

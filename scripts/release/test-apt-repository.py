@@ -93,7 +93,7 @@ class RepositoryTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'immutable'):
                     module.build(output, [package('1.0.0', 'amd64', 'changed')], key)
                 signed = output / 'dists/stable/InRelease'
-                signed.write_bytes(signed.read_bytes().replace(b'Origin: Conclave', b'Origin: Tampered'))
+                signed.write_bytes(signed.read_bytes().replace(b'Origin: Syntila', b'Origin: Tampered'))
                 self.assertNotEqual(subprocess.run(['gpgv', '--keyring', str(output / 'conclave-archive-keyring.gpg'), str(signed)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode, 0)
             finally:
                 subprocess.run(['gpgconf', '--kill', 'gpg-agent'], check=False)

@@ -47,7 +47,7 @@ on the installer. The headless bundle contains `conclave-workspace.exe` and
 
 ## Selected backend: Azure Artifact Signing Basic
 
-Artifact Signing is Microsoft's current name for Trusted Signing. Conclave's
+Artifact Signing is Microsoft's current name for Trusted Signing. Syntila's
 existing `CONCLAVE_WINDOWS_TRUSTED_SIGNING_*` variable names remain unchanged.
 The GitHub environment selects `CONCLAVE_WINDOWS_SIGNING=azure`.
 
@@ -122,7 +122,7 @@ and [Basic pricing](https://learn.microsoft.com/en-us/azure/artifact-signing/how
 
 ## Device qualification before announcing
 
-- Right-click Setup.exe → Properties → Digital Signatures shows the Conclave
+- Right-click Setup.exe → Properties → Digital Signatures shows the Syntila
   publisher with a timestamp; `Get-AuthenticodeSignature` reports `Valid` for
   Setup.exe, `conclave-workspace.exe` and the Engine.
 - The installer UAC/SmartScreen prompt names the publisher (no "Unknown

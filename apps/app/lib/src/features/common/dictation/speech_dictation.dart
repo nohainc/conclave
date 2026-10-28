@@ -2,7 +2,7 @@ import 'speech_dictation_stub.dart'
     if (dart.library.js_interop) 'speech_dictation_web.dart' as platform;
 
 /// Browser speech-to-text for composers. Recognition runs in the browser
-/// (some browsers use their vendor's speech service); Conclave only receives
+/// (some browsers use their vendor's speech service); Syntila only receives
 /// the text the user decides to send.
 abstract interface class SpeechDictation {
   bool get supported;

@@ -44,7 +44,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
     final c = widget.controller;
 
     return MaterialApp(
-      title: 'Conclave Profile Lab',
+      title: 'Syntila Profile Lab',
       debugShowCheckedModeBanner: false,
       theme: ProfileLabTheme.darkTheme,
       builder: (context, child) => Column(
@@ -76,7 +76,7 @@ class _ProfileLabAppState extends State<ProfileLabApp> {
                           ConclaveBrand.logoMark(size: 26),
                           const SizedBox(width: 12),
                           Text(
-                            'Conclave Profile Lab',
+                            'Syntila Profile Lab',
                             style: ConclaveTypography.wordmark.copyWith(
                               fontSize: 14,
                               color: Colors.white,

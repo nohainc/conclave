@@ -1,4 +1,4 @@
-# ADR-001: D1 + R2 as initial Conclave storage
+# ADR-001: D1 + R2 as initial Syntila storage
 
 **Status:** Superseded
 **Date:** 2026-09-20
@@ -39,10 +39,10 @@ Use Cloudflare D1 as the initial relational system of record and Cloudflare R2 f
 Secrets must not be stored in plaintext D1 columns. Platform credentials belong in Cloudflare secrets. Future BYOK credentials require encryption before persistence with keys held separately.
 
 ## Rationale
-Conclave MVP has moderate transactional metadata volume and long-running AI/tool operations rather than sustained high concurrent database writes. D1 keeps the Cloudflare architecture simple. Large data is naturally externalized to R2.
+Syntila MVP has moderate transactional metadata volume and long-running AI/tool operations rather than sustained high concurrent database writes. D1 keeps the Cloudflare architecture simple. Large data is naturally externalized to R2.
 
 ## Portability requirement
-Conclave Core must not issue raw D1 queries directly. Persistence is accessed through repository interfaces such as:
+Syntila Core must not issue raw D1 queries directly. Persistence is accessed through repository interfaces such as:
 - GoalRepository
 - TaskRepository
 - WorkerRepository

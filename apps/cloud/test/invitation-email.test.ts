@@ -47,7 +47,7 @@ describe("Invitation Email Delivery", () => {
     const ok = await sendSpaceInvitationEmail(env as never, {
       recipientEmail: "ulikossnokia@gmail.com",
       inviterName: "Vitalii Noha",
-      spaceName: "Conclave AX Development",
+      spaceName: "Syntila Development",
       role: "collaborator",
       appUrl: "https://app.conclave.dev/?invitation=pinv-123",
     });
@@ -59,12 +59,12 @@ describe("Invitation Email Delivery", () => {
       to: "ulikossnokia@gmail.com",
       from: {
         email: "invitations@conclaveax.com",
-        name: "Conclave AX",
+        name: "Syntila",
       },
-      subject: "Vitalii Noha invited you to Conclave AX Development",
+      subject: "Vitalii Noha invited you to Syntila Development",
     });
     expect(sent.text).toContain(
-      'Vitalii Noha invited you to join "Conclave AX Development" as a collaborator on Conclave AX.',
+      'Vitalii Noha invited you to join "Syntila Development" as a collaborator on Syntila.',
     );
     expect(sent.text).toContain(
       "https://app.conclave.dev/?invitation=pinv-123",
@@ -73,7 +73,7 @@ describe("Invitation Email Delivery", () => {
       "Sign in with ulikossnokia@gmail.com to accept.",
     );
     expect(sent.html).toContain("<strong>Vitalii Noha</strong>");
-    expect(sent.html).toContain("<strong>Conclave AX Development</strong>");
+    expect(sent.html).toContain("<strong>Syntila Development</strong>");
     expect(sent.html).toContain(
       'href="https://app.conclave.dev/?invitation=pinv-123"',
     );
@@ -106,7 +106,7 @@ describe("Invitation Email Delivery", () => {
         {
           recipientEmail: "person@example.com",
           inviterName: "Vitalii Noha",
-          spaceName: "Conclave AX",
+          spaceName: "Syntila",
           role: "collaborator",
           appUrl: "https://app.conclave.dev",
         },
@@ -124,7 +124,7 @@ describe("Invitation Email Delivery", () => {
       {
         recipientEmail: "person@example.com",
         inviterName: "Vitalii Noha",
-        spaceName: "Conclave AX",
+        spaceName: "Syntila",
         role: "collaborator",
         appUrl: "https://app.conclave.dev",
       },
@@ -133,7 +133,7 @@ describe("Invitation Email Delivery", () => {
     expect(ok).toBe(true);
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1]?.[0]).toMatchObject({
-      from: { email: "vitalii@conclaveax.com", name: "Conclave AX" },
+      from: { email: "vitalii@conclaveax.com", name: "Syntila" },
     });
   });
 
@@ -153,7 +153,7 @@ describe("Invitation Email Delivery", () => {
           {
             recipientEmail: "person@example.com",
             inviterName: "Vitalii Noha",
-            spaceName: "Conclave AX",
+            spaceName: "Syntila",
             role: "collaborator",
             appUrl: "https://app.conclave.dev",
           },
@@ -176,7 +176,7 @@ describe("Invitation Email Delivery", () => {
       INSERT INTO users (id, email, display_name, status, created_at, updated_at)
       VALUES ('user-vitalii', 'vitalii@nohainc.com', 'Vitalii Noha', 'active', '${now}', '${now}');
       INSERT INTO spaces (id, name, owner_user_id, created_at, updated_at)
-      VALUES ('proj-1', 'Conclave AX Development', 'user-vitalii', '${now}', '${now}');
+      VALUES ('proj-1', 'Syntila Development', 'user-vitalii', '${now}', '${now}');
       INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
       VALUES ('pm-1', 'proj-1', 'user-vitalii', 'owner', '${now}', '${now}');
     `);
@@ -226,10 +226,10 @@ describe("Invitation Email Delivery", () => {
     expect(sentEmails).toHaveLength(1);
     expect(sentEmails[0]).toMatchObject({
       to: "ulikossnokia@gmail.com",
-      subject: "Vitalii Noha invited you to Conclave AX Development",
+      subject: "Vitalii Noha invited you to Syntila Development",
       from: {
         email: "conclave@conclaveax.com",
-        name: "Conclave AX",
+        name: "Syntila",
       },
     });
   });
@@ -242,7 +242,7 @@ describe("Invitation Email Delivery", () => {
       INSERT INTO users (id, email, display_name, status, created_at, updated_at)
       VALUES ('user-vitalii', 'vitalii@nohainc.com', 'Vitalii Noha', 'active', '${now}', '${now}');
       INSERT INTO spaces (id, name, owner_user_id, created_at, updated_at)
-      VALUES ('proj-1', 'Conclave AX Development', 'user-vitalii', '${now}', '${now}');
+      VALUES ('proj-1', 'Syntila Development', 'user-vitalii', '${now}', '${now}');
       INSERT INTO space_memberships (id, space_id, user_id, role, created_at, updated_at)
       VALUES ('pm-1', 'proj-1', 'user-vitalii', 'owner', '${now}', '${now}');
     `);

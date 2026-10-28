@@ -666,7 +666,7 @@ export const workspaceRuntimeEnvelopeSchema = z
                 requestId: token,
                 status: z.enum(["ok", "unavailable", "error"]),
                 // The provider's own report, returned verbatim and never
-                // interpreted by Conclave.
+                // interpreted by Syntila.
                 output: reportText.optional(),
                 errorOutput: reportText.optional(),
                 exitCode: z.number().int().min(-1024).max(1024).optional(),
