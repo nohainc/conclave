@@ -46,6 +46,14 @@ final status = 'ready';
 ''';
 
 void main() {
+  test('note blank lines become display-only spacers outside code', () {
+    String show(String s) => visibleBlankLinesMarkdown(s).replaceAll('​', 'Z');
+    expect(show('Alpha\n\nBeta'), 'Alpha\n\nBeta');
+    expect(show('Alpha\n\n\nBeta'), 'Alpha\n\nZ\n\nBeta');
+    // Blank lines inside a fence are code, not spacing.
+    expect(show('```\none\n\n\nthree\n```'), '```\none\n\n\nthree\n```');
+  });
+
   testWidgets(
       'note previews preserve blank-line spacing without changing messages',
       (tester) async {
@@ -98,7 +106,8 @@ void main() {
       body: SyntilaMarkdownBody(data: note, preserveBlankLines: true),
     )));
     await tester.pumpAndSettle();
-    expect(find.text('Heading', findRichText: true), findsOneWidget);
+    // gpt_markdown ends a level-1 heading with a line break.
+    expect(find.textContaining('Heading', findRichText: true), findsOneWidget);
     expect(find.text('Item', findRichText: true), findsOneWidget);
     expect(find.text('Tail', findRichText: true), findsOneWidget);
     expect(tester.widget<SyntilaCodeBlock>(find.byType(SyntilaCodeBlock)).code,

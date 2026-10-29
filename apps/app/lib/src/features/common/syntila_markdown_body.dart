@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
 import 'syntila_code_block.dart';
 
@@ -92,10 +91,7 @@ class SyntilaMarkdownBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Notes keep the legacy renderer: their visible blank lines rely on a
-    // custom block syntax that gpt_markdown's parser does not expose.
-    final body =
-        preserveBlankLines ? _buildLegacy(context) : _buildGpt(context);
+    final body = _buildGpt(context);
     // Keep the region at the message boundary: an ancestor SelectionArea could
     // otherwise make Select All include neighboring messages or shell UI.
     return SelectionArea(
@@ -108,6 +104,8 @@ class SyntilaMarkdownBody extends StatelessWidget {
   /// the thread's list virtualizes messages while each body caches segments.
   Widget _buildGpt(BuildContext context) {
     final theme = Theme.of(context);
+    final data =
+        preserveBlankLines ? visibleBlankLinesMarkdown(this.data) : this.data;
     // gpt_markdown's image hook receives only the URL; recover the alt text.
     final imageAlts = {
       for (final m
@@ -158,75 +156,57 @@ class SyntilaMarkdownBody extends StatelessWidget {
     if (fitContent) return body;
     return SizedBox(width: double.infinity, child: body);
   }
-
-  Widget _buildLegacy(BuildContext context) {
-    return MarkdownBody(
-      key: ValueKey<String>(data),
-      data: data,
-      fitContent: fitContent,
-      extensionSet: md.ExtensionSet.gitHubFlavored,
-      blockSyntaxes: [if (preserveBlankLines) const _BlankLinesSyntax()],
-      // One selection region joins paragraphs, lists and code blocks.
-      selectable: false,
-      softLineBreak: true,
-      builders: {
-        'pre': SyntilaCodeBlockBuilder(),
-        if (preserveBlankLines) 'note-blank-lines': _BlankLinesBuilder(),
-      },
-      syntaxHighlighter: SyntilaSyntaxHighlighter(Theme.of(context)),
-      styleSheet: SyntilaMarkdownStyleSheet.fromTheme(Theme.of(context)),
-      onTapLink: (_, href, __) => unawaited(_openLink(context, href)),
-      imageBuilder: (_, __, alt) => Wrap(
-        spacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Icon(Icons.image_outlined,
-              size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
-          Text(alt?.isNotEmpty == true ? alt! : 'Image',
-              style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      ),
-    );
-  }
 }
 
-/// Let the Markdown parser own code fences, lists and other block structure;
-/// only blank lines it would otherwise discard become visual spacers.
-class _BlankLinesSyntax extends md.BlockSyntax {
-  const _BlankLinesSyntax();
-
-  // Formatting a multiline selection as headings prefixes its empty lines too.
-  // Preserve those empty ATX headings just like blank lines, only in Notes.
-  @override
-  RegExp get pattern => RegExp(r'^(?:[ \t]*| {0,3}#{1,6}(?:[ \t]+#*[ \t]*)?)$');
-
-  @override
-  md.Node parse(md.BlockParser parser) {
-    var count = 0;
-    while (!parser.isDone && pattern.hasMatch(parser.current.content)) {
-      count++;
-      parser.advance();
+/// Notes show extra blank lines as space, which Markdown would collapse.
+/// Each blank line beyond the paragraph break becomes a zero-width-space
+/// paragraph for display only (Dart's trim keeps U+200B, unlike U+00A0); the saved note is unchanged. Empty ATX
+/// headings (left by heading-formatting a multiline selection) count as blank
+/// lines. Fenced code keeps its whitespace untouched.
+String visibleBlankLinesMarkdown(String source) {
+  final lines = source.split('\n');
+  if (source.endsWith('\n')) lines.removeLast();
+  final blank = RegExp(r'^(?:[ \t]*| {0,3}#{1,6}(?:[ \t]+#*[ \t]*)?)$');
+  final fence = RegExp(r'^ {0,3}(`{3,}|~{3,})');
+  final out = <String>[];
+  String? openFence;
+  var run = 0;
+  var seenContent = false;
+  void flush({required bool atEnd}) {
+    if (run == 0) return;
+    // Between blocks the first blank line is the normal paragraph break.
+    final extra = seenContent && !atEnd ? run - 1 : run;
+    out.add('');
+    for (var i = 0; i < extra; i++) {
+      out
+        ..add('\u200B')
+        ..add('');
     }
-    parser.encounteredBlankLine = true;
-    return md.Element('note-blank-lines', [])..attributes['count'] = '$count';
+    run = 0;
   }
-}
 
-class _BlankLinesBuilder extends MarkdownElementBuilder {
-  @override
-  bool isBlockElement() => true;
-
-  @override
-  Widget visitElementAfterWithContext(BuildContext context, md.Element element,
-      TextStyle? preferredStyle, TextStyle? parentStyle) {
-    final style = SyntilaMarkdownStyleSheet.fromTheme(Theme.of(context)).p;
-    final lineHeight =
-        MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 14) *
-            (style?.height ?? 1.5);
-    return SizedBox(
-      height: lineHeight * int.parse(element.attributes['count']!),
-    );
+  for (final line in lines) {
+    final marker = fence.firstMatch(line)?.group(1);
+    if (openFence != null) {
+      out.add(line);
+      if (marker != null &&
+          marker[0] == openFence[0] &&
+          marker.length >= openFence.length) {
+        openFence = null;
+      }
+      continue;
+    }
+    if (blank.hasMatch(line)) {
+      run++;
+      continue;
+    }
+    flush(atEnd: false);
+    seenContent = true;
+    if (marker != null) openFence = marker;
+    out.add(line);
   }
+  flush(atEnd: true);
+  return out.join('\n');
 }
 
 // Horizontal scrollables treat a point to their left as preceding their
