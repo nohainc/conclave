@@ -185,14 +185,20 @@ class _NewThreadPageState extends State<NewThreadPage> {
                                     configurations: _workflows!,
                                     isOwner: widget.space.role == 'owner'),
                               ),
+                            // Same label column and type scale as the
+                            // Workspace and Additional folders rows.
                             Row(
                               key: const ValueKey(
                                   'space-show-ai-history-setting'),
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Expanded(
-                                    child: Text('Show AI History tab')),
-                                const SizedBox(width: 8),
+                                SizedBox(
+                                    width: _settingLabelWidth,
+                                    child: Text('AI History tab',
+                                        style: _settingLabelStyle(
+                                            Theme.of(context)))),
                                 Transform.scale(
+                                  alignment: Alignment.centerLeft,
                                   scale: 0.8,
                                   child: Switch(
                                     materialTapTargetSize:

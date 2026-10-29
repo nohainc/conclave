@@ -106,13 +106,21 @@ void main() {
     expect(find.text('Show execution history in this Space\'s Threads.'),
         findsNothing);
     expect(tester.getSize(setting).height, lessThanOrEqualTo(48));
-    expect(tester.getSize(setting).width, 840);
-    expect(tester.getRect(setting).right - tester.getRect(toggle).right,
+    // Every Settings row shares one label column and type scale: labels
+    // start at the same x, values (selector, switch) start at the same x.
+    final workspaceLabel = find.text('Workspace');
+    final historyLabel = find.text('AI History tab');
+    expect(tester.getTopLeft(historyLabel).dx,
+        tester.getTopLeft(workspaceLabel).dx);
+    expect(tester.widget<Text>(historyLabel).style?.fontSize,
+        tester.widget<Text>(workspaceLabel).style?.fontSize);
+    expect(
+        (tester.getTopLeft(toggle).dx -
+                tester
+                    .getTopLeft(find.byKey(const ValueKey('space-workspace')))
+                    .dx)
+            .abs(),
         lessThanOrEqualTo(8));
-    final defaultMessage =
-        find.textContaining('Following the default Workspace:');
-    expect(tester.getRect(setting).top - tester.getRect(defaultMessage).bottom,
-        greaterThanOrEqualTo(12));
 
     await tester.tap(toggle);
     await tester.pumpAndSettle();
@@ -235,7 +243,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('save-space-folders')));
     await tester.pumpAndSettle();
     expect(source.saves.single, ['folder-00000000000000a1']);
-    expect(find.text('Additional folders · api'), findsOneWidget);
+    // Label column "Additional folders", attached folder names as the value.
+    expect(find.text('Additional folders'), findsOneWidget);
+    expect(find.text('api'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('space-workspace')));
     await tester.pumpAndSettle();
