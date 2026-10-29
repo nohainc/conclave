@@ -1603,7 +1603,8 @@ extension _AxAppController on _AxAppStateMixin {
       actual.path == canonical.path &&
       mapEquals(actual.queryParameters, canonical.queryParameters);
 
-  void _navigateTo(AxNavigation next, {bool replace = false}) {
+  void _navigateTo(AxNavigation next,
+      {bool replace = false, bool expandThreadSpace = true}) {
     if ((next.spaceId?.startsWith('local-space-') ?? false) ||
         (next.spaceId?.startsWith('local-space-') ?? false) ||
         (next.threadId?.startsWith('local-thread-') ?? false) ||
@@ -1622,7 +1623,9 @@ extension _AxAppController on _AxAppStateMixin {
       navigation = next;
       final spaceId = next.spaceId;
       selectedSpaceId = spaceId ?? selectedSpaceId;
-      if (next.kind == AxRouteKind.thread && spaceId != null) {
+      if (expandThreadSpace &&
+          next.kind == AxRouteKind.thread &&
+          spaceId != null) {
         expandedSpaceIds.add(spaceId);
       }
     });

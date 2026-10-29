@@ -96,7 +96,8 @@ void main() {
         ),
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Authentication redesign'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-1')),
+          findsOneWidget);
       expect(find.byTooltip('New Space'), findsOneWidget);
       expect(find.byTooltip('Notifications'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -126,18 +127,17 @@ void main() {
       await tester.pumpAndSettle();
 
       // Allowed permanent items:
-      expect(find.text('Syntila'),
+      expect(find.byKey(const ValueKey('sidebar-space-row-p-1')),
           findsOneWidget); // Space in tree; header has only the app mark
       expect(find.byTooltip('New Space'),
           findsOneWidget); // New Space button before alarm
       expect(find.byTooltip('Notifications'), findsOneWidget); // Alarm button
-      expect(
-          find.descendant(
-              of: find.byType(SpaceTree), matching: find.text('Syntila')),
+      expect(find.byKey(const ValueKey('sidebar-space-row-p-1')),
           findsOneWidget); // Space name in tree
-      expect(find.text('Authentication redesign'),
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-1')),
           findsOneWidget); // Thread in tree
-      expect(find.text('Scheduler'), findsOneWidget); // Thread in tree
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-2')),
+          findsOneWidget); // Thread in tree
       expect(find.text('Vitalii Noha'),
           findsOneWidget); // User footer display name
       expect(find.text('VN'), findsOneWidget); // User avatar initials
@@ -412,10 +412,7 @@ void main() {
       );
 
       // Selecting the expanded parent from a Thread preserves expansion.
-      await tester.tap(find.descendant(
-        of: find.byType(SpaceTree),
-        matching: find.text('Syntila'),
-      ));
+      await tester.tap(find.byKey(const ValueKey('sidebar-space-row-p-1')));
       expect(toggledSpaceId, isNull);
       expect(navigated, const AxNavigation.space('p-1'));
     });
@@ -443,7 +440,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap on idle thread 'Scheduler'
-      await tester.tap(find.text('Scheduler'));
+      await tester.tap(find.byKey(const ValueKey('sidebar-thread-row-ws-2')));
       expect(navigated, const AxNavigation.thread('p-1', 'ws-2'));
     });
   });

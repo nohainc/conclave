@@ -286,7 +286,8 @@ void main() {
     builds.clear();
     store.spaces.replace([space.copyWith(name: 'Updated in background')]);
     await tester.pumpAndSettle();
-    expect(find.text('Updated in background'), findsOneWidget);
+    expect(
+        find.byKey(ValueKey('sidebar-space-row-${space.id}')), findsOneWidget);
     expect(builds['SyntilaAppShell'] ?? 0, 0);
     expect(builds['AxSidebar'] ?? 0, 0);
     expect(builds['SpacePage'] ?? 0, 0);

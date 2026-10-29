@@ -694,23 +694,20 @@ void main() {
       dataSource: data,
     )));
     await tester.pumpAndSettle();
-    final tree = find.byType(SpaceTree);
-    final target = find.descendant(of: tree, matching: find.text('Atlas API'));
-    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
-        findsNothing);
+    final target = find.byKey(const ValueKey('sidebar-space-row-atlas'));
+    final atlasThread =
+        find.byKey(const ValueKey('sidebar-thread-row-atlas-chat'));
+    expect(atlasThread, findsNothing);
     await tester.tap(target);
     await tester.pumpAndSettle();
     expect(data.selectedSpaces, contains('atlas'));
-    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
-        findsOneWidget);
+    expect(atlasThread, findsOneWidget);
     await tester.tap(target);
     await tester.pumpAndSettle();
-    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
-        findsNothing);
+    expect(atlasThread, findsNothing);
     await tester.tap(target);
     await tester.pumpAndSettle();
-    expect(find.descendant(of: tree, matching: find.text('Atlas conversation')),
-        findsOneWidget);
+    expect(atlasThread, findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -730,10 +727,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     final tree = find.byType(SpaceTree);
-    final space =
-        find.descendant(of: tree, matching: find.text('Authentication'));
-    final stream = find.descendant(
-        of: tree, matching: find.text('Authentication hardening'));
+    final space = find.byKey(const ValueKey('sidebar-space-row-space-auth'));
+    final stream = find.byKey(const ValueKey('sidebar-thread-row-thread-auth'));
     expect(stream, findsOneWidget);
     // Keep the active Thread route while collapsing its sidebar parent.
     tester.widget<SpaceTree>(tree).onToggleSpaceExpanded!('space-auth');
@@ -745,6 +740,37 @@ void main() {
     await tester.tap(space);
     await tester.pumpAndSettle();
     expect(stream, findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('opening a recent Thread preserves its collapsed Space',
+      (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      theme: SyntilaBrand.darkTheme(),
+      home: const SyntilaAppShell(
+        services: DefaultPlatformServices(),
+        dataSource: AxFixtureDataSource(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final tree = find.byType(SpaceTree);
+    const originalThread = ValueKey('sidebar-thread-row-thread-auth');
+    const recentThread = ValueKey('recent-thread-row-space-auth-thread-auth');
+    expect(find.byKey(originalThread), findsNothing);
+    expect(find.byKey(recentThread), findsOneWidget);
+
+    await tester.tap(find.byKey(recentThread));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<SpaceTree>(tree).shellContext.navigation.threadId,
+        'thread-auth');
+    expect(find.byKey(originalThread), findsNothing);
+    expect(find.byKey(recentThread), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -936,7 +962,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Check Header & Main Sections
-      expect(find.text('Syntila'), findsOneWidget); // Space only
+      expect(find.byKey(const ValueKey('sidebar-space-row-space-1')),
+          findsOneWidget);
       expect(find.text('Home'), findsNothing);
       expect(find.text('Spaces'), findsNothing);
       expect(find.text('SPACES'), findsNothing);
@@ -956,7 +983,8 @@ void main() {
       expect(find.text('INSIGHTS'), findsNothing);
 
       // Check Space & Thread tree
-      expect(find.text('Authentication redesign'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-1')),
+          findsOneWidget);
 
       // Check Viewer Initials & Name button
       expect(find.text('VN'), findsOneWidget);
@@ -968,13 +996,13 @@ void main() {
       expect(createSpaceCalled, isTrue);
 
       // Selecting an expanded Space from Home preserves its expansion.
-      await tester.tap(find.text('Syntila').last);
+      await tester.tap(find.byKey(const ValueKey('sidebar-space-row-space-1')));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(navigatedTo?.spaceId, 'space-1');
       expect(toggledSpaceId, isNull);
 
       // Tap thread row
-      await tester.tap(find.text('Authentication redesign'));
+      await tester.tap(find.byKey(const ValueKey('sidebar-thread-row-ws-1')));
       expect(navigatedTo?.kind, AxRouteKind.thread);
       expect(navigatedTo?.threadId, 'ws-1');
 
@@ -1317,7 +1345,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Active Thread'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-active')),
+          findsOneWidget);
       expect(find.text('Old Archived Thread'), findsNothing);
       expect(find.text('Archived (1)'), findsNothing);
     });
@@ -2125,7 +2154,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Threads should not be visible when collapsed
-      expect(find.text('Engine optimization'), findsNothing);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-running')),
+          findsNothing);
       // Collapsed space shows closed folder icon
       expect(
         find.byWidgetPredicate(
@@ -2134,7 +2164,7 @@ void main() {
       );
 
       // Tap the space item -> should navigate to space and toggle expansion
-      await tester.tap(find.text('Syntila Core'));
+      await tester.tap(find.byKey(const ValueKey('sidebar-space-row-p-1')));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(navigatedTo?.spaceId, 'p-1');
       expect(toggledSpaceId, 'p-1');
@@ -2176,10 +2206,11 @@ void main() {
             (w) => w is SyntilaFolderIcon && w.isExpanded == true),
         findsOneWidget,
       );
-      expect(find.text('Engine optimization'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-running')),
+          findsOneWidget);
 
       // Tap the space item again -> toggles expansion to collapse and navigates
-      await tester.tap(find.text('Syntila Core'));
+      await tester.tap(find.byKey(const ValueKey('sidebar-space-row-p-1')));
       expect(navigatedTo?.kind, AxRouteKind.space);
       expect(toggledSpaceId, 'p-1');
     });
@@ -2211,9 +2242,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Engine optimization'), findsOneWidget);
-      expect(find.text('Queue integration'), findsOneWidget);
-      expect(find.text('Buggy patch'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-running')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-queued')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-failed')),
+          findsOneWidget);
     });
 
     testWidgets(
@@ -2587,13 +2621,17 @@ void main() {
       await tester.pumpAndSettle();
 
       // Space rows display the space name without legacy Goal counts.
-      expect(find.text('Syntila'), findsOneWidget); // Space only
+      expect(
+          find.byKey(const ValueKey('sidebar-space-row-p-1')), findsOneWidget);
       expect(find.text('5'), findsNothing);
 
       // Thread rows are rendered
-      expect(find.text('Authentication redesign'), findsOneWidget);
-      expect(find.text('Landing page'), findsOneWidget);
-      expect(find.text('Scheduler'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-1')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-2')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-3')),
+          findsOneWidget);
 
       // Test New Space button in sidebar header row
       await tester.tap(find.byTooltip('New Space'));
@@ -2698,7 +2736,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Home container has transparent background, Spaces nav is active
-      expect(find.text('Authentication redesign'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-1')),
+          findsOneWidget);
     });
 
     testWidgets(
@@ -2814,8 +2853,8 @@ void main() {
       // Full sidebar visible with space tree, search & alarm button
       expect(find.byType(AxSidebar), findsOneWidget);
       expect(find.byType(AxTopBar), findsNothing); // Top HUD hidden on desktop
-      expect(
-          find.text('Authentication redesign'), findsOneWidget); // sidebar item
+      expect(find.byKey(const ValueKey('sidebar-thread-row-ws-1')),
+          findsOneWidget); // sidebar item
       expect(find.byTooltip('Search...'),
           findsOneWidget); // Search icon on sidebar
       expect(

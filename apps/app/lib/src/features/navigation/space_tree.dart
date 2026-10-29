@@ -3,6 +3,7 @@ import '../common/quiet_notices.dart';
 import '../common/thread_dialogs.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/semantics.dart';
 
 import '../../brand.dart';
@@ -10,11 +11,15 @@ import '../../navigation/ax_navigation.dart';
 import '../../ax/ax_models.dart';
 import 'ax_shell_context.dart';
 import '../../ax/sync/ax_query_builder.dart';
+import '../../ax/sync/ax_space_threads.dart';
 
 /// Width reserved at the right of every row for the menu button, so activity
 /// indicators keep a fixed position whether or not the row is selected.
 const double _menuSlotWidth = 28;
 const double _sidebarRowHeight = 30;
+
+String _threadSelectionKey(String spaceId, String threadId) =>
+    '$spaceId/$threadId';
 
 /// Interactive Space Tree component for the Syntila App Sidebar.
 class SpaceTree extends StatelessWidget {
@@ -22,6 +27,7 @@ class SpaceTree extends StatelessWidget {
     super.key,
     required this.shellContext,
     required this.onNavigateTo,
+    this.onNavigateToRecentThread,
     this.onToggleSpaceExpanded,
     this.onCreateSpace,
     this.onCreateThread,
@@ -41,10 +47,12 @@ class SpaceTree extends StatelessWidget {
     this.spaceIdFilter,
     this.onOpenInvitations,
     this.narrow = false,
+    this.showRecentThreads = false,
   });
 
   final AxShellContext shellContext;
   final ValueChanged<AxNavigation> onNavigateTo;
+  final ValueChanged<AxNavigation>? onNavigateToRecentThread;
   final ValueChanged<String>? onToggleSpaceExpanded;
   final VoidCallback? onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
@@ -73,10 +81,24 @@ class SpaceTree extends StatelessWidget {
   final String? spaceIdFilter;
   final VoidCallback? onOpenInvitations;
   final bool narrow;
+  final bool showRecentThreads;
 
   @override
-  Widget build(BuildContext context) =>
-      SidebarPulse(child: Builder(builder: _buildContent));
+  Widget build(BuildContext context) {
+    final activeSpaceId =
+        shellContext.navigation.spaceId ?? shellContext.selectedSpace?.id;
+    final activeThreadId =
+        shellContext.navigation.threadId ?? shellContext.selectedThread?.id;
+    final activeThreadKey = activeSpaceId != null && activeThreadId != null
+        ? _threadSelectionKey(activeSpaceId, activeThreadId)
+        : null;
+    return SidebarPulse(
+      child: _RecentThreadSelectionHost(
+        activeThreadKey: activeThreadKey,
+        child: Builder(builder: _buildContent),
+      ),
+    );
+  }
 
   Widget _buildContent(BuildContext context) {
     Widget content(BuildContext context) {
@@ -122,6 +144,29 @@ class SpaceTree extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (showRecentThreads)
+          _RecentThreadsSection(
+            spaces: shellContext.spaces,
+            spaceThreads: shellContext.spaceThreads,
+            threadsBySpace: shellContext.threadsBySpace,
+            buildThreadRow: (context, space, thread) {
+              final cachedThreads = shellContext.spaceThreads?.peek(space.id) ??
+                  shellContext.threadsBySpace[space.id] ??
+                  const <AxThread>[];
+              final visibleThreads = cachedThreads
+                  .where((item) =>
+                      !item.archived && item.status.toLowerCase() != 'archived')
+                  .toList();
+              return _buildThreadRow(
+                context,
+                space,
+                thread,
+                visibleThreads,
+                recent: true,
+                key: ValueKey('recent-thread-row-${space.id}-${thread.id}'),
+              );
+            },
+          ),
         if (invitationCount > 0) ...[
           Container(
             margin: const EdgeInsets.only(bottom: 6),
@@ -179,11 +224,11 @@ class SpaceTree extends StatelessWidget {
             ),
           ),
         if (ownedSpaces.isNotEmpty) ...[
-          if (sharedSpaces.isNotEmpty) _groupLabel(context, 'your spaces'),
+          if (sharedSpaces.isNotEmpty) _groupLabel(context, 'YOUR SPACES'),
           ...ownedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
         if (sharedSpaces.isNotEmpty) ...[
-          _groupLabel(context, 'shared with you'),
+          _groupLabel(context, 'SHARED WITH YOU'),
           ...sharedSpaces.map((space) => _buildSpaceItem(context, space)),
         ],
       ],
@@ -191,13 +236,9 @@ class SpaceTree extends StatelessWidget {
   }
 
   Widget _groupLabel(BuildContext context, String label) => Padding(
-      padding: const EdgeInsets.fromLTRB(10, 12, 8, 6),
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: SyntilaColors.neutralText(
-                  Theme.of(context).brightness == Brightness.dark))));
+        padding: const EdgeInsets.fromLTRB(10, 12, 8, 6),
+        child: _sidebarGroupLabel(context, label),
+      );
 
   Widget _buildSpaceItem(BuildContext context, AxSpace space) {
     final cache = shellContext.spaceThreads;
@@ -367,105 +408,124 @@ class SpaceTree extends StatelessWidget {
               child: const Text('Retry Threads')),
         if (isExpanded)
           ...visibleThreads.map(
-            (thread) {
-              final isThreadSelected =
-                  shellContext.navigation.threadId == thread.id ||
-                      shellContext.selectedThread?.id == thread.id;
-              final statusIndicator =
-                  _buildThreadStatusIndicator(thread.status);
-
-              return _SidebarHoverRow(
-                key: ValueKey('sidebar-thread-row-${thread.id}'),
-                actionsLabel: 'Thread actions',
-                enabled: !thread.id.startsWith('local-thread-'),
-                builder: (context, hovered, menuOpenChanged, menuController) {
-                  final isThreadActive = isThreadSelected || hovered;
-                  return InkWell(
-                    hoverColor: Colors.transparent,
-                    onTap: thread.id.startsWith('local-thread-') ||
-                            thread.id.startsWith('local-thread-')
-                        ? null
-                        : () {
-                            onNavigateTo(
-                                AxNavigation.thread(space.id, thread.id));
-                            if (compact) {
-                              Scaffold.maybeOf(context)?.closeDrawer();
-                            }
-                          },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      height: pageLayout ? 52 : _sidebarRowHeight,
-                      padding: const EdgeInsets.only(left: 8, right: 2),
-                      decoration: BoxDecoration(
-                        color: isThreadActive
-                            ? SyntilaColors.navigationSelectedColor(
-                                Theme.of(context).brightness == Brightness.dark)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        children: [
-                          // Leading slot sits under the Space folder icon, so the
-                          // title stays put and the right edge stays clear.
-                          SizedBox(
-                            width: narrow ? 10 : 26,
-                            child: SidebarActivityIndicators(
-                              running: thread.hasActiveWork,
-                              unread: thread.hasUnread && !isThreadSelected,
-                              gap: narrow ? 0 : 4,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              thread.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: SyntilaColors.navigationTextMuted(
-                                    Theme.of(context).brightness ==
-                                        Brightness.dark),
-                                fontSize: pageLayout ? 15 : 11.5,
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                          ),
-                          if (statusIndicator != null) ...[
-                            const SizedBox(width: 8),
-                            statusIndicator,
-                          ],
-                          // Like the menu, only on the active row; same spot as
-                          // the Space pin, just left of the menu slot.
-                          if (thread.isPinned && isThreadActive)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 4),
-                              child: Icon(Icons.push_pin_outlined,
-                                  size: 12,
-                                  color: SyntilaColors.navigationTextMuted(
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark)),
-                            ),
-                          isThreadActive
-                              ? _threadMenu(
-                                  context,
-                                  space,
-                                  thread,
-                                  menuOpenChanged,
-                                  menuController,
-                                  visibleThreads.map((t) => t.id).toList(),
-                                  visibleThreads
-                                      .where((t) => t.isPinned)
-                                      .map((t) => t.id)
-                                      .toList())
-                              : const SizedBox(width: _menuSlotWidth),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
+            (thread) => _buildThreadRow(
+              context,
+              space,
+              thread,
+              visibleThreads,
+              key: ValueKey('sidebar-thread-row-${thread.id}'),
+            ),
           ),
       ],
+    );
+  }
+
+  Widget _buildThreadRow(BuildContext context, AxSpace space, AxThread thread,
+      List<AxThread> visibleThreads,
+      {required Key key, bool recent = false}) {
+    final selection = _RecentThreadSelectionScope.of(context);
+    final selectionKey = _threadSelectionKey(space.id, thread.id);
+    final isRouteSelected = (shellContext.navigation.spaceId == space.id ||
+            shellContext.selectedSpace?.id == space.id) &&
+        (shellContext.navigation.threadId == thread.id ||
+            shellContext.selectedThread?.id == thread.id);
+    final isThreadSelected = isRouteSelected &&
+        (recent
+            ? selection.selectedKey == selectionKey
+            : selection.selectedKey != selectionKey);
+    final statusIndicator = _buildThreadStatusIndicator(thread.status);
+
+    return _SidebarHoverRow(
+      key: key,
+      actionsLabel: 'Thread actions',
+      enabled: !thread.id.startsWith('local-thread-'),
+      builder: (context, hovered, menuOpenChanged, menuController) {
+        final isThreadActive = isThreadSelected || hovered;
+        return InkWell(
+          hoverColor: Colors.transparent,
+          onTap: thread.id.startsWith('local-thread-')
+              ? null
+              : () {
+                  if (recent) {
+                    selection.selectRecent(selectionKey);
+                  } else {
+                    selection.clearRecent();
+                  }
+                  final navigation = AxNavigation.thread(space.id, thread.id);
+                  if (recent) {
+                    (onNavigateToRecentThread ?? onNavigateTo)(navigation);
+                  } else {
+                    onNavigateTo(navigation);
+                  }
+                  if (compact) Scaffold.maybeOf(context)?.closeDrawer();
+                },
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            height: pageLayout ? 52 : _sidebarRowHeight,
+            padding: const EdgeInsets.only(left: 8, right: 2),
+            decoration: BoxDecoration(
+              color: isThreadActive
+                  ? SyntilaColors.navigationSelectedColor(
+                      Theme.of(context).brightness == Brightness.dark)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: narrow ? 10 : 26,
+                  child: SidebarActivityIndicators(
+                    running: thread.hasActiveWork,
+                    unread: thread.hasUnread && !isThreadSelected,
+                    gap: narrow ? 0 : 4,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    thread.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: SyntilaColors.navigationTextMuted(
+                          Theme.of(context).brightness == Brightness.dark),
+                      fontSize: pageLayout ? 15 : 11.5,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+                if (statusIndicator != null) ...[
+                  const SizedBox(width: 8),
+                  statusIndicator,
+                ],
+                if (thread.isPinned && isThreadActive)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Icon(
+                      Icons.push_pin_outlined,
+                      size: 12,
+                      color: SyntilaColors.navigationTextMuted(
+                          Theme.of(context).brightness == Brightness.dark),
+                    ),
+                  ),
+                isThreadActive
+                    ? _threadMenu(
+                        context,
+                        space,
+                        thread,
+                        menuOpenChanged,
+                        menuController,
+                        visibleThreads.map((item) => item.id).toList(),
+                        visibleThreads
+                            .where((item) => item.isPinned)
+                            .map((item) => item.id)
+                            .toList(),
+                      )
+                    : const SizedBox(width: _menuSlotWidth),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -900,6 +960,240 @@ class SpaceTree extends StatelessWidget {
       default:
         return null;
     }
+  }
+}
+
+class _RecentThreadSelectionController extends ChangeNotifier {
+  String? selectedKey;
+
+  void selectRecent(String key) {
+    if (selectedKey == key) return;
+    selectedKey = key;
+    notifyListeners();
+  }
+
+  void clearRecent() {
+    if (selectedKey == null) return;
+    selectedKey = null;
+    notifyListeners();
+  }
+
+  void reconcile(String? activeThreadKey) {
+    if (selectedKey != null && selectedKey != activeThreadKey) {
+      selectedKey = null;
+    }
+  }
+}
+
+class _RecentThreadSelectionHost extends StatefulWidget {
+  const _RecentThreadSelectionHost({
+    required this.activeThreadKey,
+    required this.child,
+  });
+
+  final String? activeThreadKey;
+  final Widget child;
+
+  @override
+  State<_RecentThreadSelectionHost> createState() =>
+      _RecentThreadSelectionHostState();
+}
+
+class _RecentThreadSelectionHostState
+    extends State<_RecentThreadSelectionHost> {
+  final _controller = _RecentThreadSelectionController();
+
+  @override
+  void didUpdateWidget(covariant _RecentThreadSelectionHost oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeThreadKey != widget.activeThreadKey) {
+      _controller.reconcile(widget.activeThreadKey);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _RecentThreadSelectionScope(
+        controller: _controller,
+        child: widget.child,
+      );
+}
+
+class _RecentThreadSelectionScope
+    extends InheritedNotifier<_RecentThreadSelectionController> {
+  const _RecentThreadSelectionScope({
+    required _RecentThreadSelectionController controller,
+    required super.child,
+  }) : super(notifier: controller);
+
+  static _RecentThreadSelectionController of(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_RecentThreadSelectionScope>();
+    assert(scope != null, 'Recent Thread selection scope is missing.');
+    return scope!.notifier!;
+  }
+}
+
+Widget _sidebarGroupLabel(BuildContext context, String label) => Text(
+      label,
+      style: TextStyle(
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.7,
+        color: SyntilaColors.neutralText(
+            Theme.of(context).brightness == Brightness.dark),
+      ),
+    );
+
+/// The eight most recently active Threads across every visible Space.
+///
+/// This projection ensures the lightweight per-Space Thread lists and watches
+/// their shared cache, so activity can reorder shortcuts without requiring a
+/// Space to be expanded first.
+class _RecentThreadsSection extends StatefulWidget {
+  const _RecentThreadsSection({
+    required this.spaces,
+    required this.spaceThreads,
+    required this.threadsBySpace,
+    required this.buildThreadRow,
+  });
+
+  final List<AxSpace> spaces;
+  final AxSpaceThreads? spaceThreads;
+  final Map<String, List<AxThread>> threadsBySpace;
+  final Widget Function(BuildContext, AxSpace, AxThread) buildThreadRow;
+
+  @override
+  State<_RecentThreadsSection> createState() => _RecentThreadsSectionState();
+}
+
+class _RecentThreadsSectionState extends State<_RecentThreadsSection> {
+  VoidCallback? _cancelCacheWatch;
+  bool _cacheRebuildPending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _watchAndEnsure();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecentThreadsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldSpaceIds = oldWidget.spaces.map((space) => space.id).toSet();
+    final newSpaceIds = widget.spaces.map((space) => space.id).toSet();
+    if (oldWidget.spaceThreads != widget.spaceThreads ||
+        oldSpaceIds.length != newSpaceIds.length ||
+        oldSpaceIds.difference(newSpaceIds).isNotEmpty ||
+        newSpaceIds.difference(oldSpaceIds).isNotEmpty) {
+      _watchAndEnsure();
+    }
+  }
+
+  void _watchAndEnsure() {
+    _cancelCacheWatch?.call();
+    final cache = widget.spaceThreads;
+    if (cache == null) {
+      _cancelCacheWatch = null;
+      return;
+    }
+    _cancelCacheWatch = cache.engine.watchCache(_cacheChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final space in widget.spaces) {
+        if (space.archived || space.id.startsWith('local-space-')) continue;
+        unawaited(cache.ensure(space.id).then<void>(
+              (_) {},
+              onError: (Object _, StackTrace __) {},
+            ));
+      }
+    });
+  }
+
+  void _cacheChanged() {
+    if (!mounted || _cacheRebuildPending) return;
+    _cacheRebuildPending = true;
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.idle ||
+        phase == SchedulerPhase.postFrameCallbacks) {
+      _cacheRebuildPending = false;
+      setState(() {});
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cacheRebuildPending = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  List<(AxSpace, AxThread)> _recentThreads() {
+    final cache = widget.spaceThreads;
+    final items = <(AxSpace, AxThread)>[];
+    for (final space in widget.spaces) {
+      if (space.archived || space.id.startsWith('local-space-')) continue;
+      final threads = cache?.peek(space.id) ??
+          widget.threadsBySpace[space.id] ??
+          const <AxThread>[];
+      for (final thread in threads) {
+        if (thread.archived ||
+            thread.status.toLowerCase() == 'archived' ||
+            thread.id.startsWith('local-thread-')) {
+          continue;
+        }
+        items.add((space, thread));
+      }
+    }
+    items.sort((left, right) {
+      String activity(AxThread thread) =>
+          thread.updatedAt.isNotEmpty ? thread.updatedAt : thread.createdAt;
+      final byActivity =
+          compareAxLastUpdatedDesc(activity(left.$2), activity(right.$2));
+      if (byActivity != 0) return byActivity;
+      final bySpace = left.$1.id.compareTo(right.$1.id);
+      return bySpace != 0 ? bySpace : left.$2.id.compareTo(right.$2.id);
+    });
+    return items.take(8).toList(growable: false);
+  }
+
+  @override
+  void dispose() {
+    _cancelCacheWatch?.call();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final recent = _recentThreads();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 2, 8, 6),
+          child: _sidebarGroupLabel(context, 'RECENT THREADS'),
+        ),
+        if (recent.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 2, 8, 8),
+            child: Text(
+              'No recent threads yet',
+              style: TextStyle(
+                fontSize: 10.5,
+                color: SyntilaColors.navigationTextMuted(isDark),
+              ),
+            ),
+          )
+        else
+          for (final (space, thread) in recent)
+            widget.buildThreadRow(context, space, thread),
+        const SizedBox(height: 6),
+      ],
+    );
   }
 }
 

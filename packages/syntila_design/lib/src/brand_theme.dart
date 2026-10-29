@@ -150,7 +150,7 @@ abstract final class SyntilaBrand {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       textTheme: _textTheme(SyntilaColors.textPrimaryLight),
-      filledButtonTheme: _filledButtonTheme(),
+      filledButtonTheme: _filledButtonTheme(false),
       outlinedButtonTheme: _outlinedButtonTheme(
           SyntilaColors.borderLight, SyntilaColors.primaryForegroundLight),
       textButtonTheme: _textButtonTheme(SyntilaColors.primaryForegroundLight),
@@ -176,9 +176,9 @@ abstract final class SyntilaBrand {
   /// Builds the canonical dark [ThemeData] for Syntila.
   static ThemeData darkTheme() {
     const colorScheme = ColorScheme.dark(
-      primary: SyntilaColors.primary,
+      primary: SyntilaColors.primaryDark,
       primaryContainer: SyntilaColors.primarySoftDark,
-      secondary: SyntilaColors.primaryPressed,
+      secondary: SyntilaColors.primaryPressedDark,
       surface: SyntilaColors.surfaceDark,
       surfaceContainerLowest: SyntilaColors.canvasDark,
       surfaceContainerLow: SyntilaColors.surfaceDark,
@@ -186,8 +186,8 @@ abstract final class SyntilaBrand {
       surfaceContainerHigh: SyntilaColors.surfaceHoverDark,
       surfaceContainerHighest: SyntilaColors.codeBackgroundDark,
       error: SyntilaColors.error,
-      onPrimary: Colors.white,
-      onPrimaryContainer: Colors.white,
+      onPrimary: Colors.black,
+      onPrimaryContainer: SyntilaColors.primaryForegroundDark,
       onSurface: SyntilaColors.textPrimaryDark,
       onSurfaceVariant: SyntilaColors.textSecondaryDark,
       onError: Colors.white,
@@ -246,7 +246,7 @@ abstract final class SyntilaBrand {
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       textTheme: _textTheme(SyntilaColors.textPrimaryDark),
-      filledButtonTheme: _filledButtonTheme(),
+      filledButtonTheme: _filledButtonTheme(true),
       outlinedButtonTheme: _outlinedButtonTheme(
           SyntilaColors.borderDark, SyntilaColors.primaryForegroundDark),
       textButtonTheme: _textButtonTheme(SyntilaColors.primaryForegroundDark),
@@ -349,13 +349,27 @@ abstract final class SyntilaBrand {
         ),
       );
 
-  static FilledButtonThemeData _filledButtonTheme() => FilledButtonThemeData(
+  static FilledButtonThemeData _filledButtonTheme(bool isDark) =>
+      FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: SyntilaColors.primary,
+          backgroundColor: SyntilaColors.primaryColor(isDark),
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(SyntilaRadius.md)),
+        ).copyWith(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return null;
+            return isDark && !states.contains(WidgetState.pressed)
+                ? Colors.black
+                : Colors.white;
+          }),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return null;
+            return states.contains(WidgetState.pressed)
+                ? SyntilaColors.primaryPressedColor(isDark)
+                : SyntilaColors.primaryColor(isDark);
+          }),
         ),
       );
 

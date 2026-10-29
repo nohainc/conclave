@@ -14,6 +14,7 @@ class AppSidebar extends StatelessWidget {
     super.key,
     required this.shellContext,
     required this.onNavigateTo,
+    this.onNavigateToRecentThread,
     ValueChanged<String>? onToggleSpaceExpanded,
     VoidCallback? onCreateSpace,
     this.onCreateThread,
@@ -50,6 +51,7 @@ class AppSidebar extends StatelessWidget {
 
   final AxShellContext shellContext;
   final ValueChanged<AxNavigation> onNavigateTo;
+  final ValueChanged<AxNavigation>? onNavigateToRecentThread;
   final ValueChanged<String> onToggleSpaceExpanded;
   final VoidCallback onCreateSpace;
   final ValueChanged<AxSpace>? onCreateThread;
@@ -254,6 +256,7 @@ class AppSidebar extends StatelessWidget {
                   child: SpaceTree(
                     shellContext: shellContext,
                     onNavigateTo: onNavigateTo,
+                    onNavigateToRecentThread: onNavigateToRecentThread,
                     onToggleSpaceExpanded: onToggleSpaceExpanded,
                     onCreateSpace: onCreateSpace,
                     onCreateThread: onCreateThread,
@@ -270,6 +273,7 @@ class AppSidebar extends StatelessWidget {
                     onReorderPinnedThreads: onReorderPinnedThreads,
                     compact: compact,
                     narrow: narrow,
+                    showRecentThreads: true,
                   ),
                 ),
               ),

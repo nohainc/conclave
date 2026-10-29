@@ -10,6 +10,7 @@ class AxSidebar extends AppSidebar {
     super.key,
     required super.shellContext,
     required super.onNavigateTo,
+    super.onNavigateToRecentThread,
     super.onToggleSpaceExpanded,
     super.onCreateSpace,
     super.onCreateThread,

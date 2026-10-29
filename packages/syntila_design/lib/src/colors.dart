@@ -3,21 +3,27 @@ import 'package:flutter/material.dart';
 /// Semantic brand colors and design tokens for Syntila.
 abstract final class SyntilaColors {
   // Brand Core
-  static const primary = Color(0xff0759d1);
-  static const primaryPressed = Color(0xff044cb6);
-  static const primaryForegroundLight = Color(0xff0759d1);
-  static const primaryForegroundDark = Color(0xffb8d2fd);
-  static const primarySoft = Color(0xffcddffd);
-  static const primarySoftDark = Color(0xff0a244f);
-  static const primaryRunningIndicator = Color(0xff5e93e1);
+  static const brand = Color(0xff6366f1);
+  static const primaryLight = Color(0xff4338ca);
+  static const primaryDark = Color(0xff6366f1);
+  static const primary = primaryLight;
+  static const primaryPressedDark = Color(0xff4f46e5);
+  static Color primaryColor(bool isDark) => isDark ? primaryDark : primaryLight;
+  static Color primaryPressedColor(bool isDark) =>
+      isDark ? primaryPressedDark : primaryPressed;
+  static const primaryPressed = Color(0xff3730a3);
+  static const primaryForegroundLight = Color(0xff4338ca);
+  static const primaryForegroundDark = Color(0xffa5b4fc);
+  static const primarySoft = Color(0xffe0e7ff);
+  static const primarySoftDark = Color(0xff1e1b4b);
+  static const primaryRunningIndicator = Color(0xff818cf8);
 
   // Focused input field: border and floating label. Mirrored across themes
-  // like the text ramp (light + dark lightness = 117); the label sits 6
-  // points further from the field background than the border.
-  static const focusBorderLight = Color(0xff0759d1);
-  static const focusBorderDark = Color(0xff5893f6);
-  static const focusLabelLight = Color(0xff044ab1);
-  static const focusLabelDark = Color(0xff76a8f9);
+  // with periwinkle accents lifted for readable dark-mode focus states.
+  static const focusBorderLight = Color(0xff4338ca);
+  static const focusBorderDark = Color(0xff818cf8);
+  static const focusLabelLight = Color(0xff3730a3);
+  static const focusLabelDark = Color(0xffa5b4fc);
   static Color focusBorder(bool isDark) =>
       isDark ? focusBorderDark : focusBorderLight;
   static Color focusLabel(bool isDark) =>

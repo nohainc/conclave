@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syntila_app/src/ax/ax_app.dart';
@@ -19,15 +20,18 @@ import 'ax_fixture_snapshot.dart';
 const a =
     AxSpace(id: 'space-auth', name: 'Space A', branch: '', lastActivity: '');
 const b = AxSpace(id: 'atlas', name: 'Space B', branch: '', lastActivity: '');
-AxThread stream(String space, String name) => AxThread(
-    id: '$space-stream',
-    spaceId: space,
-    name: name,
-    lead: '',
-    status: 'active',
-    brief: '',
-    primaryWorkspace: '',
-    queueStatus: '');
+AxThread stream(String space, String name,
+        {String updatedAt = '', String? id}) =>
+    AxThread(
+        id: id ?? '$space-stream',
+        spaceId: space,
+        name: name,
+        lead: '',
+        status: 'active',
+        brief: '',
+        primaryWorkspace: '',
+        queueStatus: '',
+        updatedAt: updatedAt);
 
 class ControlledSource extends AxFixtureDataSource {
   final requests = <String, List<Completer<List<AxThread>>>>{};
@@ -107,7 +111,208 @@ class UnsortedRecentSource extends AxFixtureDataSource {
       ];
 }
 
+class MessageActivitySource extends AxFixtureDataSource {
+  bool secondThreadHasNewMessage = false;
+
+  @override
+  Future<List<AxThread>> loadSpaceThreads({required String spaceId}) async => [
+        stream(spaceId, 'Initially recent',
+            id: 'initially-recent', updatedAt: '2026-10-29T10:00:00Z'),
+        stream(spaceId, 'New message target',
+            id: 'message-target',
+            updatedAt: secondThreadHasNewMessage
+                ? '2026-10-29T12:00:00Z'
+                : '2026-10-29T09:00:00Z'),
+      ];
+}
+
 void main() {
+  testWidgets('recent Threads load globally, reorder by activity, and cap at 8',
+      (tester) async {
+    final source = ControlledSource();
+    final cache = AxSpaceThreads(source);
+    AxNavigation? selected;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SpaceTree(
+      shellContext: AxShellContext(
+        navigation: const AxNavigation.home(),
+        spaces: const [a, b],
+        spaceThreads: cache,
+        expandedSpaceIds: const {'atlas'},
+      ),
+      showRecentThreads: true,
+      onNavigateTo: (navigation) => selected = navigation,
+    ))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+
+    expect(source.requests[a.id], hasLength(1));
+    expect(source.requests[b.id], hasLength(1));
+    source.requests[a.id]!.single.complete([
+      for (var index = 0; index < 5; index++)
+        stream(a.id, 'A $index',
+            id: 'a-$index', updatedAt: '2026-10-29T10:0$index:00Z'),
+    ]);
+    source.requests[b.id]!.single.complete([
+      for (var index = 0; index < 5; index++)
+        stream(b.id, 'B $index',
+            id: 'b-$index', updatedAt: '2026-10-29T11:0$index:00Z'),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('RECENT THREADS'), findsOneWidget);
+    expect(
+        tester.getTopLeft(find.text('RECENT THREADS')).dy,
+        lessThan(tester
+            .getTopLeft(find.byKey(ValueKey('sidebar-space-row-${a.id}')))
+            .dy));
+    expect(find.byKey(const ValueKey('recent-thread-row-atlas-b-4')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('recent-thread-row-space-auth-a-2')),
+        findsOneWidget);
+    expect(find.text('A 0'), findsNothing);
+    expect(find.text('A 1'), findsNothing);
+    Finder recentTitle(String id, String name) => find.descendant(
+        of: find.byKey(ValueKey('recent-thread-row-${b.id}-$id')),
+        matching: find.text(name));
+    final recentB4 = recentTitle('b-4', 'B 4');
+    final originalB4 = find.descendant(
+        of: find.byKey(const ValueKey('sidebar-thread-row-b-4')),
+        matching: find.text('B 4'));
+    expect(tester.getTopLeft(recentB4).dy,
+        lessThan(tester.getTopLeft(recentTitle('b-3', 'B 3')).dy));
+    expect(tester.getTopLeft(recentB4).dx, tester.getTopLeft(originalB4).dx);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey('recent-thread-row-atlas-b-4')),
+            matching: find.text(b.name)),
+        findsNothing);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer();
+    await mouse.moveTo(tester.getCenter(recentB4));
+    await tester.pumpAndSettle();
+    final recentMenu = find.descendant(
+        of: find.byKey(const ValueKey('recent-thread-row-atlas-b-4')),
+        matching: find.byTooltip('Thread menu'));
+    expect(recentMenu, findsOneWidget);
+    await tester.tap(recentMenu);
+    await tester.pumpAndSettle();
+    expect(find.text('Archive Thread'), findsOneWidget);
+    await tester.tapAt(const Offset(790, 590));
+    await tester.pumpAndSettle();
+
+    cache.engine.update(
+        cache.query(a.id),
+        (_) => [
+              stream(a.id, 'A newest',
+                  id: 'a-newest', updatedAt: '2026-10-29T12:00:00Z'),
+              for (var index = 0; index < 4; index++)
+                stream(a.id, 'A $index',
+                    id: 'a-$index', updatedAt: '2026-10-29T10:0$index:00Z'),
+            ]);
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('A newest')).dy,
+        lessThan(tester.getTopLeft(recentB4).dy));
+
+    await tester.tap(find.text('A newest'));
+    expect(selected?.spaceId, a.id);
+    expect(selected?.threadId, 'a-newest');
+  });
+
+  testWidgets('active highlight follows the selected Thread row source',
+      (tester) async {
+    var navigation = const AxNavigation.home();
+    final thread = stream(a.id, 'Shared row',
+        id: 'shared-row', updatedAt: '2026-10-29T12:00:00Z');
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: StatefulBuilder(
+          builder: (context, setState) => SpaceTree(
+            shellContext: AxShellContext(
+              navigation: navigation,
+              spaces: const [a],
+              threadsBySpace: {
+                a.id: [thread],
+              },
+              expandedSpaceIds: const {'space-auth'},
+            ),
+            showRecentThreads: true,
+            onNavigateTo: (value) => setState(() => navigation = value),
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    const recentKey = ValueKey('recent-thread-row-space-auth-shared-row');
+    const originalKey = ValueKey('sidebar-thread-row-shared-row');
+    BoxDecoration rowDecoration(Key key) => tester
+        .widgetList<Container>(find.descendant(
+            of: find.byKey(key), matching: find.byType(Container)))
+        .map((container) => container.decoration)
+        .whereType<BoxDecoration>()
+        .firstWhere((decoration) => decoration.borderRadius != null);
+
+    await tester.tap(find.byKey(recentKey));
+    await tester.pumpAndSettle();
+    expect(rowDecoration(recentKey).color, isNot(Colors.transparent));
+    expect(rowDecoration(originalKey).color, Colors.transparent);
+
+    await tester.tap(find.byKey(originalKey));
+    await tester.pumpAndSettle();
+    expect(rowDecoration(recentKey).color, Colors.transparent);
+    expect(rowDecoration(originalKey).color, isNot(Colors.transparent));
+  });
+
+  testWidgets('a new user message reorders Recent Threads', (tester) async {
+    final source = MessageActivitySource();
+    final cache = AxSpaceThreads(source);
+    final router = AxRealtimeCacheRouter(cache.engine,
+        activityDebounce: const Duration(milliseconds: 1));
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SpaceTree(
+          shellContext: AxShellContext(
+            navigation: const AxNavigation.home(),
+            spaces: const [a],
+            spaceThreads: cache,
+          ),
+          showRecentThreads: true,
+          onNavigateTo: (_) {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    Finder recentTitle(String threadId, String title) => find.descendant(
+        of: find.byKey(ValueKey('recent-thread-row-${a.id}-$threadId')),
+        matching: find.text(title));
+    final initiallyRecent = recentTitle('initially-recent', 'Initially recent');
+    final messageTarget = recentTitle('message-target', 'New message target');
+    expect(tester.getTopLeft(initiallyRecent).dy,
+        lessThan(tester.getTopLeft(messageTarget).dy));
+
+    source.secondThreadHasNewMessage = true;
+    await router.handle({
+      'type': 'discussion.created',
+      'spaceId': a.id,
+      'threadId': 'message-target',
+      'payload': {
+        'entityId': 'message-1',
+        'threadId': 'message-target',
+      },
+    });
+    await tester.pumpAndSettle(const Duration(milliseconds: 10));
+
+    expect(tester.getTopLeft(messageTarget).dy,
+        lessThan(tester.getTopLeft(initiallyRecent).dy));
+  });
+
   test('sorts Spaces and Threads by their most recent update', () async {
     final source = UnsortedRecentSource();
     final store = AxStore(source);
@@ -388,35 +593,41 @@ void main() {
     final tree = find.byType(SpaceTree);
     Finder text(String name) =>
         find.descendant(of: tree, matching: find.text(name));
-    await tester.tap(text('Space A'));
+    Finder spaceName(String spaceId, String name) => find.descendant(
+        of: find.byKey(ValueKey('sidebar-space-row-$spaceId')),
+        matching: find.text(name));
+    Finder spaceThread(String spaceId, String name) => find.descendant(
+        of: find.byKey(ValueKey('sidebar-thread-row-$spaceId-stream')),
+        matching: find.text(name));
+    await tester.tap(spaceName(a.id, 'Space A'));
     await tester.pump();
     expect(source.requests[a.id], hasLength(1));
     source.requests[a.id]!.single.complete([stream(a.id, 'A cached')]);
     await tester.pumpAndSettle();
-    await tester.tap(text('Space B'));
+    await tester.tap(spaceName(b.id, 'Space B'));
     await tester.pump();
-    expect(text('A cached'), findsOneWidget);
+    expect(spaceThread(a.id, 'A cached'), findsOneWidget);
     expect(text('Loading Threads…'), findsOneWidget);
     expect(source.requests[b.id], hasLength(1));
     expect(source.snapshots, 1);
     source.requests[b.id]!.single.complete([stream(b.id, 'B cached')]);
     await tester.pumpAndSettle();
-    expect(text('A cached'), findsOneWidget);
-    expect(text('B cached'), findsOneWidget);
-    await tester.tap(text('Space A'));
+    expect(spaceThread(a.id, 'A cached'), findsOneWidget);
+    expect(spaceThread(b.id, 'B cached'), findsOneWidget);
+    await tester.tap(spaceName(a.id, 'Space A'));
     await tester.pump();
-    expect(text('A cached'), findsOneWidget);
-    expect(text('B cached'), findsOneWidget);
+    expect(spaceThread(a.id, 'A cached'), findsOneWidget);
+    expect(spaceThread(b.id, 'B cached'), findsOneWidget);
     expect(source.requests[a.id], hasLength(1));
     expect(source.snapshots, 1);
     // Only clicking the already-focused Space is an explicit collapse.
-    await tester.tap(text('Space A'));
+    await tester.tap(spaceName(a.id, 'Space A'));
     await tester.pumpAndSettle();
-    expect(text('A cached'), findsNothing);
-    expect(text('B cached'), findsOneWidget);
-    await tester.tap(text('Space A'));
+    expect(spaceThread(a.id, 'A cached'), findsNothing);
+    expect(spaceThread(b.id, 'B cached'), findsOneWidget);
+    await tester.tap(spaceName(a.id, 'Space A'));
     await tester.pump();
-    expect(text('A cached'), findsOneWidget);
+    expect(spaceThread(a.id, 'A cached'), findsOneWidget);
     expect(source.requests[a.id], hasLength(1));
     await tester.pumpWidget(const SizedBox.shrink());
   });

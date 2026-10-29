@@ -34,9 +34,8 @@ class SyntilaSyntaxHighlighter extends SyntaxHighlighter {
     ..registerLanguage('xml', xml)
     ..registerLanguage('css', css);
 
-  /// Highlight tokens for [source], or null when the language is unsupported,
-  /// the source is too large, or parsing fails. Shared with the HTML renderer.
-  static List<hl.Node>? parseTokens(String source, String language) {
+  @override
+  TextSpan format(String source) {
     final canonical = switch (language.toLowerCase()) {
       'ts' || 'tsx' => 'typescript',
       'js' || 'jsx' => 'javascript',
@@ -58,41 +57,49 @@ class SyntilaSyntaxHighlighter extends SyntaxHighlighter {
       'xml',
       'css'
     };
-    if (!supported.contains(canonical) || source.length > 50000) return null;
-    try {
-      return _engine.parse(source, language: canonical).nodes;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  TextSpan format(String source) {
     final base = TextStyle(
         fontFamily: SyntilaTypography.fontFamilyMono,
         fontFamilyFallback: SyntilaTypography.fontFamilyMonoFallback,
         fontSize: 12.5,
         height: 1.45,
         color: theme.colorScheme.onSurface);
-    final tokens = parseTokens(source, language);
-    if (tokens == null) return TextSpan(text: source, style: base);
+    if (!supported.contains(canonical) || source.length > 50000) {
+      return TextSpan(text: source, style: base);
+    }
     final dark = theme.brightness == Brightness.dark;
     Color? tokenColor(String? name) => switch (name) {
           'keyword' ||
           'selector-tag' ||
           'tag' =>
             SyntilaColors.syntaxKeyword(dark),
-          'string' || 'attr' || 'attribute' => SyntilaColors.syntaxString(dark),
-          'number' || 'literal' => SyntilaColors.syntaxNumber(dark),
+          'string' ||
+          'attr' ||
+          'attribute' =>
+            SyntilaColors.syntaxString(dark),
+          'number' ||
+          'literal' =>
+            SyntilaColors.syntaxNumber(dark),
           'comment' => theme.colorScheme.onSurfaceVariant,
-          'title' || 'built_in' => SyntilaColors.syntaxTitle(dark),
+          'title' ||
+          'built_in' =>
+            SyntilaColors.syntaxTitle(dark),
           _ => null,
         };
     TextSpan span(hl.Node node) => TextSpan(
         text: node.value,
         style: TextStyle(color: tokenColor(node.className)),
         children: node.children?.map(span).toList());
-    return TextSpan(style: base, children: tokens.map(span).toList());
+    try {
+      return TextSpan(
+          style: base,
+          children: _engine
+              .parse(source, language: canonical)
+              .nodes
+              ?.map(span)
+              .toList());
+    } catch (_) {
+      return TextSpan(text: source, style: base);
+    }
   }
 }
 

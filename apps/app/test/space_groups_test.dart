@@ -19,6 +19,21 @@ const shared = AxSpace(
     role: 'collaborator');
 
 void main() {
+  testWidgets('recent Threads section stays visible when empty',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SpaceTree(
+      shellContext:
+          const AxShellContext(navigation: AxNavigation.home(), spaces: []),
+      showRecentThreads: true,
+      onNavigateTo: (_) {},
+    ))));
+
+    expect(find.text('RECENT THREADS'), findsOneWidget);
+    expect(find.text('No recent threads yet'), findsOneWidget);
+  });
+
   for (final spaces in [
     <AxSpace>[],
     [own],
@@ -38,11 +53,11 @@ void main() {
         onCreateSpace: () {},
       ))));
       expect(
-          find.text('your spaces'),
+          find.text('YOUR SPACES'),
           spaces.contains(own) && spaces.contains(shared)
               ? findsOneWidget
               : findsNothing);
-      expect(find.text('shared with you'),
+      expect(find.text('SHARED WITH YOU'),
           spaces.contains(shared) ? findsOneWidget : findsNothing);
       if (spaces.length == 2) {
         expect(tester.getTopLeft(find.text(own.name)).dy,

@@ -6,7 +6,7 @@ abstract final class ProfileLabTheme {
   static const interactionText = SyntilaColors.primaryForegroundDark;
   static const secondaryText = SyntilaColors.textSecondaryDark;
   static const borderColor = SyntilaColors.borderDark;
-  static const primaryAccent = SyntilaColors.primary;
+  static const primaryAccent = SyntilaColors.primaryDark;
   static const darkBackground = SyntilaColors.canvasDark;
   static const darkSurface = SyntilaColors.surfaceDark;
   static const darkCard = SyntilaColors.surfaceHoverDark;
@@ -21,9 +21,9 @@ abstract final class ProfileLabTheme {
       scaffoldBackgroundColor: darkBackground,
       colorScheme: const ColorScheme.dark(
         primary: primaryAccent,
-        onPrimary: Colors.white,
+        onPrimary: Colors.black,
         secondary: primaryAccent,
-        onSecondary: Colors.white,
+        onSecondary: Colors.black,
         surface: darkSurface,
         onSurface: Colors.white,
       ),
@@ -36,7 +36,7 @@ abstract final class ProfileLabTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
               backgroundColor: primaryAccent,
-              foregroundColor: Colors.white,
+              foregroundColor: Colors.black,
               minimumSize: const Size(48, 40))),
       outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(

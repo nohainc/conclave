@@ -71,6 +71,9 @@ extension _AxAppShellViews on _AxAppStateMixin {
                                   child: AxSidebar(
                                     shellContext: shell,
                                     onNavigateTo: _navigateTo,
+                                    onNavigateToRecentThread: (next) =>
+                                        _navigateTo(next,
+                                            expandThreadSpace: false),
                                     onToggleSpaceExpanded: _toggleSpaceExpanded,
                                     onCreateSpace: _createSpace,
                                     onCreateThread: _createThread,

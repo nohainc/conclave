@@ -15,6 +15,32 @@ double _contrastRatio(Color foreground, Color background) {
 }
 
 void main() {
+  test('Primary buttons follow theme and pressed state', () {
+    for (final isDark in [false, true]) {
+      final theme =
+          isDark ? SyntilaBrand.darkTheme() : SyntilaBrand.lightTheme();
+      final background = theme.filledButtonTheme.style!.backgroundColor!;
+      expect(theme.colorScheme.primary, SyntilaColors.primaryColor(isDark));
+      expect(background.resolve({}), theme.colorScheme.primary);
+      expect(background.resolve({WidgetState.pressed}),
+          SyntilaColors.primaryPressedColor(isDark));
+      expect(background.resolve({WidgetState.disabled}), isNull);
+      final foreground = theme.filledButtonTheme.style!.foregroundColor!;
+      for (final states in [
+        <WidgetState>{},
+        {WidgetState.pressed}
+      ]) {
+        expect(
+            _contrastRatio(
+                foreground.resolve(states)!, background.resolve(states)!),
+            greaterThanOrEqualTo(4.5));
+      }
+      expect(
+          _contrastRatio(
+              theme.colorScheme.onPrimary, theme.colorScheme.primary),
+          greaterThanOrEqualTo(4.5));
+    }
+  });
   group('Surface Hierarchy & Theme Tokens', () {
     test('Light mode surface hierarchy is defined deterministically', () {
       expect(SyntilaColors.canvasLight, const Color(0xfff1f2f4));

@@ -1,3 +1,7 @@
+> Current palette (October 29, 2026): Precision Indigo. See
+> [Branding](../BRANDING.md#precision-indigo-ui-palette) for the current tokens
+> and asset generation process. This palette supersedes earlier blue accents below.
+
 # Syntila Brand & Design System Specification
 
 **Status:** Canonical  
