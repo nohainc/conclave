@@ -30,6 +30,10 @@ state; the DOM is a pure view of message text.
   classes map to a fixed `smd-*` set. Code-block copy uses the browser clipboard.
 - Theme tokens are passed as CSS custom properties; one shared stylesheet is
   injected once.
+- Wheel events inside a message platform view are forwarded to the enclosing
+  Flutter `Scrollable` (unless consumed by horizontal scrolling inside a wide
+  table or code block), and pointer/keyboard selection (`pointerdown`,
+  `selectionchange`, `Cmd/Ctrl+A`) is scoped to the active message root.
 - Notes (blank-line spacers) and callers needing Flutter selection callbacks
   keep the widget renderer.
 
@@ -43,7 +47,7 @@ state; the DOM is a pure view of message text.
   identity and selection. Parsing is still whole-message per update.
 - KaTeX/Mermaid would add third-party JS to `web/`; that requires a separate
   security review (CSP, sandboxing for Mermaid SVG).
-- Cross-message selection, keyboard focus, and accessibility in the DOM view
-  are not yet verified.
+- Screen-reader navigation and full keyboard accessibility across platform
+  views are not yet verified.
 - Native clients (if built) could reuse `renderMarkdownHtml` output in a
   WebView.

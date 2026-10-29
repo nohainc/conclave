@@ -23,7 +23,7 @@ List<String> renderMarkdownBlocks(String source) {
   );
   final nodes =
       document.parseLines(source.replaceAll('\r\n', '\n').split('\n'));
-  return [for (final node in nodes) _renderNode(node)]
+  return [for (final node in nodes) _renderTopNode(node)]
       .where((block) => block.isNotEmpty)
       .toList();
 }
@@ -48,6 +48,18 @@ List<String> renderMarkdownBlocks(String source) {
     nextEnd--;
   }
   return (start: start, previousEnd: previousEnd, nextEnd: nextEnd);
+}
+
+String _renderTopNode(md.Node node) {
+  final rendered = _renderNode(node);
+  if (rendered.isEmpty) return '';
+  if (node is! md.Element ||
+      (!_allowedTags.contains(node.tag) &&
+          node.tag != 'pre' &&
+          node.tag != 'img')) {
+    return '<p>$rendered</p>';
+  }
+  return rendered;
 }
 
 String _renderNode(md.Node node) {
@@ -93,7 +105,36 @@ void _write(StringBuffer out, md.Node node) {
   _writeAttributes(out, node);
   out.write('>');
   if (_voidTags.contains(tag)) return;
-  node.children?.forEach((child) => _write(out, child));
+  final children = node.children;
+  if (children != null) {
+    for (var i = 0; i < children.length; i++) {
+      final child = children[i];
+      if (child is md.Text &&
+          tag != 'code' &&
+          tag != 'pre' &&
+          child.textContent.contains('\n')) {
+        final lines = child.textContent.split('\n');
+        for (var j = 0; j < lines.length; j++) {
+          if (j > 0) {
+            final trailingNewlineBeforeBlock = j == lines.length - 1 &&
+                lines[j].isEmpty &&
+                i + 1 < children.length &&
+                children[i + 1] is md.Element &&
+                const {'ul', 'ol', 'blockquote', 'pre', 'table'}
+                    .contains((children[i + 1] as md.Element).tag);
+            if (!trailingNewlineBeforeBlock) {
+              out.write('<br>');
+            }
+          }
+          if (lines[j].isNotEmpty) {
+            out.write(escapeHtml(lines[j]));
+          }
+        }
+      } else {
+        _write(out, child);
+      }
+    }
+  }
   out.write('</$tag>');
 }
 

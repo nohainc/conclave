@@ -104,6 +104,7 @@ class SyntilaMarkdownBody extends StatelessWidget {
       final body = SyntilaMessageTypography.fromTheme(theme);
       return HtmlMarkdownView(
         data: data,
+        fitContent: fitContent,
         onOpenLink: (href) => unawaited(_openLink(context, href)),
         style: HtmlMarkdownStyle(
           text: body.color ?? SyntilaColors.textPrimary(isDark),

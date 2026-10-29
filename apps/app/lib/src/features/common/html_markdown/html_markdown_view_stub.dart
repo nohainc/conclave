@@ -8,5 +8,6 @@ Widget buildHtmlMarkdownView({
   required String data,
   required ValueChanged<String> onOpenLink,
   required HtmlMarkdownStyle style,
+  bool fitContent = false,
 }) =>
     throw UnsupportedError('HTML Markdown requires Flutter Web.');

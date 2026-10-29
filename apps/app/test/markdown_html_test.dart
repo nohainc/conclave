@@ -94,4 +94,15 @@ void main() {
     expect(diffBlocks(['a', 'c'], ['a', 'b', 'c']),
         (start: 1, previousEnd: 1, nextEnd: 2));
   });
+
+  test('renders single newlines inside paragraphs as <br> soft line breaks',
+      () {
+    final html = renderMarkdownHtml('first line\nsecond line\n\nnew paragraph');
+    expect(html, '<p>first line<br>second line</p><p>new paragraph</p>');
+  });
+
+  test('wraps top-level raw HTML blocks in a paragraph element', () {
+    final blocks = renderMarkdownBlocks('<div>raw block</div>\n\npara');
+    expect(blocks, ['<p>&lt;div&gt;raw block&lt;/div&gt;</p>', '<p>para</p>']);
+  });
 }

@@ -21,15 +21,21 @@ class HtmlMarkdownView extends StatelessWidget {
     required this.data,
     required this.onOpenLink,
     required this.style,
+    this.fitContent = false,
   });
 
   final String data;
   final ValueChanged<String> onOpenLink;
   final HtmlMarkdownStyle style;
+  final bool fitContent;
 
   @override
   Widget build(BuildContext context) => platform.buildHtmlMarkdownView(
-      data: data, onOpenLink: onOpenLink, style: style);
+        data: data,
+        onOpenLink: onOpenLink,
+        style: style,
+        fitContent: fitContent,
+      );
 }
 
 /// Theme tokens forwarded to the DOM as CSS custom properties.
