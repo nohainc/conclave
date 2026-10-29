@@ -5,9 +5,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:markdown/markdown.dart' as md;
 
 const source = '''
 # Heading
@@ -415,11 +414,9 @@ void main() {
           ),
         ),
       ));
-      final renderer = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
-      expect(renderer.extensionSet, same(md.ExtensionSet.gitHubFlavored));
-      expect(renderer.selectable, isFalse);
+      final renderer = tester.widget<GptMarkdown>(find.byType(GptMarkdown));
+      expect(renderer.html, isFalse);
       expect(find.byType(SelectionArea), findsOneWidget);
-      expect(renderer.softLineBreak, isTrue);
       expect(renderer.data, source);
       expect(find.byType(Table), findsOneWidget);
       expect(find.byIcon(Icons.check_box), findsOneWidget);
@@ -449,12 +446,12 @@ void main() {
         ),
       ),
     ));
-    final renderer = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
-    renderer.onTapLink!('Docs', 'https://example.com/docs', '');
+    final renderer = tester.widget<GptMarkdown>(find.byType(GptMarkdown));
+    renderer.onLinkTap!('https://example.com/docs', 'Docs');
     expect(destination, 'https://example.com/docs');
 
     destination = null;
-    await tester.tap(find.text('Docs'));
+    await tester.tap(find.text('Docs', findRichText: true));
     await tester.pump();
     expect(destination, 'https://example.com/docs');
   });
@@ -505,8 +502,8 @@ void main() {
         ),
       ),
     ));
-    final renderer = tester.widget<MarkdownBody>(find.byType(MarkdownBody));
-    renderer.onTapLink!('Unsafe', 'javascript:alert', '');
+    final renderer = tester.widget<GptMarkdown>(find.byType(GptMarkdown));
+    renderer.onLinkTap!('javascript:alert', 'Unsafe');
     await tester.pump();
     expect(launches, 0);
   });

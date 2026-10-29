@@ -2425,6 +2425,8 @@ void main() {
   });
   testWidgets('Work copies exact Markdown for prompt and fallback response',
       (tester) async {
+    await tester.binding.setSurfaceSize(const Size(800, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     String? copied;
     tester.binding.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -2440,7 +2442,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SizedBox(
-      height: 600,
+      height: 700,
       child: ThreadPage(
         space: const AxSpace(
             id: 'space-1',

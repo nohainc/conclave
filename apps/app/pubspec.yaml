@@ -22,6 +22,7 @@ dependencies:
   url_launcher: ^6.3.3
   highlight: ^0.7.0
   timezone: ^0.11.2
+  gpt_markdown: ^1.4.0
 
 dev_dependencies:
   flutter_test:

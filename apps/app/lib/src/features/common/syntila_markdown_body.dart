@@ -5,9 +5,9 @@ import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
-import 'html_markdown/html_markdown_view.dart';
 import 'syntila_code_block.dart';
 
 /// Accept only absolute web URLs. Uri parsing alone normalizes some malformed
@@ -43,8 +43,7 @@ Future<bool> _launchMarkdownLink(Uri uri) => launchUrl(
       webOnlyWindowName: '_blank',
     );
 
-/// AX's authored-content contract: raw GFM source. Only the web browser
-/// renderer converts it to HTML, through the allowlist in `markdown_html.dart`.
+/// AX's authored-content contract: raw GFM source, never converted to HTML.
 /// Diagnostics should continue to use plain text widgets.
 class SyntilaMarkdownBody extends StatelessWidget {
   const SyntilaMarkdownBody({
@@ -93,34 +92,75 @@ class SyntilaMarkdownBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Web default: conversation messages only. Notes (blank-line spacers) and
-    // callers that consume Flutter selection keep the widget renderer.
-    if (htmlMarkdownEnabled &&
-        htmlMarkdownSupported &&
-        !preserveBlankLines &&
-        onSelectionChanged == null) {
-      final theme = Theme.of(context);
-      final isDark = theme.brightness == Brightness.dark;
-      final body = SyntilaMessageTypography.fromTheme(theme);
-      return HtmlMarkdownView(
-        data: data,
-        fitContent: fitContent,
-        onOpenLink: (href) => unawaited(_openLink(context, href)),
-        style: HtmlMarkdownStyle(
-          text: body.color ?? SyntilaColors.textPrimary(isDark),
-          muted: SyntilaColors.textSecondary(isDark),
-          link: SyntilaColors.primaryForeground(isDark),
-          border: SyntilaColors.border(isDark),
-          codeBackground: SyntilaColors.codeBackground(isDark),
-          syntaxKeyword: SyntilaColors.syntaxKeyword(isDark),
-          syntaxString: SyntilaColors.syntaxString(isDark),
-          syntaxNumber: SyntilaColors.syntaxNumber(isDark),
-          syntaxTitle: SyntilaColors.syntaxTitle(isDark),
-          fontSize: MediaQuery.textScalerOf(context).scale(body.fontSize ?? 14),
-        ),
-      );
-    }
-    final body = MarkdownBody(
+    // Notes keep the legacy renderer: their visible blank lines rely on a
+    // custom block syntax that gpt_markdown's parser does not expose.
+    final body =
+        preserveBlankLines ? _buildLegacy(context) : _buildGpt(context);
+    // Keep the region at the message boundary: an ancestor SelectionArea could
+    // otherwise make Select All include neighboring messages or shell UI.
+    return SelectionArea(
+      onSelectionChanged: onSelectionChanged,
+      child: _MarkdownSelectionOrder(child: body),
+    );
+  }
+
+  /// Conversation messages: gpt_markdown sized to content, one per message so
+  /// the thread's list virtualizes messages while each body caches segments.
+  Widget _buildGpt(BuildContext context) {
+    final theme = Theme.of(context);
+    // gpt_markdown's image hook receives only the URL; recover the alt text.
+    final imageAlts = {
+      for (final m
+          in RegExp(r'!\[([^\]]*)\]\(\s*<?([^)\s>]*)').allMatches(data))
+        m.group(2)!: m.group(1)!,
+    };
+    final body = GptMarkdown(
+      data,
+      key: ValueKey<String>(data),
+      style: SyntilaMessageTypography.fromTheme(theme),
+      styleSheet: SyntilaGptMarkdownStyleSheet.fromTheme(theme),
+      // Authored content is Markdown only; raw HTML stays literal text.
+      html: false,
+      isStreaming: false,
+      onLinkTap: (url, _) => unawaited(_openLink(context, url)),
+      // Fence bodies keep their trailing newline so copy matches the source.
+      codeBuilder: (_, language, code, __) => SyntilaCodeBlock(
+          code: code.endsWith('\n') ? code : '$code\n', language: language),
+      // Read-only task markers; Material checkboxes need a Material ancestor.
+      checkboxBuilder: (_, checked, content, __) => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsetsDirectional.only(end: 8, top: 2),
+            child: Icon(
+              checked ? Icons.check_box : Icons.check_box_outline_blank,
+              size: 18,
+              color: SyntilaColors.primary,
+              semanticLabel: checked ? 'Checked' : 'Unchecked',
+            ),
+          ),
+          Flexible(child: content),
+        ],
+      ),
+      // Remote images are never fetched from message content.
+      imageBuilder: (context, url, __, ___) => Wrap(
+        spacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(Icons.image_outlined,
+              size: 16, color: theme.colorScheme.onSurfaceVariant),
+          Text(imageAlts[url]?.isNotEmpty == true ? imageAlts[url]! : 'Image',
+              style: theme.textTheme.bodyMedium),
+        ],
+      ),
+    );
+    if (fitContent) return body;
+    return SizedBox(width: double.infinity, child: body);
+  }
+
+  Widget _buildLegacy(BuildContext context) {
+    return MarkdownBody(
       key: ValueKey<String>(data),
       data: data,
       fitContent: fitContent,
@@ -146,14 +186,6 @@ class SyntilaMarkdownBody extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
-    );
-    // MarkdownBody keeps its own native selection disabled so this single
-    // region can join paragraphs, lists, tables and custom code blocks. Keep
-    // the region at the message boundary: an ancestor SelectionArea could
-    // otherwise make Select All include neighboring messages or shell UI.
-    return SelectionArea(
-      onSelectionChanged: onSelectionChanged,
-      child: _MarkdownSelectionOrder(child: body),
     );
   }
 }
@@ -331,6 +363,56 @@ abstract final class SyntilaMarkdownStyleSheet {
       horizontalRuleDecoration: BoxDecoration(
         border: Border(top: BorderSide(color: SyntilaColors.border(isDark))),
       ),
+    );
+  }
+}
+
+/// gpt_markdown counterpart of [SyntilaMarkdownStyleSheet] for messages.
+abstract final class SyntilaGptMarkdownStyleSheet {
+  static GptMarkdownStyleSheet fromTheme(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    final body = SyntilaMessageTypography.fromTheme(theme);
+    return GptMarkdownStyleSheet(
+      heading: HeadingStyle(
+        textStyle: TextStyle(
+          fontFamily: SyntilaTypography.fontFamily,
+          fontFamilyFallback: SyntilaTypography.fontFamilyFallback,
+          fontWeight: FontWeight.w600,
+          height: 1.3,
+          color: body.color,
+        ),
+      ),
+      link: LinkStyle(
+        color: SyntilaColors.primaryForeground(isDark),
+        hoverColor: SyntilaColors.primaryForeground(isDark),
+        decoration: TextDecoration.underline,
+      ),
+      inlineCode: InlineCodeStyle(
+        fontFamily: SyntilaTypography.fontFamilyMono,
+        fontFamilyFallback: SyntilaTypography.fontFamilyMonoFallback,
+        fontSizeFactor: 0.9,
+        color: body.color,
+        backgroundColor: SyntilaColors.codeBackground(isDark),
+        borderColor: SyntilaColors.border(isDark),
+      ),
+      list:
+          ListStyle(bulletColor: body.color, markerTextStyle: body, indent: 24),
+      table: TableStyle(
+        borderColor: SyntilaColors.border(isDark),
+        cellPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        headerBackground: SyntilaColors.codeBackground(isDark),
+        headerTextStyle: body.copyWith(fontWeight: FontWeight.w600),
+      ),
+      blockQuote: BlockQuoteStyle(
+        barWidth: 3,
+        barColor: SyntilaColors.border(isDark),
+        backgroundColor: isDark
+            ? SyntilaColors.surfaceDark
+            : SyntilaColors.surfaceHoverLight,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        textStyle: body.copyWith(color: SyntilaColors.textSecondary(isDark)),
+      ),
+      hr: HrStyle(color: SyntilaColors.border(isDark), thickness: 1),
     );
   }
 }

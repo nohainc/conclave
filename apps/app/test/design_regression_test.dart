@@ -305,14 +305,21 @@ This is standard body paragraph text with **bold** and `inline_code`.
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Heading 1'), findsOneWidget);
-      expect(find.textContaining('Heading 2'), findsOneWidget);
-      expect(find.textContaining('Heading 3'), findsOneWidget);
-      expect(find.textContaining('This is standard body paragraph text'),
+      expect(
+          find.textContaining('Heading 1', findRichText: true), findsOneWidget);
+      expect(
+          find.textContaining('Heading 2', findRichText: true), findsOneWidget);
+      expect(
+          find.textContaining('Heading 3', findRichText: true), findsOneWidget);
+      expect(
+          find.textContaining('This is standard body paragraph text',
+              findRichText: true),
           findsOneWidget);
-      expect(find.textContaining('Blockquote context'), findsOneWidget);
-      expect(find.textContaining('Item 1'), findsOneWidget);
-      expect(find.textContaining('inline_code'), findsOneWidget);
+      expect(find.textContaining('Blockquote context', findRichText: true),
+          findsOneWidget);
+      expect(find.textContaining('Item 1', findRichText: true), findsOneWidget);
+      expect(find.textContaining('inline_code', findRichText: true),
+          findsOneWidget);
     });
 
     // 6. Code Block
