@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
+import 'html_markdown/html_markdown_view.dart';
 import 'syntila_code_block.dart';
 
 /// Accept only absolute web URLs. Uri parsing alone normalizes some malformed
@@ -42,7 +43,8 @@ Future<bool> _launchMarkdownLink(Uri uri) => launchUrl(
       webOnlyWindowName: '_blank',
     );
 
-/// AX's authored-content contract: raw GFM source, never converted to HTML.
+/// AX's authored-content contract: raw GFM source. Only the opt-in browser
+/// renderer converts it to HTML, through the allowlist in `markdown_html.dart`.
 /// Diagnostics should continue to use plain text widgets.
 class SyntilaMarkdownBody extends StatelessWidget {
   const SyntilaMarkdownBody({
@@ -91,6 +93,32 @@ class SyntilaMarkdownBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Prototype: conversation messages only. Notes (blank-line spacers) and
+    // callers that consume Flutter selection keep the widget renderer.
+    if (htmlMarkdownEnabled &&
+        htmlMarkdownSupported &&
+        !preserveBlankLines &&
+        onSelectionChanged == null) {
+      final theme = Theme.of(context);
+      final isDark = theme.brightness == Brightness.dark;
+      final body = SyntilaMessageTypography.fromTheme(theme);
+      return HtmlMarkdownView(
+        data: data,
+        onOpenLink: (href) => unawaited(_openLink(context, href)),
+        style: HtmlMarkdownStyle(
+          text: body.color ?? SyntilaColors.textPrimary(isDark),
+          muted: SyntilaColors.textSecondary(isDark),
+          link: SyntilaColors.primaryForeground(isDark),
+          border: SyntilaColors.border(isDark),
+          codeBackground: SyntilaColors.codeBackground(isDark),
+          syntaxKeyword: SyntilaColors.syntaxKeyword(isDark),
+          syntaxString: SyntilaColors.syntaxString(isDark),
+          syntaxNumber: SyntilaColors.syntaxNumber(isDark),
+          syntaxTitle: SyntilaColors.syntaxTitle(isDark),
+          fontSize: MediaQuery.textScalerOf(context).scale(body.fontSize ?? 14),
+        ),
+      );
+    }
     final body = MarkdownBody(
       key: ValueKey<String>(data),
       data: data,
