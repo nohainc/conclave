@@ -164,6 +164,32 @@ abstract interface class AxThreadReadDataSource {
   Future<void> markThreadRead(String threadId);
 }
 
+/// When another Space member last read a Thread; drives "Seen by".
+class AxThreadReadState {
+  const AxThreadReadState(
+      {required this.userId, required this.displayName, required this.readAt});
+
+  final String userId;
+  final String displayName;
+  final DateTime readAt;
+
+  static AxThreadReadState? fromJson(Map<String, dynamic> json) {
+    final readAt = DateTime.tryParse(json['readAt']?.toString() ?? '');
+    final userId = json['userId']?.toString() ?? '';
+    if (readAt == null || userId.isEmpty) return null;
+    final name = json['displayName']?.toString().trim() ?? '';
+    return AxThreadReadState(
+        userId: userId,
+        displayName: name.isEmpty ? 'Member' : name,
+        readAt: readAt);
+  }
+}
+
+/// Optional capability: read receipts for a Thread's other members.
+abstract interface class AxThreadReadReceiptsDataSource {
+  Future<List<AxThreadReadState>> loadThreadReadStates(String threadId);
+}
+
 /// Optional capability: the durable notification feed of finished Work and
 /// its per-user read markers.
 abstract interface class AxNotificationDataSource {
@@ -206,6 +232,7 @@ class AxApiClient extends _AxApiClientCore
         AxWorkspaceSharingDataSource,
         AxPeopleDataSource,
         AxThreadReadDataSource,
+        AxThreadReadReceiptsDataSource,
         AxNotificationDataSource,
         AxPinDataSource,
         AxNotesDataSource,

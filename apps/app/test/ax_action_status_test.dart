@@ -13,9 +13,9 @@ void main() {
         'Cancelled');
   });
 
-  test('a queued work request reads as received by Syntila', () {
+  test('a queued work request reads as received', () {
     final status = axWorkRequestStatus('queued');
-    expect(status.label(AxActionKind.workRequest), 'Received by Syntila');
+    expect(status.label(AxActionKind.workRequest), 'Received');
     expect(status.finished, isFalse);
     expect(axWorkRequestStatus('failed').problem, isTrue);
     expect(axWorkRequestStatus('completed'), AxActionStatus.processed);

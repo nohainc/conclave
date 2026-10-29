@@ -24,8 +24,7 @@ enum AxActionKind { message, workRequest, invitation }
 extension AxActionStatusLabel on AxActionStatus {
   String label(AxActionKind kind) => switch ((this, kind)) {
         (AxActionStatus.sending, _) => 'Sending…',
-        (AxActionStatus.accepted, AxActionKind.workRequest) =>
-          'Received by Syntila',
+        (AxActionStatus.accepted, AxActionKind.workRequest) => 'Received',
         (AxActionStatus.accepted, _) => 'Sent',
         (AxActionStatus.delivered, AxActionKind.workRequest) => 'Started',
         (AxActionStatus.delivered, _) => 'Delivered',

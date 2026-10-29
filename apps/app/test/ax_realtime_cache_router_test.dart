@@ -28,6 +28,21 @@ void main() {
     await router.handle({'type': 'people.updated'});
     expect(loads['people'], 2);
   });
+  test('thread.read refreshes read receipts only, not the Thread list',
+      () async {
+    final receipts = query(['thread', 'W', 'read-states']);
+    final threads = query(['space', 'A', 'threads']);
+    await engine.ensure(receipts);
+    await engine.ensure(threads);
+    await router.handle({
+      'type': 'thread.read',
+      'spaceId': 'A',
+      'threadId': 'W',
+      'payload': {'entityId': 'W', 'threadId': 'W'}
+    });
+    expect(loads['thread:W:read-states'], 2);
+    expect(loads['space:A:threads'], 1);
+  });
   test('Discussion without integration callback revalidates its query',
       () async {
     final discussion = query(['thread', 'W', 'discussion']);

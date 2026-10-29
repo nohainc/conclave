@@ -3906,6 +3906,40 @@ void main() {
     });
   }
 
+  testWidgets('my latest message shows who has seen it', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ThreadPage(
+          space: const AxSpace(
+            id: 'space-1',
+            name: 'Space One',
+            branch: '',
+            lastActivity: 'today',
+            role: 'collaborator',
+          ),
+          thread: const AxThread(
+            id: 'thread-1',
+            spaceId: 'space-1',
+            name: 'Research',
+            lead: 'Owner',
+            status: 'active',
+            brief: '',
+            primaryWorkspace: 'Workspace One',
+            queueStatus: 'Idle',
+          ),
+          dataSource: _ReadReceiptsDataSource(),
+          currentUserId: 'user-owner',
+          onBackToSpace: _noop,
+          onArchive: _noop,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Seen by Ann'), findsOneWidget);
+  });
+
   testWidgets(
       'Owner Members tab distinguishes Members and Pending invitations with Resend and Revoke controls',
       (tester) async {
@@ -4343,6 +4377,23 @@ class _DiscussionDataSource extends AxFixtureDataSource {
           createdAt: '2026-10-05T19:18:00.000Z',
           isMe: true,
         ),
+      ];
+}
+
+class _ReadReceiptsDataSource extends _DiscussionDataSource
+    implements AxThreadReadReceiptsDataSource {
+  @override
+  Future<List<AxThreadReadState>> loadThreadReadStates(String threadId) async =>
+      [
+        AxThreadReadState(
+            userId: 'u-ann',
+            displayName: 'Ann',
+            readAt: DateTime.parse('2026-10-05T19:20:00.000Z')),
+        // Read before the message was sent: not "seen".
+        AxThreadReadState(
+            userId: 'u-bob',
+            displayName: 'Bob',
+            readAt: DateTime.parse('2026-10-05T19:00:00.000Z')),
       ];
 }
 

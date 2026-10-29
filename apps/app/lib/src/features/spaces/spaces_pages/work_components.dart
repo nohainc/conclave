@@ -2147,6 +2147,22 @@ class _WorkTimelineCard extends StatelessWidget {
                                           onPressed: () =>
                                               onCancelRun!(request.id),
                                         ),
+                                      // Cloud accepted it; shown until a
+                                      // Worker starts, then progress takes over.
+                                      if (request.status == 'queued') ...[
+                                        Tooltip(
+                                          message:
+                                              'Received by Syntila, waiting for a Worker',
+                                          child: ActionStatusChip(
+                                            key: ValueKey(
+                                                'work-request-status-${request.id}'),
+                                            status: axWorkRequestStatus(
+                                                request.status),
+                                            kind: AxActionKind.workRequest,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                      ],
                                       if (reportedIssue != null)
                                         Text('Reported',
                                             style: TextStyle(

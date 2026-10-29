@@ -977,6 +977,17 @@ export async function routeWorkerRequest(
         ctx,
       );
     }
+    const threadReadStatesMatch = url.pathname.match(
+      /^\/api\/threads\/([^/]+)\/read-states$/,
+    );
+    if (request.method === "GET" && threadReadStatesMatch?.[1]) {
+      return await handlers.handleListThreadReadStates!(
+        request,
+        env,
+        threadReadStatesMatch[1],
+        ctx,
+      );
+    }
 
     const threadDiscussionMatch = url.pathname.match(
       /^\/api\/threads\/([^/]+)\/discussion-messages$/,

@@ -155,6 +155,7 @@ export const routeHandlers = {
   handleUpdateThread: handlers.handleUpdateThread,
   handleDeleteThread: handlers.handleDeleteThread,
   handleMarkThreadRead: handlers.handleMarkThreadRead,
+  handleListThreadReadStates: handlers.handleListThreadReadStates,
   handleSetPin: handlers.handleSetPin,
   handleSetPinOrder: handlers.handleSetPinOrder,
   handleListUserFiles: handlers.handleListUserFiles,

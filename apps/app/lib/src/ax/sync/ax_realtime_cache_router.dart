@@ -127,6 +127,14 @@ class AxRealtimeCacheRouter {
       }
       return;
     }
+    if (type == 'thread.read') {
+      // Read receipts only; the Thread list and unread state are unchanged.
+      if (threadId != null) {
+        await engine.revalidateWhere(
+            (key) => key == AxQueryKey(['thread', threadId, 'read-states']));
+      }
+      return;
+    }
     if (threadId != null &&
         const {
           'work_request.created',

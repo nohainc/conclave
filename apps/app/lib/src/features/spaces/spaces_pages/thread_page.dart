@@ -150,6 +150,57 @@ class _ThreadPageState extends State<ThreadPage>
           ? null
           : widget.dataSource as AxThreadQueueDataSource;
   AxThreadQueue _sharedQueue = AxThreadQueue.empty;
+
+  /// Read receipts: when each other member last read this Thread. Kept in the
+  /// shared engine so a live `thread.read` signal refreshes it.
+  List<AxThreadReadState> _readStates = const [];
+  void Function()? _cancelReadStates;
+
+  void _watchReadStates() {
+    _cancelReadStates?.call();
+    _cancelReadStates = null;
+    _readStates = const [];
+    final source = widget.dataSource;
+    if (widget.isDraft || source is! AxThreadReadReceiptsDataSource) return;
+    final receipts = source as AxThreadReadReceiptsDataSource;
+    final threadId = widget.thread.id;
+    final query = AxQuery<List<AxThreadReadState>>(
+        key: AxQueryKey(['thread', threadId, 'read-states']),
+        load: () => receipts.loadThreadReadStates(threadId));
+    final engine = _workHistoryCache.engine;
+    _cancelReadStates = engine.watch(query, (state) {
+      final next = state.data ?? const <AxThreadReadState>[];
+      if (!mounted || identical(next, _readStates)) return;
+      setState(() => _readStates = next);
+    }, fireImmediately: false);
+    unawaited(engine.ensure(query).then<void>((_) {},
+        onError: (Object _, StackTrace __) {}));
+  }
+
+  /// Members who have read up to [date]: the line under my latest message.
+  Widget? _seenBy(DateTime? date) {
+    if (date == null) return null;
+    final names = [
+      for (final state in _readStates)
+        if (!state.readAt.isBefore(date)) state.displayName
+    ];
+    if (names.isEmpty) return null;
+    final shown = names.length <= 3
+        ? names.join(', ')
+        : '${names.take(3).join(', ')} +${names.length - 3}';
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 2, right: 4),
+        child: Text('Seen by $shown',
+            key: const ValueKey('discussion-seen-by'),
+            style: TextStyle(
+                fontSize: 11,
+                color: SyntilaColors.textSecondary(
+                    Theme.of(context).brightness == Brightness.dark))),
+      ),
+    );
+  }
   int _sharedQueueGeneration = 0;
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
@@ -1318,6 +1369,7 @@ class _ThreadPageState extends State<ThreadPage>
     _loadWorkflowCatalog();
     _restoreThreadViewState();
     _loadSharedQueue();
+    _watchReadStates();
   }
 
   void _applyWorkers(List<AxWorker> workers) {
@@ -1518,6 +1570,7 @@ class _ThreadPageState extends State<ThreadPage>
       _releaseWorkQueue(oldWidget);
       _claimWorkQueue();
     }
+
     if (threadChanged || oldWidget.dataSource != widget.dataSource) {
       _sharedQueue = AxThreadQueue.empty;
       _loadSharedQueue();
@@ -1641,6 +1694,10 @@ class _ThreadPageState extends State<ThreadPage>
       _workEventSubscription?.cancel();
       _subscribeToWorkEvents();
     }
+    // After the caches above are rebound to the new Thread.
+    if (threadChanged || oldWidget.isDraft != widget.isDraft) {
+      _watchReadStates();
+    }
   }
 
   static const _terminalActivityTypes = {
@@ -1756,6 +1813,7 @@ class _ThreadPageState extends State<ThreadPage>
       _effectiveWorkflow.isNotEmpty;
   @override
   void dispose() {
+    _cancelReadStates?.call();
     _releaseWorkQueue(widget);
     _invalidateInteractionCallbacks();
     AxRenderDiagnostics.instance.updateContext(
@@ -2217,6 +2275,8 @@ class _ThreadPageState extends State<ThreadPage>
       BuildContext context, ThreadChatPresentationSnapshot state,
       {bool twoPane = false}) {
     final messages = _conversationItems(state);
+    final lastOwnIndex = messages.lastIndexWhere((message) =>
+        message.isMe && message.workRequest == null && message.aiKind == null);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final showEmpty = messages.isEmpty &&
         state.error == null &&
@@ -2436,6 +2496,9 @@ class _ThreadPageState extends State<ThreadPage>
                               : Colors.transparent,
                           borderRadius: BorderRadius.circular(12),
                         );
+                        final seenBy = index == lastOwnIndex
+                            ? _seenBy(message.date)
+                            : null;
                         return KeyedSubtree(
                           key: ValueKey(message.id),
                           child: KeyedSubtree(
@@ -2444,7 +2507,12 @@ class _ThreadPageState extends State<ThreadPage>
                               duration: const Duration(milliseconds: 300),
                               curve: Curves.easeOut,
                               decoration: highlightDecoration,
-                              child: rowContent,
+                              child: seenBy == null
+                                  ? rowContent
+                                  : Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [rowContent, seenBy]),
                             ),
                           ),
                         );

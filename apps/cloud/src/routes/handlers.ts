@@ -94,6 +94,7 @@ export {
   handleUpdateThread,
   handleDeleteThread,
   handleMarkThreadRead,
+  handleListThreadReadStates,
   handleListDiscussionMessages,
   handleCreateDiscussionMessage,
   handleEditDiscussionMessage,

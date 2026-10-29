@@ -63,6 +63,18 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     }
   }
 
+  Future<List<AxThreadReadState>> loadThreadReadStates(String threadId) async {
+    final body = await _getJson(Uri.parse(
+        '$baseUrl/threads/${Uri.encodeComponent(threadId)}/read-states'));
+    return [
+      for (final item in (body['readStates'] as List? ?? const []))
+        if (item is Map)
+          if (AxThreadReadState.fromJson(Map<String, dynamic>.from(item))
+              case final state?)
+            state,
+    ];
+  }
+
   Future<void> setPinned(
       {required String kind, required String id, required bool pinned}) async {
     final uri = Uri.parse(

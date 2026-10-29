@@ -20,6 +20,7 @@ import {
 } from "./thread-activity.js";
 import { MutationIdempotency } from "./mutation-idempotency.js";
 import { publishCollaborationEvent } from "../collaboration-events.js";
+import { createEventPublisher } from "../event-publisher.js";
 import {
   canExecuteThread,
   canManageThread,
@@ -971,5 +972,49 @@ export async function handleMarkThreadRead(
     recipientUserIds: [context.userId],
     mutations: [mutation],
   });
+  // Read receipts: other members viewing the Thread refetch who has seen it.
+  // Live-only; a reconnecting client simply reloads the read states.
+  try {
+    await createEventPublisher(env).publish({
+      type: "thread.read",
+      spaceId,
+      threadId,
+      stream: { kind: "space", id: spaceId },
+      payload: { entityId: threadId, threadId },
+      durable: false,
+    });
+  } catch (error) {
+    console.warn("thread.read.signal_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
   return json({ threadId, readAt });
+}
+
+/** When each other Space member last read the Thread (read receipts). Only
+ * members of the Space are listed; they can already see each other. */
+export async function handleListThreadReadStates(
+  request: Request,
+  env: SecurityEnv,
+  threadId: string,
+  accessContext?: ExecutionContext,
+): Promise<Response> {
+  const { context, spaceId } = await authorizeThreadAccess(
+    request,
+    env,
+    threadId,
+    "view",
+    accessContext,
+  );
+  const rows = await env.SYNTILA_DB.prepare(
+    `SELECT r.user_id AS userId, u.display_name AS displayName, r.read_at AS readAt
+       FROM thread_read_states r
+       JOIN space_memberships m ON m.space_id = ?2 AND m.user_id = r.user_id
+       JOIN users u ON u.id = r.user_id
+      WHERE r.thread_id = ?1 AND r.user_id != ?3
+      ORDER BY r.read_at DESC`,
+  )
+    .bind(threadId, spaceId, context.userId)
+    .all();
+  return json({ readStates: rows.results ?? [] });
 }
