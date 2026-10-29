@@ -37,8 +37,13 @@ class WorkspaceSharingSection extends StatefulWidget {
     this.personAccessSource,
     this.workers = const [],
     this.people = const [],
+    this.refresh,
     this.expandable = false,
   });
+
+  /// Fires when an invitation is sent, accepted, declined or revoked; the
+  /// lists reload quietly so the owner sees the response while waiting here.
+  final Listenable? refresh;
 
   /// Collapse the section behind an expandable header (the Workspace page).
   final bool expandable;
@@ -70,19 +75,34 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
   @override
   void initState() {
     super.initState();
+    widget.refresh?.addListener(_onRefresh);
     unawaited(_load());
   }
 
   @override
   void didUpdateWidget(WorkspaceSharingSection oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.refresh != widget.refresh) {
+      oldWidget.refresh?.removeListener(_onRefresh);
+      widget.refresh?.addListener(_onRefresh);
+    }
     if (oldWidget.workspaceId != widget.workspaceId) unawaited(_load());
   }
 
-  Future<void> _load() async {
+  @override
+  void dispose() {
+    widget.refresh?.removeListener(_onRefresh);
+    super.dispose();
+  }
+
+  void _onRefresh() {
+    if (mounted && !_busy) unawaited(_load(quiet: true));
+  }
+
+  Future<void> _load({bool quiet = false}) async {
     final workspaceId = widget.workspaceId;
     setState(() {
-      _loading = true;
+      if (!quiet) _loading = true;
       _error = null;
     });
     try {

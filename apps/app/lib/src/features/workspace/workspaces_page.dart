@@ -36,6 +36,7 @@ class WorkspacesPage extends StatefulWidget {
     this.sharingSource,
     this.people = const [],
     this.personAccessSource,
+    this.sharingRefresh,
     this.onRevoke,
     this.onLeaveShared,
     // Retained as optional compatibility inputs while callers are audited.
@@ -72,6 +73,9 @@ class WorkspacesPage extends StatefulWidget {
 
   /// Enables editing one person's Workers, models and mode.
   final AxWorkspacePersonAccessDataSource? personAccessSource;
+
+  /// Fires when an invitation changes elsewhere; the sharing section reloads.
+  final Listenable? sharingRefresh;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -256,6 +260,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             memberAccessSource: widget.memberAccessSource,
             personAccessSource: widget.personAccessSource,
             workers: widget.workspaceWorkers,
+            refresh: widget.sharingRefresh,
             expandable: true,
           ),
         ],

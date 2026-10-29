@@ -130,6 +130,7 @@ const collaborationRealtimeEventTypes = <String>{
   'discussion.deleted',
   'workspace_space_grant.updated',
   'people.updated',
+  'workspace_invitation.updated',
 };
 const durableRealtimeEventTypes = <String>{
   'work_request.created',
@@ -169,6 +170,7 @@ const durableRealtimeEventTypes = <String>{
   'discussion.deleted',
   'workspace_space_grant.updated',
   'people.updated',
+  'workspace_invitation.updated',
 };
 const ephemeralRealtimeEventTypes = <String>{
   'assignment.activity',

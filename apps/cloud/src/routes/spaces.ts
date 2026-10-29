@@ -1159,7 +1159,8 @@ export async function handleAcceptSpaceInvitation(
     invitation.spaceId,
     invitation.id,
     {
-      additionalRecipientUserIds: [context.userId],
+      // The inviter also hears it on their own stream, outside the Space view.
+      additionalRecipientUserIds: [context.userId, invitation.invitedByUserId],
     },
   );
   return json({
@@ -1179,11 +1180,12 @@ export async function handleDeclineSpaceInvitation(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   const invitation = await env.SYNTILA_DB.prepare(
-    `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, expires_at AS expiresAt
+    `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, invited_by_user_id AS invitedByUserId, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
     .bind(invitationId)
     .first<{
+      invitedByUserId: string;
       id: string;
       spaceId: string;
       email: string;
@@ -1233,7 +1235,7 @@ export async function handleDeclineSpaceInvitation(
     invitation.spaceId,
     invitation.id,
     {
-      additionalRecipientUserIds: [context.userId],
+      additionalRecipientUserIds: [context.userId, invitation.invitedByUserId],
     },
   );
   return json({

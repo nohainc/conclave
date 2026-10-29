@@ -365,6 +365,7 @@ extension _AxAppViews on _AxAppStateMixin {
                     people: peopleState.data ?? const <AxPerson>[],
                     workspaces: _workspaceCards(),
                     workspaceWorkers: workspaceWorkers,
+                    sharingRefresh: store.workspaceInvitationRevision,
                     workerUsageSource:
                         widget.dataSource is AxWorkerUsageDataSource
                             ? widget.dataSource as AxWorkerUsageDataSource

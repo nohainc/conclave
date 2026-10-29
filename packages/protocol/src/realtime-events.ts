@@ -98,6 +98,7 @@ export const RealtimeEventEnvelopeSchema = z
   .superRefine((event, context) => {
     const stream = event.stream;
     const people = event.type === "people.updated";
+    const workspaceInvitation = event.type === "workspace_invitation.updated";
     const collaboration = (
       COLLABORATION_REALTIME_EVENT_TYPES as readonly string[]
     ).includes(event.type);
@@ -105,7 +106,7 @@ export const RealtimeEventEnvelopeSchema = z
       collaboration &&
       (!stream ||
         stream.kind === "execution_workspace" ||
-        (!people && !event.spaceId) ||
+        (!people && !workspaceInvitation && !event.spaceId) ||
         !event.payload.entityId)
     ) {
       context.addIssue({
@@ -126,6 +127,19 @@ export const RealtimeEventEnvelopeSchema = z
         code: "custom",
         message:
           "People signals require a user stream and an entity identifier only",
+      });
+    }
+    if (
+      workspaceInvitation &&
+      (stream?.kind !== "user" ||
+        event.spaceId ||
+        event.threadId ||
+        Object.keys(event.payload).some((key) => key !== "entityId"))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Workspace invitation signals require a user stream and an entity identifier only",
       });
     }
     if (

@@ -146,7 +146,8 @@
       "discussion.updated",
       "discussion.deleted",
       "workspace_space_grant.updated",
-      "people.updated"
+      "people.updated",
+      "workspace_invitation.updated"
     ],
     "ephemeralTypes": [
       "assignment.activity",
@@ -170,7 +171,8 @@
       "discussion.updated",
       "discussion.deleted",
       "workspace_space_grant.updated",
-      "people.updated"
+      "people.updated",
+      "workspace_invitation.updated"
     ]
   },
   "x-execution-events": {

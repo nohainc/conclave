@@ -471,6 +471,7 @@ extension _AxAppController on _AxAppStateMixin {
         await Future.wait([
           _refreshRealtimeFeatures('space.updated'),
           _refreshRealtimeFeatures('workspace.updated'),
+          _refreshRealtimeFeatures('workspace_invitation.updated'),
         ]);
       }
     }
@@ -505,6 +506,20 @@ extension _AxAppController on _AxAppStateMixin {
           final update = AxProductUpdate.fromJson(payload);
           store.addProductUpdate(update);
         } catch (_) {}
+      }
+      return;
+    }
+    if (type == 'workspace_invitation.updated') {
+      // Invitee: the Inbox list. Owner: the open sharing section, and any
+      // newly lent Workspace once the invitee accepts.
+      store.workspaceInvitationRevision.value++;
+      try {
+        await Future.wait<void>([
+          store.refreshWorkspaceInvitations(),
+          store.workspaces.list(),
+        ]);
+      } catch (error) {
+        _reportRefreshFailure(error);
       }
       return;
     }

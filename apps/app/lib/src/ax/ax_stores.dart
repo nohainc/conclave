@@ -214,6 +214,10 @@ class AxStore {
   final ValueNotifier<List<AxMyWorkspaceInvitation>> workspaceInvitations =
       ValueNotifier(const []);
 
+  /// Bumped when a Workspace invitation the viewer sent or received changes,
+  /// so open sharing views reload without a page refresh.
+  final ValueNotifier<int> workspaceInvitationRevision = ValueNotifier(0);
+
   Future<void> refreshWorkspaceInvitations() async {
     final AxDataSource raw = dataSource;
     if (raw is! AxWorkspaceSharingDataSource) return;
@@ -454,6 +458,7 @@ class AxStore {
     invitations.removeListener(_updateUnreadNotifications);
     workspaceInvitations.removeListener(_updateUnreadNotifications);
     workspaceInvitations.dispose();
+    workspaceInvitationRevision.dispose();
     invitations.dispose();
     lifecycle.dispose();
     lifecycleNotice.dispose();

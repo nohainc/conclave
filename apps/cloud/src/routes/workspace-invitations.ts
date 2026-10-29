@@ -1,4 +1,5 @@
 import { hashToken } from "@syntila/security";
+import { createEventPublisher } from "../event-publisher.js";
 import {
   HttpError,
   json,
@@ -17,6 +18,42 @@ export function monthStartIso(now = new Date()): string {
 export const MONTHLY_RUN_SECONDS_SQL = `SELECT COALESCE(ROUND(SUM(MAX(0, (julianday(updated_at) - julianday(created_at)) * 86400))), 0) AS seconds
    FROM worker_assignments
    WHERE execution_workspace_id = ?1 AND requested_by_user_id = ?2 AND created_at >= ?3`;
+
+/**
+ * ID-only invalidation on each party's own user stream: the owner sees the
+ * response while on the sharing page, and the invitee sees new invitations.
+ * A failed signal never fails the mutation; clients reconcile on reconnect.
+ */
+async function publishWorkspaceInvitationChanged(
+  env: SecurityEnv,
+  invitationId: string,
+  userIds: readonly (string | null | undefined)[],
+) {
+  const publisher = createEventPublisher(env);
+  for (const userId of new Set(userIds.filter((id): id is string => !!id))) {
+    try {
+      await publisher.publish({
+        type: "workspace_invitation.updated",
+        stream: { kind: "user", id: userId },
+        payload: { entityId: invitationId },
+        recipientUserIds: [userId],
+      });
+    } catch (error) {
+      console.warn("workspace_invitation.signal_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+async function userIdByEmail(env: SecurityEnv, email: string) {
+  const row = await env.SYNTILA_DB.prepare(
+    "SELECT id FROM users WHERE LOWER(email) = ?1 LIMIT 1",
+  )
+    .bind(email.trim().toLowerCase())
+    .first<{ id: string }>();
+  return row?.id;
+}
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_PENDING_PER_WORKSPACE = 20;
@@ -59,6 +96,15 @@ export async function handleWorkspaceInvitations(
       .run();
     if (!revoked.meta?.changes)
       throw new HttpError(404, "Pending invitation not found");
+    const invitee = await env.SYNTILA_DB.prepare(
+      "SELECT email FROM workspace_invitations WHERE id = ?1",
+    )
+      .bind(invitationId)
+      .first<{ email: string }>();
+    await publishWorkspaceInvitationChanged(env, invitationId, [
+      context.userId,
+      invitee ? await userIdByEmail(env, invitee.email) : undefined,
+    ]);
     return json({ revoked: true });
   }
   if (request.method === "GET") {
@@ -124,6 +170,10 @@ export async function handleWorkspaceInvitations(
       now,
     )
     .run();
+  await publishWorkspaceInvitationChanged(env, id, [
+    context.userId,
+    await userIdByEmail(env, email),
+  ]);
   return json({ id, email, status: "pending", expiresAt }, { status: 201 });
 }
 
@@ -226,6 +276,10 @@ export async function handleAcceptWorkspaceInvitation(
   ]);
   if (!results[0]?.meta?.changes)
     throw new HttpError(409, "Workspace invitation is no longer pending");
+  await publishWorkspaceInvitationChanged(env, invitation.id, [
+    invitation.ownerId,
+    context.userId,
+  ]);
   return json({ workspaceId: invitation.workspaceId, status: "active" });
 }
 
@@ -353,5 +407,14 @@ export async function handleDeclineWorkspaceInvitation(
     .run();
   if (!result.meta?.changes)
     throw new HttpError(404, "Workspace invitation not found");
+  const owner = await env.SYNTILA_DB.prepare(
+    "SELECT invited_by_user_id AS userId FROM workspace_invitations WHERE id = ?1",
+  )
+    .bind(invitationId)
+    .first<{ userId: string }>();
+  await publishWorkspaceInvitationChanged(env, invitationId, [
+    owner?.userId,
+    context.userId,
+  ]);
   return json({ status: "declined" });
 }

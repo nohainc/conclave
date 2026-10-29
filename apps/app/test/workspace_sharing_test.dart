@@ -212,6 +212,23 @@ void main() {
     expect(source.calls, ['invite:a@b.test', 'cancel:i1', 'revoke:guest']);
   });
 
+  testWidgets('owner sees an invitation response without reloading',
+      (tester) async {
+    final source = SharingSource();
+    final refresh = ValueNotifier(0);
+    addTearDown(refresh.dispose);
+    await pump(
+        tester,
+        WorkspaceSharingSection(
+            workspaceId: 'ws', source: source, refresh: refresh));
+    expect(find.byKey(const ValueKey('sharing-invitation-i1')), findsOneWidget);
+    // The invitee declined; the realtime signal bumps the revision.
+    source.invitations = const [];
+    refresh.value++;
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('sharing-invitation-i1')), findsNothing);
+  });
+
   testWidgets('owner sets a monthly run-time limit', (tester) async {
     final source = SharingSource();
     await pump(
