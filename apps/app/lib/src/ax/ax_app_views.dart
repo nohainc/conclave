@@ -366,6 +366,8 @@ extension _AxAppViews on _AxAppStateMixin {
                     workspaces: _workspaceCards(),
                     workspaceWorkers: workspaceWorkers,
                     sharingRefresh: store.workspaceInvitationRevision,
+                    onSetParallelSlots: (workspace, slots) =>
+                        store.workspaces.setParallelSlots(workspace.id, slots),
                     workerUsageSource:
                         widget.dataSource is AxWorkerUsageDataSource
                             ? widget.dataSource as AxWorkerUsageDataSource

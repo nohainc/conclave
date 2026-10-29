@@ -15,12 +15,11 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
-  WorkspaceSettings settings({int slots = 6}) => WorkspaceSettings(
+  WorkspaceSettings settings() => WorkspaceSettings(
         serviceEnabled: true,
         cloudUrl: 'https://syntila.app',
         connectOnStart: true,
         workspaceName: 'GMKtec',
-        parallelSlots: slots,
         workRoot: '${root.path}/work',
         folders: {
           'models': '${root.path}/models',
@@ -33,11 +32,12 @@ void main() {
 
     final source = await store.file.readAsString();
     expect(source, startsWith('..\n'));
-    expect(source, contains('parallel_slots 6'));
+    // Parallel slots are set on the web Workspaces page, never in this file.
+    expect(source, isNot(contains('parallel_slots')));
     expect(source, contains('models ${root.path}/models'));
     final loaded = store.readSync()!;
     expect(loaded.workspaceName, 'GMKtec');
-    expect(loaded.parallelSlots, 6);
+    expect(loaded.legacyParallelSlots, isNull);
     expect(loaded.workRoot, '${root.path}/work');
     expect(loaded.folders['models'], '${root.path}/models');
     if (!Platform.isWindows) {
@@ -47,13 +47,6 @@ void main() {
 
   test('rejects invalid scalar types, paths and unknown behavior keys', () {
     final valid = settings().toNanoValue();
-    expect(
-      () => WorkspaceSettings.fromNanoValue({
-        ...valid,
-        'execution': {'parallel_slots': '11'},
-      }),
-      throwsFormatException,
-    );
     expect(
       () => WorkspaceSettings.fromNanoValue({
         ...valid,
@@ -77,12 +70,12 @@ void main() {
     'resolver consumes workspace.nano once as service configuration',
     () async {
       final state = Directory('${root.path}/state');
-      await WorkspaceSettingsStore(state).write(settings(slots: 7));
+      await WorkspaceSettingsStore(state).write(settings());
 
       final config = WorkspaceConfig.fromArgs(['--data-dir', state.path]);
       expect(config.serviceEnabled, isTrue);
       expect(config.connectOnStart, isTrue);
-      expect(config.parallelSlots, 7);
+      expect(config.legacyParallelSlots, isNull);
       expect(config.workRootPath, '${root.path}/work');
       expect(config.folders['models'], '${root.path}/models');
       expect(config.cloudUri!.scheme, 'wss');
@@ -97,13 +90,31 @@ void main() {
       final generated = await store.ensureDefaults();
 
       expect(generated.cloudUrl, 'https://syntila.app');
-      // A new file is named after this machine and starts with 3 slots.
+      // A new file is named after this machine.
       expect(generated.workspaceName, isNotEmpty);
       expect(generated.workspaceName.length, lessThanOrEqualTo(120));
-      expect(generated.parallelSlots, 3);
+      expect(generated.legacyParallelSlots, isNull);
       expect(generated.connectOnStart, isFalse);
       expect(generated.workRoot, isNotEmpty);
       expect(store.file.existsSync(), isTrue);
     },
   );
+
+  test('an old file\'s parallel_slots is read once for Cloud to adopt', () {
+    final valid = settings().toNanoValue();
+    final legacy = WorkspaceSettings.fromNanoValue({
+      ...valid,
+      'execution': {'parallel_slots': '7'},
+    });
+    expect(legacy.legacyParallelSlots, 7);
+    expect(legacy.toNanoValue().containsKey('execution'), isFalse);
+    // Out of range is ignored, not a startup failure.
+    expect(
+      WorkspaceSettings.fromNanoValue({
+        ...valid,
+        'execution': {'parallel_slots': '11'},
+      }).legacyParallelSlots,
+      isNull,
+    );
+  });
 }

@@ -287,19 +287,21 @@ describe("v8 Workspace inventory recovery", () => {
       workers: [],
     });
     expect(slots()).toBe(5);
+    // Cloud owns slots once set (the web Workspaces page): a Service's
+    // reported value only seeds an unset Workspace and never overrides it.
     await internal.recordWorkerInventory({
       fullSnapshot: true,
       parallelSlots: 3,
       workers: [],
     });
-    expect(slots()).toBe(3);
+    expect(slots()).toBe(5);
     for (const invalid of [0, 1025, 2.5, "7", null]) {
       await internal.recordWorkerInventory({
         fullSnapshot: true,
         parallelSlots: invalid,
         workers: [],
       });
-      expect(slots()).toBe(3);
+      expect(slots()).toBe(5);
     }
     database.close();
   });

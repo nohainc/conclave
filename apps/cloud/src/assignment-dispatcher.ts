@@ -549,9 +549,8 @@ async function dispatchWorkspaceWorkerAssignment(
       })),
       timeoutMs,
       queueWaitTimeoutMs,
-      // This is the immutable intersection of Cloud grant, Cloud scheduling,
-      // and Workspace-reported capacity. The Service takes the final local
-      // slot reservation using this value and its current local registry.
+      // Replaced at delivery by the Workspace's current slot total: Cloud
+      // admits each assignment against that total before sending it.
       maxConcurrentAssignments: target.maxConcurrentAssignments,
       sessionPolicy,
       ...(sessionKey !== undefined ? { sessionKey } : {}),
@@ -656,10 +655,15 @@ async function dispatchWorkspaceWorkerAssignment(
     const delivery = (await response
       .clone()
       .json()
-      .catch(() => ({}))) as { delivered?: boolean; queued?: boolean };
+      .catch(() => ({}))) as {
+      delivered?: boolean;
+      queued?: boolean;
+      deliveryState?: string;
+    };
     if (delivery.queued === true && delivery.delivered !== true) {
-      // The Service is not ready. Nothing was sent and nothing was accepted:
-      // the assignment stays `created` in the durable queue.
+      // The Service is not ready or every slot is taken. Nothing was sent and
+      // nothing was accepted: the assignment stays `created` in the durable
+      // queue until the Service is ready or an assignment finishes.
       tryLogDiagnosticEvent({
         requestId: task.workRequestId,
         assignmentId,
@@ -675,7 +679,9 @@ async function dispatchWorkspaceWorkerAssignment(
         stage: "dispatch",
         severity: "info",
         retryable: true,
-        context: { status: "queued_waiting_for_service_ready" },
+        context: {
+          status: `queued_${delivery.deliveryState ?? "waiting_for_service_ready"}`,
+        },
       });
       return {
         assignmentId,

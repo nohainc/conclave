@@ -239,8 +239,9 @@ class WorkspaceManagerService {
     return {
       'active': slots['active'] ?? 0,
       'queued': slots['queued'] ?? 0,
-      // The configured total, not the last limit applied to an admission.
-      'limit': workspace.config.parallelSlots,
+      // The total Cloud last sent with an assignment (set on the web
+      // Workspaces page); the local record until the first assignment.
+      'limit': slots['limit'] ?? await subsystem?.parallelSlots(),
       'workers': [
         for (final raw in (slots['workers'] as List).whereType<Map>())
           {
@@ -814,7 +815,6 @@ class WorkspaceManagerService {
               WorkRootResolver().defaultPath,
           'settingsFile': workspace.config.settingsFile?.path,
           'folders': workspace.config.folders,
-          'parallelSlots': workspace.config.parallelSlots,
           'serviceEnabled': workspace.config.serviceEnabled,
           'connectOnStart': workspace.config.connectOnStart,
         };

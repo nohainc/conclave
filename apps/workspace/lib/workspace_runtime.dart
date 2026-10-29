@@ -78,7 +78,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
           workRootPath: config.workRootPath,
           serviceEnabled: config.serviceEnabled,
           connectOnStart: config.connectOnStart,
-          parallelSlots: config.parallelSlots,
+          legacyParallelSlots: config.legacyParallelSlots,
           folders: config.folders,
           settingsFile: config.settingsFile,
         );
@@ -91,7 +91,6 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
   final localWorkerRegistry = LocalWorkerRegistry(
     dataDirectory: effectiveConfig.dataDirectory,
     workspaceId: localWorkspaceId,
-    configuredParallelSlots: effectiveConfig.parallelSlots,
     onChanged: () async {
       await workerCatalogCoordinator?.refreshLocalWorkers();
       await connection?.refreshWorkerInventory();
@@ -100,7 +99,12 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       await cliWorkerEngineSupervisor?.cancelWorker(workerId);
     },
   );
-  await localWorkerRegistry.setParallelSlots(effectiveConfig.parallelSlots);
+  // Report a pre-Cloud local value once so Cloud can adopt it for a
+  // Workspace that has no slot total yet. Cloud never lets it override.
+  final legacySlots = effectiveConfig.legacyParallelSlots;
+  if (legacySlots != null) {
+    await localWorkerRegistry.setParallelSlots(legacySlots);
+  }
   const developmentDraftRoot = String.fromEnvironment(
     'SYNTILA_DEVELOPMENT_PROFILE_DIRECTORY',
   );
@@ -507,11 +511,13 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
       final queueWaitTimeout = queueWaitTimeoutValue is int
           ? Duration(milliseconds: queueWaitTimeoutValue)
           : CliWorkerEngineSupervisor.defaultQueueWaitTimeout;
-      // Parallel slots are one Workspace-wide pool shared by every Worker.
-      // `localConcurrencyLimit` carries that total on each Worker record, and
-      // it is the only limit the Service applies; Cloud has already enforced
-      // grant and scheduling limits at dispatch.
-      final effectiveConcurrency = worker.localConcurrencyLimit;
+      // Parallel slots are one Workspace-wide pool owned by Cloud. Cloud
+      // admits each assignment against that total and stamps the current
+      // value into the assignment, so this limit never makes work wait here.
+      // An older Cloud omits it; the local Worker record is the fallback.
+      final cloudSlots = payload['maxConcurrentAssignments'];
+      final effectiveConcurrency =
+          cloudSlots is int ? cloudSlots : worker.localConcurrencyLimit;
       if (effectiveConcurrency < 1) {
         throw AssignmentExecutionFailure(
           code: 'worker_not_ready',

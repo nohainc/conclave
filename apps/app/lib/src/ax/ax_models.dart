@@ -1352,6 +1352,7 @@ class AxWorkspace {
     this.workerCount = 0,
     this.activeTaskCount = 0,
     this.shared = false,
+    this.parallelSlots,
   });
 
   final String id;
@@ -1376,6 +1377,10 @@ class AxWorkspace {
   final int workerCount;
   final int activeTaskCount;
 
+  /// How many requests run at once on this Workspace. Owner-only (null for a
+  /// lent Workspace); set on the Workspaces page and enforced by Cloud.
+  final int? parallelSlots;
+
   factory AxWorkspace.fromJson(Map<String, dynamic> json) => AxWorkspace(
         id: _string(json, 'id'),
         name: _string(json, 'name'),
@@ -1399,12 +1404,14 @@ class AxWorkspace {
         workerCount: json['workerCount'] as int? ?? 0,
         activeTaskCount: json['activeTaskCount'] as int? ?? 0,
         shared: json['shared'] == true || json['shared'] == 1,
+        parallelSlots: json['parallelSlots'] as int?,
       );
 
   AxWorkspace copyWith({
     int? workerCount,
     int? activeTaskCount,
     String? lastSeen,
+    int? parallelSlots,
   }) =>
       AxWorkspace(
         id: id,
@@ -1426,6 +1433,7 @@ class AxWorkspace {
         workerCount: workerCount ?? this.workerCount,
         activeTaskCount: activeTaskCount ?? this.activeTaskCount,
         shared: shared,
+        parallelSlots: parallelSlots ?? this.parallelSlots,
       );
 }
 

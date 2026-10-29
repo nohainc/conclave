@@ -27,8 +27,9 @@ export async function recordWorkspaceWorkerInventory(
   const fullSnapshot =
     (payload as Record<string, unknown>).fullSnapshot === true;
   const reportedWorkerIds = new Set<string>();
-  // The Workspace-wide parallel slot total. Older Services omit it; Cloud then
-  // keeps using the per-Worker value.
+  // Slots are owned by Cloud and set on the web Workspaces page. A Service
+  // that still reports its old local value only seeds a Workspace that has
+  // none yet, so the owner's existing limit carries over; it never overrides.
   const parallelSlots = (payload as Record<string, unknown>).parallelSlots;
   if (
     typeof parallelSlots === "number" &&
@@ -38,7 +39,7 @@ export async function recordWorkspaceWorkerInventory(
   ) {
     await env.SYNTILA_DB.prepare(
       `UPDATE execution_workspaces SET parallel_slots = ?2, updated_at = ?3
-        WHERE id = ?1 AND (parallel_slots IS NULL OR parallel_slots != ?2)`,
+        WHERE id = ?1 AND parallel_slots IS NULL`,
     )
       .bind(workspaceId, parallelSlots, now)
       .run();

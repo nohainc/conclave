@@ -19,9 +19,9 @@ final class WorkspaceSettings {
     required this.cloudUrl,
     required this.connectOnStart,
     required this.workspaceName,
-    required this.parallelSlots,
     required this.workRoot,
     this.folders = const {},
+    this.legacyParallelSlots,
   });
 
   static const schemaVersion = 1;
@@ -30,7 +30,11 @@ final class WorkspaceSettings {
   final String cloudUrl;
   final bool connectOnStart;
   final String workspaceName;
-  final int parallelSlots;
+
+  /// `execution.parallel_slots` from a file written before slots moved to
+  /// Cloud. Read only so Cloud can adopt it once; never written back. The
+  /// owner sets parallel slots on the web Workspaces page.
+  final int? legacyParallelSlots;
 
   /// The primary Work Root path where worker runs and scratch workspaces live.
   final String workRoot;
@@ -45,7 +49,6 @@ final class WorkspaceSettings {
     String? cloudUrl,
     bool? connectOnStart,
     String? workspaceName,
-    int? parallelSlots,
     String? workRoot,
     Map<String, String>? folders,
   }) {
@@ -55,7 +58,7 @@ final class WorkspaceSettings {
       cloudUrl: cloudUrl ?? this.cloudUrl,
       connectOnStart: connectOnStart ?? this.connectOnStart,
       workspaceName: workspaceName ?? this.workspaceName,
-      parallelSlots: parallelSlots ?? this.parallelSlots,
+      legacyParallelSlots: legacyParallelSlots,
       workRoot: workRoot ??
           (folders != null && folders.containsKey('work')
               ? folders['work']!
@@ -74,9 +77,6 @@ final class WorkspaceSettings {
         'workspace': <String, Object>{
           'name': workspaceName,
           'work_root': workRoot,
-        },
-        'execution': <String, Object>{
-          'parallel_slots': parallelSlots.toString()
         },
         if (folders.isNotEmpty) 'folders': <String, Object>{...folders},
       };
@@ -110,7 +110,9 @@ final class WorkspaceSettings {
     final service = _mapping(root, 'service');
     final cloud = _mapping(root, 'cloud');
     final workspace = _mapping(root, 'workspace');
-    final execution = _mapping(root, 'execution');
+    final execution = root.containsKey('execution')
+        ? _mapping(root, 'execution')
+        : const <String, Object>{};
     _onlyKeys(service, const {'enabled'}, 'service');
     _onlyKeys(cloud, const {'url', 'connect_on_start'}, 'cloud');
     _onlyKeys(workspace, const {'name', 'work_root'}, 'workspace');
@@ -132,14 +134,10 @@ final class WorkspaceSettings {
         'workspace.name must contain between 1 and 120 characters',
       );
     }
-    final slots = int.tryParse(
-      _requiredString(execution, 'parallel_slots', 'execution'),
-    );
-    if (slots == null || slots < minParallelSlots || slots > maxParallelSlots) {
-      throw const FormatException(
-        'execution.parallel_slots must be between $minParallelSlots and $maxParallelSlots',
-      );
-    }
+    // Legacy: a value outside the range is ignored rather than rejected.
+    final legacySlotsText = execution['parallel_slots'];
+    final legacySlots =
+        legacySlotsText is String ? int.tryParse(legacySlotsText) : null;
 
     String? workRoot = workspace['work_root'] as String?;
     if (workRoot != null) {
@@ -174,14 +172,15 @@ final class WorkspaceSettings {
       cloudUrl: cloudUrl,
       connectOnStart: _boolean(cloud, 'connect_on_start'),
       workspaceName: name,
-      parallelSlots: slots,
       workRoot: workRoot,
       folders: Map.unmodifiable(folders),
+      legacyParallelSlots: legacySlots != null &&
+              legacySlots >= minParallelSlots &&
+              legacySlots <= maxParallelSlots
+          ? legacySlots
+          : null,
     );
   }
-
-  /// Parallel slots written to a newly created workspace.nano.
-  static const initialParallelSlots = 3;
 
   /// [workspaceName] is the display name for a new file (the machine name when
   /// `config init` creates it); it falls back to a generic name.
@@ -201,7 +200,6 @@ final class WorkspaceSettings {
           : syntilaProductionCloudUrl,
       connectOnStart: false,
       workspaceName: workspaceName ?? 'Workspace',
-      parallelSlots: initialParallelSlots,
       workRoot: Directory(work).absolute.path,
       folders: const {},
     );

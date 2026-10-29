@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'cloud_connection.dart';
 import 'local_worker_registry.dart';
-import 'local_worker_permissions.dart';
 import 'workspace_configuration.dart';
 import 'secure_credentials.dart';
 import 'platform_runtime.dart';
@@ -45,7 +44,7 @@ class WorkspaceConfig {
     this.workRootPath,
     this.serviceEnabled = true,
     this.connectOnStart = false,
-    this.parallelSlots = defaultLocalWorkerConcurrency,
+    this.legacyParallelSlots,
     this.folders = const {},
     this.settingsFile,
   });
@@ -59,7 +58,8 @@ class WorkspaceConfig {
   final String? workRootPath;
   final bool serviceEnabled;
   final bool connectOnStart;
-  final int parallelSlots;
+  /// See [WorkspaceSettings.legacyParallelSlots]; Cloud owns slots.
+  final int? legacyParallelSlots;
   final Map<String, String> folders;
   final File? settingsFile;
 
@@ -86,7 +86,7 @@ class WorkspaceConfig {
       workRootPath: resolved.workRootPath,
       serviceEnabled: resolved.settings.serviceEnabled,
       connectOnStart: resolved.settings.connectOnStart,
-      parallelSlots: resolved.settings.parallelSlots,
+      legacyParallelSlots: resolved.settings.legacyParallelSlots,
       folders: resolved.settings.folders,
       settingsFile: resolved.settingsFile,
     );

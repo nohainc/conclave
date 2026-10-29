@@ -175,6 +175,43 @@ void main() {
         find.byKey(const ValueKey('workspace-shared-badge')), findsOneWidget);
   });
 
+  testWidgets('owner sets parallel requests on the Workspaces page',
+      (tester) async {
+    final changes = <(String, int)>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkspacesPage(
+      workspaces: [
+        AxWorkspace.fromJson(
+            {'id': 'own', 'name': 'Mine', 'role': 'owner', 'parallelSlots': 3})
+      ],
+      onSetParallelSlots: (workspace, slots) async =>
+          changes.add((workspace.id, slots)),
+    )))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('parallel-slots-select')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('5').last);
+    await tester.pumpAndSettle();
+    expect(changes, [('own', 5)]);
+
+    // A lent Workspace has no slot setting for the borrower.
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: WorkspacesPage(
+      key: UniqueKey(),
+      workspaces: [
+        AxWorkspace.fromJson(
+            {'id': 'lent', 'name': 'Lent', 'role': 'member', 'shared': true})
+      ],
+      onSetParallelSlots: (workspace, slots) async {},
+    )))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('parallel-slots-select')), findsNothing);
+  });
+
   testWidgets('owner invites, cancels, sets the quota and revokes',
       (tester) async {
     final source = SharingSource();

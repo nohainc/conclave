@@ -431,12 +431,12 @@ void main() {
       file.writeAsStringSync(
         file
             .readAsStringSync()
-            .replaceFirst(RegExp(r'parallel_slots \d+'), 'parallel_slots 99'),
+            .replaceFirst(RegExp(r'connect_on_start \w+'), 'connect_on_start maybe'),
       );
       result = await runDown(['status']);
       expect(result.$1, 0);
       expect(result.$2, contains('Config:        Invalid'));
-      expect(result.$2, contains('parallel_slots'));
+      expect(result.$2, contains('connect_on_start'));
       final json = await runDown(['--json', 'status']);
       expect(json.$2, contains('"state": "invalid"'));
     });
@@ -555,7 +555,9 @@ void main() {
       expect((await config(['init'])).$1, 0);
       final shown = await config(['show']);
       expect(shown.$1, 0);
-      expect(shown.$2, contains('parallel_slots'));
+      expect(shown.$2, contains('connect_on_start'));
+      // Parallel slots are set on the web Workspaces page.
+      expect(shown.$2, isNot(contains('parallel_slots')));
       final validated = await config(['validate']);
       expect(validated.$1, 0);
       expect(validated.$2, contains('restartRequiredToApply'));
@@ -569,7 +571,7 @@ void main() {
       file.writeAsStringSync(
         file
             .readAsStringSync()
-            .replaceFirst(RegExp(r'parallel_slots \d+'), 'parallel_slots 99'),
+            .replaceFirst(RegExp(r'connect_on_start \w+'), 'connect_on_start maybe'),
       );
       expect((await config(['validate'])).$1, 65);
     });

@@ -11,6 +11,11 @@ import type { SecurityEnv } from "./handlers.js";
 import { ACTIVE_ASSIGNMENT_STATUS_SQL } from "../assignment-transitions.js";
 import { workspaceNameTaken } from "./workspaces-shared.js";
 import { releasedWorkspaceCleanup } from "../workspace-gateway/release-cleanup.js";
+import { DEFAULT_WORKSPACE_PARALLEL_SLOTS } from "../assignment-delivery.js";
+
+/** Bounds of the Workspace-wide parallel slot total chosen by the owner. */
+export const MIN_PARALLEL_SLOTS = 1;
+export const MAX_PARALLEL_SLOTS = 10;
 
 export async function handleListWorkspaces(
   request: Request,
@@ -22,6 +27,9 @@ export async function handleListWorkspaces(
     `SELECT execution_workspaces.id, name, status,
             CASE WHEN owner_user_id = ?1 THEN 'owner' ELSE 'member' END AS role,
             CASE WHEN owner_user_id = ?1 THEN 0 ELSE 1 END AS shared,
+            CASE WHEN owner_user_id = ?1
+              THEN COALESCE(parallel_slots, ${DEFAULT_WORKSPACE_PARALLEL_SLOTS})
+            END AS parallelSlots,
             EXISTS (SELECT 1 FROM workspace_runtime_identities identity
                     WHERE identity.workspace_id = execution_workspaces.id
                       AND identity.revoked_at IS NULL) AS hasRuntimeIdentity,
@@ -143,20 +151,48 @@ export async function handleUpdateWorkspace(
     string,
     unknown
   >;
+  const hasName = body.name !== undefined;
+  const hasSlots = body.parallelSlots !== undefined;
+  if (!hasName && !hasSlots)
+    throw new HttpError(400, "Provide a name or parallelSlots");
   const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (name.length < 1 || name.length > 120) {
+  if (hasName && (name.length < 1 || name.length > 120)) {
     throw new HttpError(400, "Workspace name must be 1 to 120 characters");
   }
+  const slots = body.parallelSlots;
   if (
-    await workspaceNameTaken(env.SYNTILA_DB, context.userId, name, workspaceId)
+    hasSlots &&
+    (typeof slots !== "number" ||
+      !Number.isInteger(slots) ||
+      slots < MIN_PARALLEL_SLOTS ||
+      slots > MAX_PARALLEL_SLOTS)
+  ) {
+    throw new HttpError(
+      400,
+      `parallelSlots must be between ${MIN_PARALLEL_SLOTS} and ${MAX_PARALLEL_SLOTS}`,
+    );
+  }
+  if (
+    hasName &&
+    (await workspaceNameTaken(env.SYNTILA_DB, context.userId, name, workspaceId))
   ) {
     throw new HttpError(409, `You already have a Workspace named "${name}"`);
   }
   const now = new Date().toISOString();
   const result = await env.SYNTILA_DB.prepare(
-    "UPDATE execution_workspaces SET name = ?1, updated_at = ?2 WHERE id = ?3 AND owner_user_id = ?4 AND status <> 'revoked'",
+    `UPDATE execution_workspaces
+        SET name = CASE WHEN ?1 IS NULL THEN name ELSE ?1 END,
+            parallel_slots = CASE WHEN ?5 IS NULL THEN parallel_slots ELSE ?5 END,
+            updated_at = ?2
+      WHERE id = ?3 AND owner_user_id = ?4 AND status <> 'revoked'`,
   )
-    .bind(name, now, workspaceId, context.userId)
+    .bind(
+      hasName ? name : null,
+      now,
+      workspaceId,
+      context.userId,
+      hasSlots ? slots : null,
+    )
     .run();
   if (!result.success || result.meta.changes === 0) {
     throw new HttpError(404, "Workspace not found");
@@ -168,11 +204,30 @@ export async function handleUpdateWorkspace(
     "workspace",
     workspaceId,
     {
-      name,
+      ...(hasName ? { name } : {}),
+      ...(hasSlots ? { parallelSlots: slots } : {}),
     },
     workspaceId,
   );
-  return json({ workspace: { id: workspaceId, name, updatedAt: now } });
+  // More slots may let queued work start now; the Gateway enforces the total.
+  if (hasSlots && env.SYNTILA_WORKSPACE_GATEWAY) {
+    try {
+      await env.SYNTILA_WORKSPACE_GATEWAY.getByName(workspaceId).fetch(
+        "https://workspace-gateway/flush-queued",
+        { method: "POST" },
+      );
+    } catch {
+      // Queued work still starts when the next assignment finishes.
+    }
+  }
+  return json({
+    workspace: {
+      id: workspaceId,
+      ...(hasName ? { name } : {}),
+      ...(hasSlots ? { parallelSlots: slots } : {}),
+      updatedAt: now,
+    },
+  });
 }
 
 export async function handleRevokeWorkspace(

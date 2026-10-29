@@ -9,6 +9,7 @@ import '../../ax/ax_models.dart';
 import '../../ax/worker_presentation.dart';
 import '../../ax/worker_usage.dart';
 import 'worker_usage_dialog.dart';
+import '../common/quiet_notices.dart';
 import '../../ax/sync/ax_session_catalogs.dart';
 import '../../ax/sync/ax_workflow_configurations.dart';
 import '../../ax/ax_workspace_member_access.dart';
@@ -37,6 +38,7 @@ class WorkspacesPage extends StatefulWidget {
     this.people = const [],
     this.personAccessSource,
     this.sharingRefresh,
+    this.onSetParallelSlots,
     this.onRevoke,
     this.onLeaveShared,
     // Retained as optional compatibility inputs while callers are audited.
@@ -76,6 +78,11 @@ class WorkspacesPage extends StatefulWidget {
 
   /// Fires when an invitation changes elsewhere; the sharing section reloads.
   final Listenable? sharingRefresh;
+
+  /// Owner-only: how many requests run at once. Cloud enforces it; the
+  /// Workspace app has no slot setting of its own.
+  final Future<void> Function(AxWorkspace workspace, int slots)?
+      onSetParallelSlots;
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -230,6 +237,15 @@ class _WorkspacesPageState extends State<WorkspacesPage>
             key: ValueKey('default-workspace-${workspace.id}'),
             configurations: configurations,
             workspace: workspace,
+          ),
+        if (widget.onSetParallelSlots != null &&
+            !workspace.shared &&
+            workspace.parallelSlots != null)
+          _ParallelSlotsControl(
+            key: ValueKey('parallel-slots-${workspace.id}'),
+            slots: workspace.parallelSlots!,
+            onChanged: (slots) =>
+                widget.onSetParallelSlots!(workspace, slots),
           ),
         const SizedBox(height: 16),
         _WorkspaceCardBody(
@@ -746,5 +762,64 @@ class _DefaultWorkspaceControlState extends State<_DefaultWorkspaceControl> {
                           color: Theme.of(context).colorScheme.error)),
               ]);
         },
+      );
+}
+
+/// Bounds match Cloud's accepted range for a Workspace's slot total.
+const _minParallelSlots = 1;
+const _maxParallelSlots = 10;
+
+class _ParallelSlotsControl extends StatefulWidget {
+  const _ParallelSlotsControl(
+      {super.key, required this.slots, required this.onChanged});
+
+  final int slots;
+  final Future<void> Function(int slots) onChanged;
+
+  @override
+  State<_ParallelSlotsControl> createState() => _ParallelSlotsControlState();
+}
+
+class _ParallelSlotsControlState extends State<_ParallelSlotsControl> {
+  bool _saving = false;
+
+  Future<void> _change(int? slots) async {
+    if (slots == null || slots == widget.slots) return;
+    setState(() => _saving = true);
+    try {
+      await widget.onChanged(slots);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showNotice(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(children: [
+          Text('Parallel requests',
+              style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(width: 12),
+          DropdownButton<int>(
+            key: const ValueKey('parallel-slots-select'),
+            value: widget.slots,
+            onChanged: _saving ? null : _change,
+            items: [
+              for (var n = _minParallelSlots; n <= _maxParallelSlots; n++)
+                DropdownMenuItem(value: n, child: Text('$n')),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text('Requests beyond this wait in line.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          ),
+        ]),
       );
 }

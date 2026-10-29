@@ -1077,6 +1077,13 @@ abstract interface class AxDataSource {
     required String workspaceId,
     required String name,
   });
+
+  /// Sets how many requests run at once on an owned Workspace.
+  Future<void> setWorkspaceParallelSlots({
+    required String workspaceId,
+    required int slots,
+  }) async =>
+      throw UnimplementedError('Parallel slots are not available');
   Future<List<AxWorkspaceMember>> loadWorkspaceMembers(
       {required String workspaceId});
   Future<List<AxWorkspaceInvitation>> loadWorkspaceInvitations(

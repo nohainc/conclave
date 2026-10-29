@@ -530,6 +530,12 @@ class AxFixtureDataSource implements AxDataSource, AxPeopleDataSource {
       );
 
   @override
+  Future<void> setWorkspaceParallelSlots({
+    required String workspaceId,
+    required int slots,
+  }) async {}
+
+  @override
   Future<List<AxWorkspaceMember>> loadWorkspaceMembers(
           {required String workspaceId}) async =>
       const [

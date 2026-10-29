@@ -700,6 +700,16 @@ class WorkspaceStore extends ValueNotifier<List<AxWorkspace>> {
   Future<void> revoke(String workspaceId) =>
       source.revokeWorkspace(workspaceId: workspaceId);
 
+  Future<void> setParallelSlots(String workspaceId, int slots) async {
+    await source.setWorkspaceParallelSlots(
+        workspaceId: workspaceId, slots: slots);
+    replace(items
+        .map((workspace) => workspace.id == workspaceId
+            ? workspace.copyWith(parallelSlots: slots)
+            : workspace)
+        .toList());
+  }
+
   Future<void> update(String workspaceId, String name) async {
     final updated =
         await source.updateWorkspace(workspaceId: workspaceId, name: name);

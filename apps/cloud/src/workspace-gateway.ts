@@ -38,6 +38,7 @@ import { publishAssignmentPhase } from "./assignment-phase-events.js";
 import { createEventPublisher } from "./event-publisher.js";
 import {
   ASSIGNMENT_REVOCATION_CONFIRMATION_MS,
+  DEFAULT_WORKSPACE_PARALLEL_SLOTS,
   assignmentCommandDisposition,
 } from "./assignment-delivery.js";
 import { grantStartPermit } from "./assignment-start-permit.js";
@@ -101,6 +102,21 @@ export {
 } from "./workspace-gateway/contracts.js";
 
 /** Marks an `assignment.start` payload as requiring a start permit. */
+/**
+ * Stamps the Workspace's current slot total into the assignment snapshot at
+ * delivery time. Cloud has already admitted the assignment against that
+ * total, so the Service uses it as its local limit and never queues by count.
+ */
+function withSlotLimit(payload: unknown, slots: number): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const value = payload as { snapshot?: unknown };
+  if (!value.snapshot || typeof value.snapshot !== "object") return payload;
+  return {
+    ...value,
+    snapshot: { ...value.snapshot, maxConcurrentAssignments: slots },
+  };
+}
+
 function withStartPermitRequirement(payload: unknown): unknown {
   if (!payload || typeof payload !== "object") return payload;
   const value = payload as { snapshot?: unknown };
@@ -185,6 +201,14 @@ export class WorkspaceGateway implements DurableObject {
   /** Assignments being delivered right now; stops a flush double-sending. */
   private readonly deliveringAssignments = new Set<string>();
   private flushingQueue = false;
+  /** A slot freed while a flush was running; the flush runs one more pass. */
+  private flushRequested = false;
+  /**
+   * Serializes "is a slot free?" with the `created -> dispatched` claim, so
+   * two deliveries racing inside this Workspace's Gateway cannot both take
+   * the last slot. Cloud is the only place that counts slots.
+   */
+  private slotChain: Promise<unknown> = Promise.resolve();
   private static readonly READINESS_STORAGE_KEY = "service-readiness";
 
   constructor(
@@ -1640,6 +1664,7 @@ export class WorkspaceGateway implements DurableObject {
         );
         if (completed) this.traceTerminalPersisted(message, "completed");
         await this.sendTerminalAcknowledgement(message, "completed");
+        await this.slotFreed();
         return;
       }
       case "assignment.error": {
@@ -1676,6 +1701,7 @@ export class WorkspaceGateway implements DurableObject {
         );
         if (failed) this.traceTerminalPersisted(message, "failed");
         await this.sendTerminalAcknowledgement(message, "failed");
+        await this.slotFreed();
         return;
       }
       case "assignment.cancelled": {
@@ -1701,6 +1727,7 @@ export class WorkspaceGateway implements DurableObject {
           context: { status: "cancelled" },
         });
         await this.sendTerminalAcknowledgement(message, "cancelled");
+        await this.slotFreed();
         return;
       }
       case "assignment.cancel.ack": {
@@ -1715,6 +1742,7 @@ export class WorkspaceGateway implements DurableObject {
           });
           if (recorded) {
             await signalAssignmentTerminal(this.env, message.assignmentId!);
+            await this.slotFreed();
           }
         }
         const pending = this.pendingCancelAcks.get(message.assignmentId!);
@@ -2501,9 +2529,14 @@ export class WorkspaceGateway implements DurableObject {
   private async flushQueuedAssignments(): Promise<number> {
     const workspaceId = this.executionWorkspaceId;
     const runtimeId = this.workspaceRuntimeId;
-    if (!workspaceId || !runtimeId || this.flushingQueue) return 0;
+    if (!workspaceId || !runtimeId) return 0;
+    if (this.flushingQueue) {
+      this.flushRequested = true;
+      return 0;
+    }
     if (!(await this.serviceIsReady())) return 0;
     this.flushingQueue = true;
+    this.flushRequested = false;
     let flushed = 0;
     try {
       for (let pass = 0; pass < 8; pass += 1) {
@@ -2557,20 +2590,67 @@ export class WorkspaceGateway implements DurableObject {
           );
           const result = (await response.json().catch(() => ({}))) as {
             delivered?: boolean;
+            deliveryState?: string;
           };
           if (result.delivered === true) {
             flushed += 1;
             progressed += 1;
           }
+          // Every slot is taken; the next finished assignment flushes again.
+          if (result.deliveryState === "waiting_for_slot") break;
         }
         // Rows that could not be claimed or delivered stay queued for the
         // next trigger; stop rather than spin on them.
-        if (progressed === 0) break;
+        if (progressed === 0 && !this.flushRequested) break;
+        this.flushRequested = false;
       }
     } finally {
       this.flushingQueue = false;
     }
     return flushed;
+  }
+
+  private withSlotLock<T>(run: () => Promise<T>): Promise<T> {
+    const next = this.slotChain.then(run, run);
+    this.slotChain = next.catch(() => undefined);
+    return next;
+  }
+
+  /** The owner's slot total from Workspace settings (the web Workspaces page). */
+  private async workspaceSlotLimit(): Promise<number> {
+    const row = await this.env.SYNTILA_DB.prepare(
+      "SELECT parallel_slots AS slots FROM execution_workspaces WHERE id = ?1",
+    )
+      .bind(this.executionWorkspaceId)
+      .first<{ slots: number | null }>();
+    return row?.slots ?? DEFAULT_WORKSPACE_PARALLEL_SLOTS;
+  }
+
+  /**
+   * Every non-terminal assignment that left the queue holds a slot, including
+   * ones being revoked: their process may still be running.
+   */
+  private async slotIsFree(): Promise<boolean> {
+    const row = await this.env.SYNTILA_DB.prepare(
+      `SELECT COUNT(*) AS active FROM worker_assignments
+        WHERE execution_workspace_id = ?1
+          AND status IN (${ACTIVE_ASSIGNMENT_STATUS_SQL}) AND status <> 'created'`,
+    )
+      .bind(this.executionWorkspaceId)
+      .first<{ active: number }>();
+    return Number(row?.active ?? 0) < (await this.workspaceSlotLimit());
+  }
+
+  /** A slot was freed: hand the next queued assignment to the Service. */
+  private async slotFreed(): Promise<void> {
+    await this.flushQueuedAssignments().catch((error: unknown) =>
+      logStructured(
+        "error",
+        "workspace_queue_flush_failed",
+        { workspaceId: this.executionWorkspaceId ?? undefined },
+        { error: error instanceof Error ? error.message : String(error) },
+      ),
+    );
   }
 
   private async deliverAssignment(
@@ -2647,7 +2727,9 @@ export class WorkspaceGateway implements DurableObject {
         timestamp: new Date().toISOString(),
         type: "assignment.start",
         ...body,
-        payload: withStartPermitRequirement(body.payload),
+        payload: withStartPermitRequirement(
+          withSlotLimit(body.payload, await this.workspaceSlotLimit()),
+        ),
       });
     } catch {
       return Response.json(
@@ -2702,16 +2784,35 @@ export class WorkspaceGateway implements DurableObject {
     // point Cloud must treat the Service as possibly holding the command, so
     // every later stop goes through revocation instead of a bare terminal
     // write. If revocation won the race, the command is never written.
-    const persisted = await transitionAssignment(this.env.SYNTILA_DB, {
-      fence: {
-        assignmentId: body.assignmentId,
-        attemptId: body.attemptId,
-        executionWorkspaceId: body.executionWorkspaceId,
-        runtimeIdentityId: body.workspaceRuntimeId,
-      },
-      to: "dispatched",
-      ...(options.claimCreated ? { onlyFrom: ["created"] as const } : {}),
+    // A `created` assignment takes a slot only if one is free; otherwise it
+    // stays in the durable Cloud queue until an assignment finishes.
+    const claim = await this.withSlotLock(async () => {
+      if (currentStatus === "created" && !(await this.slotIsFree()))
+        return null;
+      return transitionAssignment(this.env.SYNTILA_DB, {
+        fence: {
+          assignmentId: body.assignmentId,
+          attemptId: body.attemptId,
+          executionWorkspaceId: body.executionWorkspaceId,
+          runtimeIdentityId: body.workspaceRuntimeId,
+        },
+        to: "dispatched",
+        ...(options.claimCreated ? { onlyFrom: ["created"] as const } : {}),
+      });
     });
+    if (!claim) {
+      return Response.json(
+        {
+          delivered: false,
+          queued: true,
+          deliveryState: "waiting_for_slot",
+          acceptance: "none",
+          status: currentStatus,
+        },
+        { status: 202 },
+      );
+    }
+    const persisted = claim;
     if (options.claimCreated && !persisted.applied) {
       // Another delivery claimed it first; that one sends the command.
       return Response.json({

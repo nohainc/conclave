@@ -2,6 +2,8 @@ export const ASSIGNMENT_ACCEPTANCE_DEADLINE_MS = 30_000;
 export const ASSIGNMENT_STARTUP_DEADLINE_MS = 30_000;
 /** Default time an accepted assignment may remain queued before startup. */
 export const DEFAULT_QUEUE_WAIT_TIMEOUT_MS = 2 * 60_000;
+/** Parallel slots a Workspace gets before its owner chooses a number. */
+export const DEFAULT_WORKSPACE_PARALLEL_SLOTS = 3;
 
 /**
  * How long Cloud waits for a Service to confirm a revocation before it shows
