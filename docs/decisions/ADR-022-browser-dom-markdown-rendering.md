@@ -1,6 +1,6 @@
 # ADR-022: Browser-DOM Markdown Rendering in the AX Web App
 
-**Status:** Proposed (prototype behind a compile-time flag)
+**Status:** Accepted (default on web; opt out with `--dart-define=SYNTILA_HTML_MARKDOWN=false`)
 **Date:** 2026-10-29
 **Normative for:** `apps/app/lib/src/features/common/html_markdown/`, the
 HTML branch of `SyntilaMarkdownBody`.
@@ -15,8 +15,8 @@ browser DOM is already available; no embedded browser or iframe is needed.
 ## 2. Decision
 
 Render conversation Markdown as sanitized HTML in an `HtmlElementView`
-(`HtmlElementView.fromTagName`), opt-in via
-`--dart-define=SYNTILA_HTML_MARKDOWN=true`. Flutter keeps all application
+(`HtmlElementView.fromTagName`). This is the default on web; builds with
+`--dart-define=SYNTILA_HTML_MARKDOWN=false` keep the widget renderer. Flutter keeps all application
 state; the DOM is a pure view of message text.
 
 - Markdown is parsed in Dart (`markdown` package, GFM) and serialized by
@@ -35,8 +35,7 @@ state; the DOM is a pure view of message text.
 
 ## 3. Consequences and open work
 
-- Prototype creates one platform view per message. Before enabling by default,
-  replace this with a single DOM renderer for the conversation area (append /
+- One platform view is created per message. As a follow-up, replace this with a single DOM renderer for the conversation area (append /
   update-by-id API, preserved scroll and selection during streaming).
 - Streaming updates are block-incremental: `renderMarkdownBlocks` yields one
   HTML string per top-level block and `patchMarkdownBlocks` replaces only the

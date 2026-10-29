@@ -3,9 +3,10 @@ import 'package:flutter/widgets.dart';
 import 'html_markdown_view_stub.dart'
     if (dart.library.js_interop) 'html_markdown_view_web.dart' as platform;
 
-/// Prototype opt-in: `--dart-define=SYNTILA_HTML_MARKDOWN=true` renders
-/// conversation Markdown in the browser DOM instead of Flutter widgets.
-const bool htmlMarkdownEnabled = bool.fromEnvironment('SYNTILA_HTML_MARKDOWN');
+/// Conversation Markdown renders in the browser DOM by default on web.
+/// `--dart-define=SYNTILA_HTML_MARKDOWN=false` restores the Flutter renderer.
+const bool htmlMarkdownEnabled =
+    bool.fromEnvironment('SYNTILA_HTML_MARKDOWN', defaultValue: true);
 
 /// Whether this platform can host [HtmlMarkdownView].
 bool get htmlMarkdownSupported => platform.htmlMarkdownSupported;

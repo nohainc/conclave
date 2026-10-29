@@ -43,7 +43,7 @@ Future<bool> _launchMarkdownLink(Uri uri) => launchUrl(
       webOnlyWindowName: '_blank',
     );
 
-/// AX's authored-content contract: raw GFM source. Only the opt-in browser
+/// AX's authored-content contract: raw GFM source. Only the web browser
 /// renderer converts it to HTML, through the allowlist in `markdown_html.dart`.
 /// Diagnostics should continue to use plain text widgets.
 class SyntilaMarkdownBody extends StatelessWidget {
@@ -93,7 +93,7 @@ class SyntilaMarkdownBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Prototype: conversation messages only. Notes (blank-line spacers) and
+    // Web default: conversation messages only. Notes (blank-line spacers) and
     // callers that consume Flutter selection keep the widget renderer.
     if (htmlMarkdownEnabled &&
         htmlMarkdownSupported &&
