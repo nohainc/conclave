@@ -75,6 +75,21 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
     ];
   }
 
+  Future<bool> loadShareReadReceipts() async {
+    final body = await _getJson(Uri.parse('$baseUrl/me/privacy'));
+    return body['shareReadReceipts'] != false;
+  }
+
+  Future<void> setShareReadReceipts(bool share) async {
+    final response = await client.put(Uri.parse('$baseUrl/me/privacy'),
+        headers: _headers(contentType: 'application/json'),
+        body: jsonEncode({'shareReadReceipts': share}));
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AxApiException('Saving read receipts failed',
+          statusCode: response.statusCode);
+    }
+  }
+
   Future<void> setPinned(
       {required String kind, required String id, required bool pinned}) async {
     final uri = Uri.parse(

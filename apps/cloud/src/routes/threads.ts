@@ -1006,12 +1006,15 @@ export async function handleListThreadReadStates(
     "view",
     accessContext,
   );
+  // Reciprocal privacy: only people who share receipts are listed, and only
+  // to a viewer who shares theirs.
   const rows = await env.SYNTILA_DB.prepare(
     `SELECT r.user_id AS userId, u.display_name AS displayName, r.read_at AS readAt
        FROM thread_read_states r
        JOIN space_memberships m ON m.space_id = ?2 AND m.user_id = r.user_id
-       JOIN users u ON u.id = r.user_id
+       JOIN users u ON u.id = r.user_id AND u.share_read_receipts = 1
       WHERE r.thread_id = ?1 AND r.user_id != ?3
+        AND EXISTS (SELECT 1 FROM users me WHERE me.id = ?3 AND me.share_read_receipts = 1)
       ORDER BY r.read_at DESC`,
   )
     .bind(threadId, spaceId, context.userId)

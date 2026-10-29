@@ -185,6 +185,12 @@ class AxThreadReadState {
   }
 }
 
+/// Optional capability: the viewer's reciprocal read-receipt setting.
+abstract interface class AxReadReceiptPrivacyDataSource {
+  Future<bool> loadShareReadReceipts();
+  Future<void> setShareReadReceipts(bool share);
+}
+
 /// Optional capability: read receipts for a Thread's other members.
 abstract interface class AxThreadReadReceiptsDataSource {
   Future<List<AxThreadReadState>> loadThreadReadStates(String threadId);
@@ -233,6 +239,7 @@ class AxApiClient extends _AxApiClientCore
         AxPeopleDataSource,
         AxThreadReadDataSource,
         AxThreadReadReceiptsDataSource,
+        AxReadReceiptPrivacyDataSource,
         AxNotificationDataSource,
         AxPinDataSource,
         AxNotesDataSource,

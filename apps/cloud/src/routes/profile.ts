@@ -179,3 +179,40 @@ export async function handleGetAvatar(
   if (object.httpEtag) headers.set("etag", object.httpEtag);
   return new Response(object.body, { headers });
 }
+
+/**
+ * GET or PUT {shareReadReceipts} for the signed-in person. Read receipts are
+ * reciprocal: turning them off hides your reads and theirs.
+ */
+export async function handleReadReceiptPrivacy(
+  request: Request,
+  env: SecurityEnv,
+  ctx?: ExecutionContext,
+): Promise<Response> {
+  const context = await securityContext(request, env, ctx);
+  if (request.method === "PUT") {
+    const body = (await request.json().catch(() => null)) as Record<
+      string,
+      unknown
+    > | null;
+    if (
+      !body ||
+      typeof body.shareReadReceipts !== "boolean" ||
+      Object.keys(body).some((key) => key !== "shareReadReceipts")
+    )
+      throw new HttpError(400, "shareReadReceipts must be true or false");
+    await env.SYNTILA_DB.prepare(
+      "UPDATE users SET share_read_receipts = ?1, updated_at = ?2 WHERE id = ?3",
+    )
+      .bind(body.shareReadReceipts ? 1 : 0, new Date().toISOString(), context.userId)
+      .run();
+    return json({ shareReadReceipts: body.shareReadReceipts });
+  }
+  if (request.method !== "GET") throw new HttpError(405, "Unsupported method");
+  const row = await env.SYNTILA_DB.prepare(
+    "SELECT share_read_receipts AS share FROM users WHERE id = ?1",
+  )
+    .bind(context.userId)
+    .first<{ share: number }>();
+  return json({ shareReadReceipts: (row?.share ?? 1) === 1 });
+}

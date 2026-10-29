@@ -696,6 +696,12 @@ extension _AxAppViews on _AxAppStateMixin {
                   )),
         ],
         const SizedBox(height: 24),
+        if (widget.dataSource is AxReadReceiptPrivacyDataSource)
+          _profileSection(
+            title: 'Privacy',
+            child: ReadReceiptPrivacyToggle(
+                source: widget.dataSource as AxReadReceiptPrivacyDataSource),
+          ),
         _profileSection(
           title: 'Active sessions',
           trailing: Builder(builder: (context) {
