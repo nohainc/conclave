@@ -3095,7 +3095,7 @@ void main() {
     }
   });
 
-  testWidgets('AI History lists requests compactly and expands on tap',
+  testWidgets('AI History shows requests and responses like the Conversation',
       (tester) async {
     final dataSource = _WorkHistoryDataSource([
       _workRequest('done', 'Line one\nLine two'),
@@ -3131,39 +3131,13 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await _openAiHistory(tester, expand: false);
-    final done = find.byKey(const ValueKey('ai-history-entry-done'));
-    final busy = find.byKey(const ValueKey('ai-history-entry-busy'));
-    // A finished request is one row; a processing one stays open.
-    expect(
-        find.descendant(of: done, matching: find.byIcon(Icons.chevron_right)),
-        findsOneWidget);
-    expect(find.descendant(of: done, matching: find.text('Line one Line two')),
-        findsOneWidget);
-    expect(find.descendant(of: busy, matching: find.byIcon(Icons.expand_more)),
-        findsOneWidget);
-    expect(find.descendant(of: busy, matching: find.text('Still working')),
-        findsOneWidget);
-    expect(_inAiHistory(find.text('Request completed.')), findsNothing);
-
-    final top = tester.getTopLeft(done).dy;
-    await tester.tap(done);
-    await tester.pumpAndSettle();
-    expect(find.descendant(of: done, matching: find.byIcon(Icons.expand_more)),
-        findsOneWidget);
-    // The clicked row stays put; its full request text and response open downward
-    // without repeating the request as a separate message bubble.
-    expect(tester.getTopLeft(done).dy, top);
-    expect(find.descendant(of: done, matching: find.text('Line one\nLine two')),
-        findsOneWidget);
+    await _openAiHistory(tester);
+    // Every request shows its full text and Worker state directly, with the
+    // same request card the Conversation uses; nothing is collapsed.
     expect(_inAiHistory(find.text('Line one\nLine two')), findsOneWidget);
     expect(_inAiHistory(find.text('Request completed.')), findsOneWidget);
-
-    await tester.tap(done);
-    await tester.pumpAndSettle();
-    expect(_inAiHistory(find.text('Request completed.')), findsNothing);
-    expect(find.descendant(of: done, matching: find.text('Line one Line two')),
-        findsOneWidget);
+    expect(_inAiHistory(find.text('Still working')), findsOneWidget);
+    expect(find.byIcon(Icons.chevron_right), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -5098,20 +5072,8 @@ Finder _inConversation(Finder finder) => find.descendant(
 /// Opens the read-only AI History panel.
 /// Opens AI History and, unless [expand] is false, expands every collapsed
 /// request row so tests can inspect its full card.
-Future<void> _openAiHistory(WidgetTester tester, {bool expand = true}) async {
+Future<void> _openAiHistory(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
-  await tester.pumpAndSettle();
-  if (!expand) return;
-  final collapsed = find.ancestor(
-      of: find.byIcon(Icons.chevron_right),
-      matching: find.byWidgetPredicate((widget) =>
-          widget.key is ValueKey<String> &&
-          (widget.key as ValueKey<String>)
-              .value
-              .startsWith('ai-history-entry-')));
-  for (final entry in collapsed.evaluate().toList()) {
-    await tester.tap(find.byKey(entry.widget.key!), warnIfMissed: false);
-  }
   await tester.pumpAndSettle();
 }
 
