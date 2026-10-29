@@ -645,6 +645,42 @@ extension _AxAppController on _AxAppStateMixin {
     return parts.isEmpty ? null : parts.join(' › ');
   }
 
+  Set<String> _currentInvitationIds() => {
+        for (final invite in store.invitations.value) 'space:${invite.id}',
+        for (final invite in store.workspaceInvitations.value)
+          'workspace:${invite.id}',
+      };
+
+  /// Announces an invitation that arrived live in the Notification Center
+  /// (and as a browser alert when the tab is in the background). In-app
+  /// snackbars are intentionally quiet in this app.
+  void _onInvitationsChanged() {
+    final known = _knownInvitationIds;
+    if (known == null || !mounted) return;
+    _knownInvitationIds = _currentInvitationIds();
+    void announce(String id, String type, String summary) =>
+        _recordNotification({
+          'eventId': 'invitation:$id',
+          'type': type,
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          // No spaceId: the invitee cannot open the Space before accepting.
+          'payload': {'summary': summary},
+        });
+    for (final invite in store.invitations.value) {
+      if (known.contains('space:${invite.id}')) continue;
+      announce(
+          'space:${invite.id}',
+          'space.invitation.received',
+          '${invite.invitedByDisplay} invited you to '
+              '${invite.spaceName.isNotEmpty ? invite.spaceName : 'a Space'}');
+    }
+    for (final invite in store.workspaceInvitations.value) {
+      if (known.contains('workspace:${invite.id}')) continue;
+      announce('workspace:${invite.id}', 'workspace.invitation.received',
+          '${invite.ownerName} invited you to use ${invite.workspaceName}');
+    }
+  }
+
   void _recordNotification(Map<String, dynamic> event) {
     final raw = notificationFromRealtimeEvent(event,
         viewerId: store.auth.session?.viewer?.id);
@@ -1480,8 +1516,11 @@ extension _AxAppController on _AxAppStateMixin {
       unawaited(store.people
           .ensure()
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-      unawaited(store.invitations.refresh());
-      unawaited(store.refreshWorkspaceInvitations());
+      unawaited(Future.wait<void>([
+        store.invitations.refresh(),
+        store.refreshWorkspaceInvitations(),
+      ]).then<void>((_) => _knownInvitationIds ??= _currentInvitationIds(),
+          onError: (Object _, StackTrace __) {}));
       optimisticRunStatus = null;
       if (showSpinner) {
         _updateState(() {

@@ -8,6 +8,8 @@ import '../../ax/ax_people.dart';
 import '../../ax/ax_workspace_member_access.dart';
 import 'workspace_member_access_section.dart';
 import '../common/quiet_notices.dart';
+import '../common/action_status_chip.dart';
+import '../../ax/ax_action_status.dart';
 
 /// Monthly run-time limits offered to the owner, in hours (null = no limit).
 const _runTimeHours = <int?>[null, 1, 5, 10, 25, 50, 100];
@@ -182,8 +184,17 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
               ],
             ));
     if (person == null) return;
-    await _act(() => widget.source
-        .createWorkspaceInvitation(widget.workspaceId, person.email));
+    var sent = false;
+    await _act(() async {
+      await widget.source
+          .createWorkspaceInvitation(widget.workspaceId, person.email);
+      sent = true;
+    });
+    // Cloud accepted it; the row then follows the invitee's answer live.
+    if (sent && mounted) {
+      ScaffoldMessenger.of(context).showNotice(
+          SnackBar(content: Text('Invitation sent to ${person.email}.')));
+    }
   }
 
   Future<void> _revokePerson(AxPersonWithAccess person) async {
@@ -238,7 +249,11 @@ class _WorkspaceSharingSectionState extends State<WorkspaceSharingSection> {
               key: ValueKey('sharing-invitation-${invitation.id}'),
               contentPadding: EdgeInsets.zero,
               title: Text(invitation.email),
-              subtitle: const Text('Invitation pending'),
+              subtitle: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionStatusChip(
+                      status: axInvitationStatus(invitation.status),
+                      kind: AxActionKind.invitation)),
               trailing: TextButton(
                   key: ValueKey('sharing-revoke-invitation-${invitation.id}'),
                   onPressed: _busy

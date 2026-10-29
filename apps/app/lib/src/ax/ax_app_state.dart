@@ -59,6 +59,10 @@ mixin _AxAppStateMixin on State<SyntilaAppShell> {
   }
 
   bool _realtimeTransportConnected = false;
+
+  /// Invitation IDs already shown to the viewer. Null until the first load,
+  /// so existing invitations are not announced as new.
+  Set<String>? _knownInvitationIds;
   int _realtimeRecoveryGeneration = 0;
   String? get realtimeNotice => store.realtimeStatus.value.$2;
   set realtimeNotice(String? value) {
@@ -422,6 +426,8 @@ mixin _AxAppStateMixin on State<SyntilaAppShell> {
     _themeMode = _themePreference.load();
     store = AxStore(widget.dataSource);
     store.spaces.addListener(_restoreSidebarExpansion);
+    store.invitations.addListener(_onInvitationsChanged);
+    store.workspaceInvitations.addListener(_onInvitationsChanged);
     _searchQueryController.addListener(_onSearchQueryChanged);
     browserNavigation = widget.browserNavigation ?? createAxBrowserNavigation();
     final initialUri = widget.initialUri ?? browserNavigation.current;
@@ -476,6 +482,8 @@ mixin _AxAppStateMixin on State<SyntilaAppShell> {
     _readTimer?.cancel();
     _desktopAuthStatusTimer?.cancel();
     store.spaces.removeListener(_restoreSidebarExpansion);
+    store.invitations.removeListener(_onInvitationsChanged);
+    store.workspaceInvitations.removeListener(_onInvitationsChanged);
     _searchQueryController.removeListener(_onSearchQueryChanged);
     _searchQueryController.dispose();
     _searchFocusNode.dispose();

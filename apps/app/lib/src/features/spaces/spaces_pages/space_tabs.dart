@@ -438,24 +438,9 @@ extension _SpaceWorkspaceTabs on _SpaceWorkspaceState {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: SyntilaColors.warningSoft(isDark),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: SyntilaColors.warning.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Text(
-                          'PENDING',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: SyntilaColors.warningText(isDark),
-                          ),
-                        ),
+                      ActionStatusChip(
+                        status: axInvitationStatus(invite.status),
+                        kind: AxActionKind.invitation,
                       ),
                       if (canInvite) ...[
                         const SizedBox(width: 4),

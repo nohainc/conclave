@@ -179,13 +179,18 @@ mixin _CatalogApi on _AxApiClientCore {
       _personAccessResponse(await client
           .delete(_personAccessUri(workspaceId, userId), headers: _headers()));
 
-  Future<void> _sharingSend(String method, String path, [Object? body]) async {
+  Future<void> _sharingSend(String method, String path,
+      [Object? body, String? idempotencyKey]) async {
     final uri = Uri.parse('$baseUrl$path');
-    final headers = _headers(contentType: 'application/json');
-    final response = method == 'PUT'
-        ? await client.put(uri, headers: headers, body: jsonEncode(body))
-        : await client.post(uri,
+    final headers = {
+      ..._headers(contentType: 'application/json'),
+      if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+    };
+    Future<http.Response> send() => method == 'PUT'
+        ? client.put(uri, headers: headers, body: jsonEncode(body))
+        : client.post(uri,
             headers: headers, body: body == null ? null : jsonEncode(body));
+    final response = await _retryOnceWithKey(idempotencyKey, send);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw AxApiException(
           'Sharing request failed (${response.statusCode}): ${response.body}',
@@ -219,7 +224,7 @@ mixin _CatalogApi on _AxApiClientCore {
 
   Future<void> createWorkspaceInvitation(String workspaceId, String email) =>
       _sharingSend('POST', '${_workspacePath(workspaceId)}/invitations',
-          {'email': email});
+          {'email': email}, newAxIdempotencyKey());
 
   Future<void> revokeWorkspaceInvitation(
           String workspaceId, String invitationId) =>

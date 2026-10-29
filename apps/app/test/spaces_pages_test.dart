@@ -3961,7 +3961,7 @@ void main() {
 
     expect(find.text('Pending invitations (1)'), findsOneWidget);
     expect(find.text('ulikossnokia@gmail.com'), findsOneWidget);
-    expect(find.text('PENDING'), findsOneWidget);
+    expect(find.text('SENT'), findsOneWidget);
 
     // Resend action
     expect(find.byTooltip('Resend invitation'), findsOneWidget);

@@ -1,5 +1,6 @@
 import { hashToken } from "@syntila/security";
 import { createEventPublisher } from "../event-publisher.js";
+import { MutationIdempotency } from "./mutation-idempotency.js";
 import {
   HttpError,
   json,
@@ -37,6 +38,9 @@ async function publishWorkspaceInvitationChanged(
         stream: { kind: "user", id: userId },
         payload: { entityId: invitationId },
         recipientUserIds: [userId],
+        // Live-only: invitation lists are small and refetched on reconnect,
+        // so this signal needs no replay log entry.
+        durable: false,
       });
     } catch (error) {
       console.warn("workspace_invitation.signal_failed", {
@@ -127,6 +131,16 @@ export async function handleWorkspaceInvitations(
     Object.keys(body).some((key) => key !== "email")
   )
     throw new HttpError(400, "An email address is required");
+  // A retried send with the same Idempotency-Key returns the first result.
+  const receipt = await MutationIdempotency.from(
+    request,
+    env.SYNTILA_DB,
+    context.userId,
+    `workspace-invitation:${workspaceId}`,
+    body,
+  );
+  const replay = await receipt?.replay();
+  if (replay) return replay;
   const email = body.email.trim().toLowerCase();
   if (!email.includes("@") || email.length > 254)
     throw new HttpError(400, "Enter a valid email address");
@@ -156,25 +170,30 @@ export async function handleWorkspaceInvitations(
   const id = `winv-${crypto.randomUUID()}`;
   const token = `workspace_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS).toISOString();
-  await env.SYNTILA_DB.prepare(
+  const created = { id, email, status: "pending", expiresAt };
+  const insert = env.SYNTILA_DB.prepare(
     `INSERT INTO workspace_invitations(id,workspace_id,email,token_hash,invited_by_user_id,status,expires_at,created_at,updated_at)
      VALUES(?1,?2,?3,?4,?5,'pending',?6,?7,?7)`,
-  )
-    .bind(
-      id,
-      workspaceId,
-      email,
-      await hashToken(token),
-      context.userId,
-      expiresAt,
-      now,
-    )
-    .run();
+  ).bind(
+    id,
+    workspaceId,
+    email,
+    await hashToken(token),
+    context.userId,
+    expiresAt,
+    now,
+  );
+  const write = (receipts: D1PreparedStatement[]) =>
+    env.SYNTILA_DB.batch([...receipts, insert]);
+  const concurrentReplay = receipt
+    ? await receipt.commit(created, 201, write)
+    : (await write([]), null);
+  if (concurrentReplay) return concurrentReplay;
   await publishWorkspaceInvitationChanged(env, id, [
     context.userId,
     await userIdByEmail(env, email),
   ]);
-  return json({ id, email, status: "pending", expiresAt }, { status: 201 });
+  return json(created, { status: 201 });
 }
 
 /** The signed-in person's pending Workspace invitations, matched by email. */
@@ -213,7 +232,8 @@ export async function handleAcceptWorkspaceInvitation(
   if (request.method !== "POST") throw new HttpError(405, "Unsupported method");
   const invitation = await env.SYNTILA_DB.prepare(
     `SELECT i.id, i.workspace_id AS workspaceId, i.email, i.status, i.expires_at AS expiresAt,
-            i.invited_by_user_id AS invitedBy, ew.owner_user_id AS ownerId
+            i.invited_by_user_id AS invitedBy, ew.owner_user_id AS ownerId,
+            i.accepted_by_user_id AS acceptedBy
      FROM workspace_invitations i
      JOIN execution_workspaces ew ON ew.id = i.workspace_id AND ew.status != 'revoked'
      WHERE i.id = ?1`,
@@ -227,7 +247,14 @@ export async function handleAcceptWorkspaceInvitation(
       expiresAt: string;
       invitedBy: string;
       ownerId: string;
+      acceptedBy: string | null;
     }>();
+  // A retried accept by the same person repeats the first result.
+  if (
+    invitation?.status === "accepted" &&
+    invitation.acceptedBy === context.userId
+  )
+    return json({ workspaceId: invitation.workspaceId, status: "active" });
   if (!invitation || invitation.status !== "pending")
     throw new HttpError(404, "Workspace invitation not found");
   if (new Date(invitation.expiresAt).getTime() <= Date.now())
@@ -405,8 +432,16 @@ export async function handleDeclineWorkspaceInvitation(
   )
     .bind(now, invitationId, context.user.email.trim().toLowerCase())
     .run();
-  if (!result.meta?.changes)
+  if (!result.meta?.changes) {
+    // A retried decline: the invitation is already closed for this person.
+    const closed = await env.SYNTILA_DB.prepare(
+      "SELECT 1 AS found FROM workspace_invitations WHERE id=?1 AND status='revoked' AND LOWER(email)=?2",
+    )
+      .bind(invitationId, context.user.email.trim().toLowerCase())
+      .first();
+    if (closed) return json({ status: "declined" });
     throw new HttpError(404, "Workspace invitation not found");
+  }
   const owner = await env.SYNTILA_DB.prepare(
     "SELECT invited_by_user_id AS userId FROM workspace_invitations WHERE id = ?1",
   )

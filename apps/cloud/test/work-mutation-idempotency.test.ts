@@ -26,7 +26,12 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
     },
   }),
 }));
-const publish = vi.hoisted(() => vi.fn(async () => {}));
+// Applies the domain writes the route commits together with its signal.
+const publish = vi.hoisted(() =>
+  vi.fn(async (input?: { mutations?: { run(): Promise<unknown> }[] }) => {
+    for (const statement of input?.mutations ?? []) await statement.run();
+  }),
+);
 vi.mock("../src/event-publisher.js", () => ({
   createEventPublisher: () => ({ publish }),
 }));

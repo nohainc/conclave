@@ -2,7 +2,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DELETE_BATCH_SIZE = 1_000;
 const MAX_DELETE_BATCHES_PER_RUN = 10;
 
-export const DURABLE_EVENT_RETENTION_DAYS = 90;
+/**
+ * The log only serves reconnect replay. A client whose cursor is older than
+ * the oldest kept event sees a sequence gap and does a full resync instead.
+ */
+export const DURABLE_EVENT_RETENTION_DAYS = 7;
 
 export async function pruneExpiredRealtimeEvents(
   db: D1Database,

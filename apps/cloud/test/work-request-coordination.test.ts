@@ -17,7 +17,12 @@ vi.mock("../src/routes/handlers.js", async (original) => ({
   resolveWorkflowInstanceId: async (_env: unknown, id: string) => id,
 }));
 vi.mock("../src/event-publisher.js", () => ({
-  createEventPublisher: () => ({ publish: async () => {} }),
+  // Applies the domain writes the route commits together with its signal.
+  createEventPublisher: () => ({
+    publish: async (input?: { mutations?: { run(): Promise<unknown> }[] }) => {
+      for (const statement of input?.mutations ?? []) await statement.run();
+    },
+  }),
 }));
 import { handleCreateWorkRequest } from "../src/routes/work-creation.js";
 

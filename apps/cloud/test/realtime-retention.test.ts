@@ -19,12 +19,12 @@ describe("durable realtime event retention", () => {
 
     const deleted = await pruneExpiredRealtimeEvents(db, now);
 
-    expect(DURABLE_EVENT_RETENTION_DAYS).toBe(90);
+    expect(DURABLE_EVENT_RETENTION_DAYS).toBe(7);
     expect(deleted).toBe(2_017);
     expect(prepare).toHaveBeenCalledWith(
       expect.stringContaining("DELETE FROM realtime_events"),
     );
-    expect(bind).toHaveBeenNthCalledWith(1, "2026-07-04T00:00:00.000Z", 1_000);
+    expect(bind).toHaveBeenNthCalledWith(1, "2026-09-25T00:00:00.000Z", 1_000);
     expect(run).toHaveBeenCalledTimes(3);
   });
 
@@ -63,12 +63,12 @@ describe("durable realtime event retention", () => {
         idempotency_key, occurred_at)
        VALUES (?, 'workspace-1', ?, 'work_request.created', '{}', ?, ?)`,
     );
-    insert.run("event-expired", 10, "idem-expired", "2026-07-03T23:59:59.999Z");
+    insert.run("event-expired", 10, "idem-expired", "2026-09-24T23:59:59.999Z");
     insert.run(
       "event-retained",
       11,
       "idem-retained",
-      "2026-07-04T00:00:00.000Z",
+      "2026-09-25T00:00:00.000Z",
     );
     const db = {
       prepare(sql: string) {

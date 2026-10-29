@@ -15,6 +15,7 @@ import {
   permissionJsonPath,
 } from "./space-permissions.js";
 import { conditionalJson } from "./conditional-read.js";
+import { MutationIdempotency } from "./mutation-idempotency.js";
 import {
   activeWorkSql,
   lastSpaceActivitySql,
@@ -632,6 +633,17 @@ export async function handleCreateSpaceInvitation(
   );
   const policy = await requireSpaceOwner(env, context, spaceId);
   const body = (await request.json()) as Record<string, unknown>;
+  // A retried send with the same Idempotency-Key returns the first result
+  // instead of "already pending".
+  const receipt = await MutationIdempotency.from(
+    request,
+    env.SYNTILA_DB,
+    context.userId,
+    `space-invitation:${spaceId}`,
+    body,
+  );
+  const replay = await receipt?.replay();
+  if (replay) return replay;
   if (
     Object.keys(body).some(
       (key) => !["email", "userId", "role", "permissions"].includes(key),
@@ -720,8 +732,20 @@ export async function handleCreateSpaceInvitation(
   const now = new Date();
   const id = `pinv-${crypto.randomUUID()}`;
   const token = `space_invite_${crypto.randomUUID()}_${crypto.randomUUID()}`;
+  const invitation = {
+    id,
+    spaceId,
+    email,
+    inviteeUserId,
+    role,
+    status: "pending",
+  };
+  const tokenHash = await hashToken(token);
   try {
-    await env.SYNTILA_DB.batch([
+    // The stored replay omits the secret token; it is shown only once.
+    const write = (receipts: D1PreparedStatement[]) =>
+      env.SYNTILA_DB.batch([
+      ...receipts,
       env.SYNTILA_DB.prepare(
         `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at, invitee_user_id)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8, ?9)`,
@@ -730,7 +754,7 @@ export async function handleCreateSpaceInvitation(
         spaceId,
         email,
         role,
-        await hashToken(token),
+        tokenHash,
         context.userId,
         new Date(now.getTime() + 7 * 86400000).toISOString(),
         now.toISOString(),
@@ -745,6 +769,10 @@ export async function handleCreateSpaceInvitation(
         spaceId,
       ),
     ]);
+    const concurrentReplay = receipt
+      ? await receipt.commit({ invitation }, 201, write)
+      : (await write([]), null);
+    if (concurrentReplay) return concurrentReplay;
   } catch (error) {
     if (
       error instanceof Error &&
@@ -812,20 +840,7 @@ export async function handleCreateSpaceInvitation(
     });
   }
 
-  return json(
-    {
-      invitation: {
-        id,
-        spaceId,
-        email,
-        inviteeUserId,
-        role,
-        status: "pending",
-      },
-      token,
-    },
-    { status: 201 },
-  );
+  return json({ invitation, token }, { status: 201 });
 }
 
 export async function handleChangeSpaceMemberRole(
@@ -1059,12 +1074,13 @@ export async function handleAcceptSpaceInvitation(
 ): Promise<Response> {
   const context = await securityContext(request, env, accessContext);
   const invitation = await env.SYNTILA_DB.prepare(
-    `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, invited_by_user_id AS invitedByUserId, expires_at AS expiresAt
+    `SELECT id, space_id AS spaceId, email, invitee_user_id AS inviteeUserId, role, status, invited_by_user_id AS invitedByUserId, accepted_by_user_id AS acceptedByUserId, expires_at AS expiresAt
      FROM space_invitations WHERE id = ?1`,
   )
     .bind(invitationId)
     .first<{
       invitedByUserId: string;
+      acceptedByUserId: string | null;
       id: string;
       spaceId: string;
       email: string;
@@ -1073,6 +1089,18 @@ export async function handleAcceptSpaceInvitation(
       status: string;
       expiresAt: string;
     }>();
+  // A retried accept by the same person repeats the first result.
+  if (
+    invitation?.status === "accepted" &&
+    invitation.acceptedByUserId === context.userId
+  )
+    return json({
+      id: invitation.id,
+      spaceId: invitation.spaceId,
+      role: invitation.role,
+      status: "accepted",
+      accepted: true,
+    });
   if (!invitation || invitation.status !== "pending")
     throw new HttpError(404, "Space invitation not found");
   if (new Date(invitation.expiresAt).getTime() <= Date.now())
@@ -1194,16 +1222,25 @@ export async function handleDeclineSpaceInvitation(
       status: string;
       expiresAt: string;
     }>();
+  const isRecipient =
+    !!invitation &&
+    (invitation.inviteeUserId !== null
+      ? invitation.inviteeUserId === context.userId
+      : context.user.email.trim().toLowerCase() ===
+        invitation.email.trim().toLowerCase());
+  // A retried decline by the recipient repeats the first result.
+  if (invitation?.status === "declined" && isRecipient)
+    return json({
+      id: invitation.id,
+      spaceId: invitation.spaceId,
+      status: "declined",
+      declined: true,
+    });
   if (!invitation || invitation.status !== "pending")
     throw new HttpError(404, "Space invitation not found");
   if (new Date(invitation.expiresAt).getTime() <= Date.now())
     throw new HttpError(410, "Space invitation expired");
-  if (
-    invitation.inviteeUserId !== null
-      ? invitation.inviteeUserId !== context.userId
-      : context.user.email.trim().toLowerCase() !==
-        invitation.email.trim().toLowerCase()
-  )
+  if (!isRecipient)
     throw new HttpError(
       403,
       "Invitation recipient does not match signed-in user",

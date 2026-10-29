@@ -5,6 +5,7 @@ import '../../ax/ax_data.dart';
 import '../../ax/sync/ax_people.dart';
 import '../../ax/sync/ax_query_builder.dart';
 import '../../ax/sync/ax_sync_engine.dart';
+import '../common/quiet_notices.dart';
 import '../invitations/space_invitation_dialog.dart';
 
 class PeoplePage extends StatefulWidget {
@@ -139,10 +140,14 @@ class _PeoplePageState extends State<PeoplePage> {
   }
 
   Future<void> _addToSpace(String userId) async {
-    await showDialog<bool>(
+    final sent = await showDialog<bool>(
         context: context,
         builder: (_) =>
             SpaceInvitationDialog(people: widget.people, personId: userId));
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showNotice(
+          const SnackBar(content: Text('Space invitation sent.')));
+    }
   }
 }
 

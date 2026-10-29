@@ -21,7 +21,12 @@ vi.mock("../src/workspace-gateway/runtime-authenticator.js", () => ({
   },
 }));
 vi.mock("../src/event-publisher.js", () => ({
-  createEventPublisher: () => ({ publish: async () => undefined }),
+  // Applies the domain writes the route commits together with its signal.
+  createEventPublisher: () => ({
+    publish: async (input?: { mutations?: { run(): Promise<unknown> }[] }) => {
+      for (const statement of input?.mutations ?? []) await statement.run();
+    },
+  }),
 }));
 
 import { sqliteD1 } from "./helpers/sqlite-d1.js";

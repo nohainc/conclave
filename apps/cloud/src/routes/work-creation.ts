@@ -629,8 +629,7 @@ export async function createWorkRequestForUser(
     workRequest,
     run: { id: runId, spaceId, threadId, status: "created" },
   };
-  const write = (receipts: D1PreparedStatement[]) =>
-    env.SYNTILA_DB.batch([
+  const statements = (receipts: D1PreparedStatement[]) => [
       ...receipts,
       env.SYNTILA_DB.prepare(
         `INSERT INTO work_requests
@@ -702,7 +701,30 @@ export async function createWorkRequestForUser(
         JSON.stringify({ threadId, runId, workflowId, workflowVersion }),
         now,
       ),
-    ]);
+    ];
+  // The "received by Syntila" signal commits in the same D1 batch as the
+  // request, so a saved request is never left unannounced.
+  const created = {
+    type: "work_request.created",
+    workspaceId: workRequest.primaryWorkspaceId ?? undefined,
+    spaceId,
+    runId,
+    idempotencyKey: `work-request:${workRequest.id}:created`,
+    payload: {
+      entityId: workRequest.id,
+      workRequestId: workRequest.id,
+      threadId,
+      status: "queued",
+      ...(submissionId ? { submissionId } : {}),
+    },
+  };
+  const write = (receipts: D1PreparedStatement[]) =>
+    workRequest.primaryWorkspaceId
+      ? createEventPublisher(env).publish({
+          ...created,
+          mutations: statements(receipts),
+        })
+      : env.SYNTILA_DB.batch(statements(receipts));
   const concurrentReplay = receipt
     ? await receipt.commit(responseBody, 202, write)
     : (await write([]), null);
@@ -717,24 +739,6 @@ export async function createWorkRequestForUser(
     durationMs: performance.now() - handlerStartedAt,
     context: { status: "persisted" },
   });
-  try {
-    await createEventPublisher(env).publish({
-      type: "work_request.created",
-      workspaceId: workRequest.primaryWorkspaceId!,
-      spaceId,
-      runId,
-      idempotencyKey: `work-request:${workRequest.id}:created`,
-      payload: {
-        entityId: workRequest.id,
-        workRequestId: workRequest.id,
-        threadId,
-        status: "queued",
-        ...(submissionId ? { submissionId } : {}),
-      },
-    });
-  } catch (error) {
-    console.error("Failed to publish work_request.created", error);
-  }
   return resumeSubmission(env, json(responseBody, { status: 202 }), false);
 }
 

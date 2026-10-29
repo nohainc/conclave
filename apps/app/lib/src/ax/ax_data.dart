@@ -213,3 +213,15 @@ class AxApiClient extends _AxApiClientCore
         AxThreadQueueDataSource {
   AxApiClient({super.baseUrl, super.client});
 }
+
+/// A keyed mutation is safe to resend: the server replays the first result.
+/// One resend covers a request whose response was lost on the network.
+Future<T> _retryOnceWithKey<T>(
+    String? idempotencyKey, Future<T> Function() send) async {
+  try {
+    return await send();
+  } on http.ClientException {
+    if (idempotencyKey == null) rethrow;
+    return send();
+  }
+}

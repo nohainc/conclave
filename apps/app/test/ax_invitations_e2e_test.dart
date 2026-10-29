@@ -255,5 +255,10 @@ void main() {
     // Bell icon badge and sidebar show Pending invitations (1)
     expect(find.text('Pending invitations (1)'), findsWidgets);
     expect(find.textContaining('Live Shared Space'), findsWidgets);
+    // The arrival is announced in the Notification Center, not only listed.
+    await tester.tap(find.byTooltip('Notifications').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Vitalii Noha invited you to Live Shared Space'),
+        findsWidgets);
   });
 }

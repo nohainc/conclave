@@ -198,11 +198,15 @@ mixin _SpaceApi on _AxApiClientCore {
   }
 
   Future<void> _spaceMutation(Uri uri, Map<String, dynamic> body,
-      {String method = 'POST'}) async {
-    final request = http.Request(method, uri)
-      ..headers.addAll(_headers(contentType: 'application/json'))
-      ..body = jsonEncode(body);
-    final response = await client.send(request);
+      {String method = 'POST', String? idempotencyKey}) async {
+    Future<http.StreamedResponse> send() => client.send(http.Request(
+        method, uri)
+      ..headers.addAll({
+        ..._headers(contentType: 'application/json'),
+        if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+      })
+      ..body = jsonEncode(body));
+    final response = await _retryOnceWithKey(idempotencyKey, send);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final responseBody = await response.stream.bytesToString();
       var detail = '';
@@ -235,11 +239,14 @@ mixin _SpaceApi on _AxApiClientCore {
           required String userId,
           required String role,
           required AxSpacePermissions permissions}) =>
-      _spaceMutation(Uri.parse('$baseUrl/spaces/$spaceId/invitations'), {
-        'userId': userId,
-        'role': role,
-        'permissions': permissions.toJson()
-      });
+      _spaceMutation(
+          Uri.parse('$baseUrl/spaces/$spaceId/invitations'),
+          {
+            'userId': userId,
+            'role': role,
+            'permissions': permissions.toJson()
+          },
+          idempotencyKey: newAxIdempotencyKey());
 
   @override
   Future<void> inviteSpaceMemberWithPermissions(
@@ -248,7 +255,8 @@ mixin _SpaceApi on _AxApiClientCore {
           required String role,
           required AxSpacePermissions permissions}) =>
       _spaceMutation(Uri.parse('$baseUrl/spaces/$spaceId/invitations'),
-          {'email': email, 'role': role, 'permissions': permissions.toJson()});
+          {'email': email, 'role': role, 'permissions': permissions.toJson()},
+          idempotencyKey: newAxIdempotencyKey());
 
   @override
   Future<void> changeSpaceMemberRole(
