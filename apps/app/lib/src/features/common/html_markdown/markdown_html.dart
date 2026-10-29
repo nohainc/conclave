@@ -11,7 +11,11 @@ import '../syntila_markdown_body.dart' show validatedMarkdownLink;
 /// emitted as escaped text, only allowlisted tags/attributes are produced,
 /// links must pass [validatedMarkdownLink], and images degrade to their alt
 /// text so authored content cannot load remote resources.
-String renderMarkdownHtml(String source) {
+String renderMarkdownHtml(String source) => renderMarkdownBlocks(source).join();
+
+/// Same output as [renderMarkdownHtml], split into top-level blocks so the DOM
+/// renderer can replace only blocks that changed while a response streams.
+List<String> renderMarkdownBlocks(String source) {
   final document = md.Document(
     extensionSet: md.ExtensionSet.gitHubFlavored,
     // Keep text raw; this renderer owns all escaping.
@@ -19,10 +23,36 @@ String renderMarkdownHtml(String source) {
   );
   final nodes =
       document.parseLines(source.replaceAll('\r\n', '\n').split('\n'));
-  final out = StringBuffer();
-  for (final node in nodes) {
-    _write(out, node);
+  return [for (final node in nodes) _renderNode(node)]
+      .where((block) => block.isNotEmpty)
+      .toList();
+}
+
+/// Index range `[start, end)` of [previous] to replace with
+/// `next.sublist(start, next.length - (previous.length - end))`, keeping the
+/// longest unchanged prefix and suffix.
+({int start, int previousEnd, int nextEnd}) diffBlocks(
+    List<String> previous, List<String> next) {
+  var start = 0;
+  while (start < previous.length &&
+      start < next.length &&
+      previous[start] == next[start]) {
+    start++;
   }
+  var previousEnd = previous.length;
+  var nextEnd = next.length;
+  while (previousEnd > start &&
+      nextEnd > start &&
+      previous[previousEnd - 1] == next[nextEnd - 1]) {
+    previousEnd--;
+    nextEnd--;
+  }
+  return (start: start, previousEnd: previousEnd, nextEnd: nextEnd);
+}
+
+String _renderNode(md.Node node) {
+  final out = StringBuffer();
+  _write(out, node);
   return out.toString();
 }
 

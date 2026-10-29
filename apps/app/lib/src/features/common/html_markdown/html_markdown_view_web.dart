@@ -35,6 +35,7 @@ class _HtmlMarkdownViewState extends State<_HtmlMarkdownView> {
   web.ResizeObserver? _observer;
   double _height = 1;
   String? _rendered;
+  List<String> _blocks = const [];
 
   @override
   void didUpdateWidget(covariant _HtmlMarkdownView oldWidget) {
@@ -76,7 +77,9 @@ class _HtmlMarkdownViewState extends State<_HtmlMarkdownView> {
     // keeps its DOM identity and any in-progress text selection.
     if (_rendered != widget.data) {
       _rendered = widget.data;
-      root.innerHTML = renderMarkdownHtml(widget.data).toJS;
+      final next = renderMarkdownBlocks(widget.data);
+      patchMarkdownBlocks(root, _blocks, next);
+      _blocks = next;
     }
   }
 
@@ -115,6 +118,26 @@ class _HtmlMarkdownViewState extends State<_HtmlMarkdownView> {
           onElementCreated: _attach,
         ),
       );
+}
+
+/// Replace only the changed run of top-level blocks in [root]. While a
+/// response streams this is usually just the last block, so earlier
+/// paragraphs keep their DOM nodes, selection and copy-button state.
+void patchMarkdownBlocks(
+    web.Element root, List<String> previous, List<String> next) {
+  final diff = diffBlocks(previous, next);
+  for (var i = diff.previousEnd - 1; i >= diff.start; i--) {
+    root.children.item(i)?.remove();
+  }
+  final anchor = root.children.item(diff.start);
+  for (var i = diff.start; i < diff.nextEnd; i++) {
+    final template = web.document.createElement('template')
+        as web.HTMLTemplateElement
+      ..innerHTML = next[i].toJS;
+    final block = template.content.firstElementChild ??
+        (web.document.createElement('p')..textContent = next[i]);
+    root.insertBefore(block, anchor);
+  }
 }
 
 const _styleId = 'syntila-md-style';

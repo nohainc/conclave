@@ -38,7 +38,10 @@ state; the DOM is a pure view of message text.
 - Prototype creates one platform view per message. Before enabling by default,
   replace this with a single DOM renderer for the conversation area (append /
   update-by-id API, preserved scroll and selection during streaming).
-- Streaming currently re-renders the whole message per update.
+- Streaming updates are block-incremental: `renderMarkdownBlocks` yields one
+  HTML string per top-level block and `patchMarkdownBlocks` replaces only the
+  changed run (common prefix/suffix kept), so finished blocks keep DOM
+  identity and selection. Parsing is still whole-message per update.
 - KaTeX/Mermaid would add third-party JS to `web/`; that requires a separate
   security review (CSP, sandboxing for Mermaid SVG).
 - Cross-message selection, keyboard focus, and accessibility in the DOM view

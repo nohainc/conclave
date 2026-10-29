@@ -64,4 +64,34 @@ void main() {
     expect(html, isNot(contains('smd-')));
     expect(html, contains('A &lt; B'));
   });
+
+  test('blocks join to the full document, one element each', () {
+    const src = '# A\n\npara\n\n- x\n- y\n\n```js\nlet a\n```';
+    final blocks = renderMarkdownBlocks(src);
+    expect(blocks.join(), renderMarkdownHtml(src));
+    expect(blocks, hasLength(4));
+    for (final b in blocks) {
+      expect(b, startsWith('<'));
+    }
+  });
+
+  test('streaming appends only touch the tail block', () {
+    final before = renderMarkdownBlocks('# A\n\nfirst\n\nsec');
+    final after = renderMarkdownBlocks('# A\n\nfirst\n\nsecond line');
+    final d = diffBlocks(before, after);
+    expect((d.start, d.previousEnd, d.nextEnd), (2, 3, 3));
+  });
+
+  test('unclosed code fence during streaming stays one code block', () {
+    final blocks = renderMarkdownBlocks('text\n\n```dart\nfinal a');
+    expect(blocks, hasLength(2));
+    expect(blocks.last, contains('syntila-md-code'));
+  });
+
+  test('diff of identical and inserted-middle lists', () {
+    expect(diffBlocks(['a', 'b'], ['a', 'b']),
+        (start: 2, previousEnd: 2, nextEnd: 2));
+    expect(diffBlocks(['a', 'c'], ['a', 'b', 'c']),
+        (start: 1, previousEnd: 1, nextEnd: 2));
+  });
 }
