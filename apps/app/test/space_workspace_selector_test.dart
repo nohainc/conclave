@@ -209,11 +209,11 @@ void main() {
     expect(source.selectedSpaceWorkspaces, isEmpty);
   });
 
-  testWidgets('other members only see the Workspace', (tester) async {
+  testWidgets('other members see no Workspace settings', (tester) async {
     final source = WorkflowSource()..selectedSpaceWorkspaces['S'] = 'other';
     await pumpSpace(tester, source, memberSpace);
     expect(find.byKey(const ValueKey('space-workspace')), findsNothing);
-    expect(find.text('Workspace: Second Workspace'), findsOneWidget);
+    expect(find.textContaining('Workspace'), findsNothing);
   });
 
   testWidgets('owner attaches Workspace folders and is warned before detaching',

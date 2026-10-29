@@ -1,5 +1,13 @@
 part of '../spaces_pages.dart';
 
+const double _settingLabelWidth = 128;
+
+TextStyle? _settingLabelStyle(ThemeData theme) => theme.textTheme.bodySmall
+    ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+
+TextStyle? _settingValueStyle(ThemeData theme) =>
+    theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w600);
+
 /// Which Workspace a Space runs on. Threads use that Workspace's Workers and
 /// workflows. Owners can pick one of their Workspaces or follow the default;
 /// other members only see the current choice.
@@ -88,11 +96,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
               .firstOrNull
               ?.name;
           final theme = Theme.of(context);
-          if (!widget.isOwner) {
-            return Text('Workspace: ${name ?? 'None selected'}',
-                key: const ValueKey('space-workspace-readonly'),
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant));
-          }
+          if (!widget.isOwner) return const SizedBox.shrink();
           final known = settings.workspaces
               .any((workspace) => workspace.id == settings.workspaceId);
           final current = settings.inherited
@@ -111,10 +115,9 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('Workspace',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
-                  const SizedBox(width: 8),
+                  SizedBox(
+                      width: _settingLabelWidth,
+                      child: Text('Workspace', style: _settingLabelStyle(theme))),
                   // Same compact list selector as the Work composer and
                   // workflow model pickers.
                   PopupMenuButton<String>(
@@ -153,8 +156,7 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                       child: Row(mainAxisSize: MainAxisSize.min, children: [
                         Text(choices[current] ?? 'Default Workspace',
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(fontWeight: FontWeight.w600)),
+                            style: _settingValueStyle(theme)),
                         const SizedBox(width: 2),
                         const Icon(Icons.keyboard_arrow_down, size: 14),
                       ]),
@@ -162,11 +164,13 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                   ),
                 ]),
                 if (settings.inherited) ...[
-                  Text(
-                      'Following the default Workspace${name == null ? '' : ': $name'}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
-                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.only(
+                        left: _settingLabelWidth + 8, bottom: 4),
+                    child: Text(
+                        'Following the default Workspace${name == null ? '' : ': $name'}',
+                        style: _settingLabelStyle(theme)),
+                  ),
                 ],
                 if (_folderSource != null && settings.workspaceId != null)
                   _SpaceAdditionalFolders(
@@ -354,21 +358,28 @@ class _SpaceAdditionalFoldersState extends State<_SpaceAdditionalFolders> {
     final theme = Theme.of(context);
     final attached = folders.attached.toList();
     final unavailable = attached.where((folder) => !folder.accessible).length;
-    return TextButton.icon(
-      key: const ValueKey('space-additional-folders'),
-      style: TextButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          visualDensity: VisualDensity.compact),
-      onPressed: () => _edit(folders),
-      icon: Icon(Icons.folder_outlined,
-          size: 15, color: unavailable > 0 ? theme.colorScheme.error : null),
-      label: Text(
-        attached.isEmpty
-            ? 'Additional folders'
-            : 'Additional folders · ${attached.map((f) => f.displayName).join(', ')}',
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodySmall,
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(
+          width: _settingLabelWidth,
+          child: Text('Additional folders', style: _settingLabelStyle(theme))),
+      TextButton.icon(
+        key: const ValueKey('space-additional-folders'),
+        style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact),
+        onPressed: () => _edit(folders),
+        icon: Icon(Icons.folder_outlined,
+            size: 14, color: unavailable > 0 ? theme.colorScheme.error : null),
+        label: Text(
+          attached.isEmpty
+              ? 'None'
+              : attached.map((f) => f.displayName).join(', '),
+          overflow: TextOverflow.ellipsis,
+          style: _settingValueStyle(theme),
+        ),
       ),
-    );
+    ]);
   }
 }
