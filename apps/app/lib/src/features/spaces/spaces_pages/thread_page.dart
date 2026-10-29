@@ -173,8 +173,9 @@ class _ThreadPageState extends State<ThreadPage>
       if (!mounted || identical(next, _readStates)) return;
       setState(() => _readStates = next);
     }, fireImmediately: false);
-    unawaited(engine.ensure(query).then<void>((_) {},
-        onError: (Object _, StackTrace __) {}));
+    unawaited(engine
+        .ensure(query)
+        .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
   }
 
   /// Members who have read up to [date]: the line under my latest message.
@@ -201,6 +202,7 @@ class _ThreadPageState extends State<ThreadPage>
       ),
     );
   }
+
   int _sharedQueueGeneration = 0;
   final _workHistoryController = ScrollController();
   late final AxWorkerUsageController _workerUsage = AxWorkerUsageController(
@@ -874,6 +876,9 @@ class _ThreadPageState extends State<ThreadPage>
 
   /// AI History starts after its last clear; the Conversation keeps every
   /// request through [_workTimeline].
+  /// AI History responses the reader opened or closed, per request.
+  final _historyResponseOverrides = <String, bool>{};
+
   List<AxWorkRequest> get _aiHistoryTimeline =>
       _afterAiHistoryClear(_workTimeline);
 
@@ -2727,6 +2732,9 @@ class _ThreadPageState extends State<ThreadPage>
         workflowCatalogError: _workflowCatalogError,
         canExecute: _canExecute,
         workTimeline: _aiHistoryTimeline,
+        historyResponseOverrides: _historyResponseOverrides,
+        onToggleHistoryResponse: (id, open) =>
+            setState(() => _historyResponseOverrides[id] = open),
         activityStore: _workActivityStore,
         realtimeStatus: _workRealtime.displayStatus,
         localWorkProgress: _localWorkProgress,

@@ -3095,7 +3095,8 @@ void main() {
     }
   });
 
-  testWidgets('AI History shows requests and responses like the Conversation',
+  testWidgets(
+      'AI History shows requests; tapping one shows or hides its response',
       (tester) async {
     final dataSource = _WorkHistoryDataSource([
       _workRequest('done', 'Line one\nLine two'),
@@ -3131,13 +3132,24 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await _openAiHistory(tester);
-    // Every request shows its full text and Worker state directly, with the
-    // same request card the Conversation uses; nothing is collapsed.
+    await _openAiHistory(tester, showResponses: false);
+    // Requests use the Conversation's request bubble. A finished response
+    // starts hidden; one still processing stays open to show progress.
     expect(_inAiHistory(find.text('Line one\nLine two')), findsOneWidget);
-    expect(_inAiHistory(find.text('Request completed.')), findsOneWidget);
     expect(_inAiHistory(find.text('Still working')), findsOneWidget);
-    expect(find.byIcon(Icons.chevron_right), findsNothing);
+    expect(_inAiHistory(find.text('Request completed.')), findsNothing);
+
+    final done = find.byKey(const ValueKey('ai-history-request-done'));
+    final top = tester.getTopLeft(done).dy;
+    await tester.tap(done);
+    await tester.pumpAndSettle();
+    expect(_inAiHistory(find.text('Request completed.')), findsOneWidget);
+    // The tapped request stays where it was; its response opens below it.
+    expect(tester.getTopLeft(done).dy, top);
+
+    await tester.tap(done);
+    await tester.pumpAndSettle();
+    expect(_inAiHistory(find.text('Request completed.')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -5072,8 +5084,17 @@ Finder _inConversation(Finder finder) => find.descendant(
 /// Opens the read-only AI History panel.
 /// Opens AI History and, unless [expand] is false, expands every collapsed
 /// request row so tests can inspect its full card.
-Future<void> _openAiHistory(WidgetTester tester) async {
+/// Opens AI History; [showResponses] also opens every hidden response.
+Future<void> _openAiHistory(WidgetTester tester,
+    {bool showResponses = true}) async {
   await tester.tap(find.byKey(const ValueKey('ai-history-toggle')));
+  await tester.pumpAndSettle();
+  if (!showResponses) return;
+  final hidden = find.byWidgetPredicate(
+      (widget) => widget is Tooltip && widget.message == 'Show response');
+  for (final tooltip in hidden.evaluate().toList()) {
+    await tester.tap(find.byWidget(tooltip.widget), warnIfMissed: false);
+  }
   await tester.pumpAndSettle();
 }
 

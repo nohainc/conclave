@@ -154,6 +154,8 @@ class _WorkComposer extends StatelessWidget {
     required this.workflowCatalogError,
     required this.canExecute,
     required this.workTimeline,
+    this.historyResponseOverrides = const {},
+    this.onToggleHistoryResponse,
     required this.activityStore,
     required this.realtimeStatus,
     required this.localWorkProgress,
@@ -219,6 +221,11 @@ class _WorkComposer extends StatelessWidget {
   final String? workflowCatalogError;
   final bool canExecute;
   final List<AxWorkRequest> workTimeline;
+
+  /// AI History: responses the reader opened (true) or closed (false). Others
+  /// follow [aiHistoryResponseOpenByDefault].
+  final Map<String, bool> historyResponseOverrides;
+  final void Function(String requestId, bool open)? onToggleHistoryResponse;
   final AxWorkActivityStore activityStore;
   final AxWorkRealtimeStatus realtimeStatus;
   final Map<String, String> localWorkProgress;
@@ -353,9 +360,8 @@ class _WorkComposer extends StatelessWidget {
           ),
       ],
       itemCount: workTimeline.length,
-      // Same reading model as the Conversation: anchored at the newest
-      // request, older pages grow upward without moving the view.
-      itemId: (index) => workTimeline[index].id,
+      // Read top-down: opening a response grows the list below the tapped
+      // request instead of moving it.
       empty: empty,
       separatorBuilder: (_, __) => const SizedBox(height: 6),
       findChildIndexCallback: (key) {
@@ -377,9 +383,26 @@ class _WorkComposer extends StatelessWidget {
                       ?.toLocal(),
               // The Conversation's request card (request bubble, status and
               // response); AI History only leaves out people's Chat messages.
-              child: requestCard(context, request,
-                  responseAnchorKey:
-                      incomingAnchor.keyFor((request.id, 'response'))),
+              // Requests read as a list; tapping one shows or hides its
+              // response.
+              child: Builder(builder: (context) {
+                final open = historyResponseOverrides[request.id] ??
+                    aiHistoryResponseOpenByDefault(request);
+                // A response seen open while it was processing stays open
+                // after it finishes, instead of disappearing.
+                if (open &&
+                    onToggleHistoryResponse != null &&
+                    !historyResponseOverrides.containsKey(request.id)) {
+                  historyResponseOverrides[request.id] = true;
+                }
+                return requestCard(context, request,
+                    responseAnchorKey:
+                        incomingAnchor.keyFor((request.id, 'response')),
+                    showResponse: open,
+                    onPromptTap: onToggleHistoryResponse == null
+                        ? null
+                        : () => onToggleHistoryResponse!(request.id, !open));
+              }),
             ),
           ),
         );
@@ -390,7 +413,10 @@ class _WorkComposer extends StatelessWidget {
   /// The live Work Request card (prompt, Worker status, activity, answer) used
   /// by both the Conversation and AI History.
   Widget requestCard(BuildContext context, AxWorkRequest request,
-          {GlobalKey? responseAnchorKey, bool showPromptBubble = true}) =>
+          {GlobalKey? responseAnchorKey,
+          bool showPromptBubble = true,
+          bool showResponse = true,
+          VoidCallback? onPromptTap}) =>
       ListenableBuilder(
         listenable: Listenable.merge([
           activityStore.listenableForRequest(request),
@@ -399,6 +425,8 @@ class _WorkComposer extends StatelessWidget {
         builder: (context, _) => _WorkTimelineCard(
           responseAnchorKey: responseAnchorKey,
           showPromptBubble: showPromptBubble,
+          showResponse: showResponse,
+          onPromptTap: onPromptTap,
           request: request,
           activities: activityStore.forRequest(request),
           clockOffset: activityStore.clockOffsetForRequest(request),
@@ -1511,10 +1539,51 @@ String? _workResponseText(AxWorkRequest request) =>
                 .where((text) => text.trim().isNotEmpty)
                 .firstOrNull;
 
+/// A tap on selectable request text. The text's selection gestures win the
+/// gesture arena, so a raw pointer press and release that barely moves counts
+/// as the tap; a drag still selects text without toggling.
+class _PromptTapListener extends StatefulWidget {
+  const _PromptTapListener(
+      {super.key, required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_PromptTapListener> createState() => _PromptTapListenerState();
+}
+
+class _PromptTapListenerState extends State<_PromptTapListener> {
+  Offset? _down;
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (event) => _down = event.position,
+        onPointerCancel: (_) => _down = null,
+        onPointerUp: (event) {
+          final down = _down;
+          _down = null;
+          if (down != null && (event.position - down).distance < kTouchSlop) {
+            widget.onTap();
+          }
+        },
+        child: widget.child,
+      );
+}
+
+/// AI History opens responses that still need attention: work in progress
+/// shows its progress, and a failure shows Retry and Report. Finished
+/// responses start hidden.
+bool aiHistoryResponseOpenByDefault(AxWorkRequest request) =>
+    !const {'completed', 'cancelled'}.contains(request.status);
+
 class _WorkTimelineCard extends StatelessWidget {
   const _WorkTimelineCard({
     this.responseAnchorKey,
     this.showPromptBubble = true,
+    this.showResponse = true,
+    this.onPromptTap,
     required this.request,
     required this.activities,
     required this.realtimeStatus,
@@ -1536,6 +1605,10 @@ class _WorkTimelineCard extends StatelessWidget {
   final ValueChanged<AxReplyReference>? onReply;
   final GlobalKey? responseAnchorKey;
   final bool showPromptBubble;
+
+  /// AI History hides the response until its request is tapped.
+  final bool showResponse;
+  final VoidCallback? onPromptTap;
   final AxWorkRequest request;
   final List<AxWorkActivity> activities;
   final AxWorkRealtimeStatus realtimeStatus;
@@ -1577,6 +1650,23 @@ class _WorkTimelineCard extends StatelessWidget {
   String _totalElapsed() {
     final elapsed = _totalElapsedMs;
     return elapsed == 0 ? '' : _elapsed(elapsed);
+  }
+
+  /// In AI History the request bubble toggles its response.
+  Widget _tappablePrompt(Widget bubble) {
+    final onTap = onPromptTap;
+    if (onTap == null) return bubble;
+    return Tooltip(
+      message: showResponse ? 'Hide response' : 'Show response',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: _PromptTapListener(
+          key: ValueKey('ai-history-request-${request.id}'),
+          onTap: onTap,
+          child: bubble,
+        ),
+      ),
+    );
   }
 
   @override
@@ -1840,7 +1930,7 @@ class _WorkTimelineCard extends StatelessWidget {
                       own: isOwnRequest,
                       visible: showMeta,
                       meta: requestMeta,
-                      bubble: Container(
+                      bubble: _tappablePrompt(Container(
                         decoration: BoxDecoration(
                           color: isOwnRequest
                               ? SyntilaColors.ownMessageBackground(isDark)
@@ -1915,6 +2005,311 @@ class _WorkTimelineCard extends StatelessWidget {
                             ],
                           ],
                         ),
+                      )),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (showResponse) const SizedBox(height: 4),
+        ],
+        // AI Execution & response bubble
+        if (showResponse)
+          _MessageHover(
+            builder: (context, showMeta) => LayoutBuilder(
+              builder: (context, constraints) {
+                final maxBubbleWidth =
+                    math.min(680.0, constraints.maxWidth * 0.9);
+                return Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(0, 6, 14, 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            // The answer anchor sits on the sender line so a
+                            // held answer is revealed with its sender visible.
+                            key: responseAnchorKey,
+                            spacing: 6,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              senderAvatar,
+                              Text(
+                                senderName,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: metaColor,
+                                ),
+                              ),
+                              if (isWorkerResponse &&
+                                  workerOwnerName?.isNotEmpty == true) ...[
+                                Tooltip(
+                                  message: 'Worker owned by $workerOwnerName',
+                                  child: Text(
+                                    "· $workerOwnerName's Worker",
+                                    key: const ValueKey('worker-owner-label'),
+                                    style: TextStyle(
+                                        fontSize: 12, color: metaColor),
+                                  ),
+                                ),
+                              ],
+                              if (isWorkerResponse) ...[
+                                Text(
+                                  '· $effortLabel',
+                                  key: const ValueKey('response-effort-label'),
+                                  style:
+                                      TextStyle(fontSize: 12, color: metaColor),
+                                ),
+                              ],
+                              if (hasMetadata) ...[
+                                AxLiveTicker(
+                                  active: progress.isTicking &&
+                                      realtimeStatus !=
+                                          AxWorkRealtimeStatus.checking,
+                                  builder: (context, now) => Text(
+                                    metadataAt(now),
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12, color: metaColor),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          // The trail is the only place that shows live progress;
+                          // it goes away once the request has finished.
+                          // A streamed answer or error also retires it, so the
+                          // text never lands inside the trail before it hides.
+                          if (!progress.isTerminal &&
+                              response?.isNotEmpty != true &&
+                              error?.isNotEmpty != true &&
+                              (activities.isNotEmpty ||
+                                  progress.currentAction != null)) ...[
+                            const SizedBox(height: 8),
+                            _WorkActivityTrail(
+                              activities: activities,
+                              fallbackAction: progress.currentAction,
+                              color: metaColor,
+                              accentColor: colors.primary,
+                            ),
+                          ],
+                          const SizedBox(height: 6),
+                          Builder(builder: (context) {
+                            // The body shows the Worker's live status while the
+                            // request is unfinished and the real outcome at the end.
+                            final String? message = error?.isNotEmpty == true
+                                ? error
+                                : response?.isNotEmpty == true
+                                    ? response
+                                    : request.status == 'cancelled'
+                                        ? 'Request cancelled.'
+                                        : (progress.isExecuting
+                                                ? null
+                                                : progressText) ??
+                                            switch (request.status) {
+                                              'completed' =>
+                                                'Request completed.',
+                                              'failed' =>
+                                                'Your request could not be completed.',
+                                              'timed_out' =>
+                                                'The worker took too long to respond. Send a new message to try again.',
+                                              'lost' =>
+                                                'The connection to the worker was lost. Send a new message to try again.',
+                                              _ => null,
+                                            };
+                            final isError = error?.isNotEmpty == true;
+                            final platform = Theme.of(context).platform;
+                            final touch = platform == TargetPlatform.iOS ||
+                                platform == TargetPlatform.android;
+                            final actionSize = touch ? 48.0 : 32.0;
+                            Widget compactAction({
+                              required String tooltip,
+                              required IconData icon,
+                              required VoidCallback? onPressed,
+                            }) =>
+                                SizedBox.square(
+                                  dimension: actionSize,
+                                  child: IconButton(
+                                    tooltip: tooltip,
+                                    constraints: BoxConstraints.tightFor(
+                                      width: actionSize,
+                                      height: actionSize,
+                                    ),
+                                    padding: EdgeInsets.zero,
+                                    icon:
+                                        Icon(icon, size: 16, color: metaColor),
+                                    onPressed: onPressed,
+                                  ),
+                                );
+                            final responseActions = <_TimelineAction>[
+                              if (onReply != null &&
+                                  request.status == 'completed' &&
+                                  response?.isNotEmpty == true)
+                                _TimelineAction(
+                                    tooltip: 'Reply',
+                                    icon: Icons.reply_rounded,
+                                    onTap: () => onReply!(AxReplyReference(
+                                          kind: 'response',
+                                          id: request.id,
+                                          authorName: senderName,
+                                          excerpt: replyExcerpt(response!),
+                                        ))),
+                              if (response?.isNotEmpty == true ||
+                                  error?.isNotEmpty == true)
+                                _TimelineAction(
+                                    tooltip: 'Copy',
+                                    icon: Icons.copy_outlined,
+                                    onTap: () => Clipboard.setData(
+                                        ClipboardData(
+                                            text:
+                                                isError ? error! : response!))),
+                              if (request.status == 'failed' &&
+                                  failedStep != null &&
+                                  failedStep.retryAllowed &&
+                                  onRetryStep != null)
+                                _TimelineAction(
+                                    tooltip: failedStep.errorCode ==
+                                            'space_folder_exists'
+                                        ? 'Use the existing folder and retry'
+                                        : failedStep.retryRequiresConfirmation
+                                            ? 'Retry anyway'
+                                            : 'Retry',
+                                    icon: Icons.refresh_rounded,
+                                    onTap: () =>
+                                        onRetryStep!(request.id, failedStep)),
+                              if (request.status == 'failed' &&
+                                  onReportIssue != null &&
+                                  reportedIssue == null)
+                                _TimelineAction(
+                                    tooltip: reportingIssue
+                                        ? 'Sending issue report'
+                                        : 'Report issue',
+                                    icon: Icons.flag_outlined,
+                                    onTap: reportingIssue
+                                        ? null
+                                        : () => onReportIssue!(request.id)),
+                            ];
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (message != null) ...[
+                                  isError
+                                      ? SelectableText(
+                                          message,
+                                          style: SyntilaMessageTypography
+                                                  .fromTheme(Theme.of(context))
+                                              .copyWith(color: colors.error),
+                                        )
+                                      : _MemoizedWorkMarkdown(
+                                          key: ValueKey((request.id, message)),
+                                          data: message,
+                                        ),
+                                ],
+                                AnimatedOpacity(
+                                    // Terminal footers reveal on hover/focus;
+                                    // active and failed controls remain available.
+                                    opacity: showMeta ||
+                                            !const {'completed', 'cancelled'}
+                                                .contains(request.status)
+                                        ? 1
+                                        : 0,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if ((request.status == 'queued' ||
+                                                request.status == 'running') &&
+                                            onCancelRun != null)
+                                          compactAction(
+                                            tooltip: 'Cancel request',
+                                            icon: Icons.cancel_outlined,
+                                            onPressed: () =>
+                                                onCancelRun!(request.id),
+                                          ),
+                                        // Cloud accepted it; shown until a
+                                        // Worker starts, then progress takes over.
+                                        if (request.status == 'queued') ...[
+                                          Tooltip(
+                                            message:
+                                                'Received by Syntila, waiting for a Worker',
+                                            child: ActionStatusChip(
+                                              key: ValueKey(
+                                                  'work-request-status-${request.id}'),
+                                              status: axWorkRequestStatus(
+                                                  request.status),
+                                              kind: AxActionKind.workRequest,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        if (reportedIssue != null)
+                                          Text('Reported',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: colors.primary)),
+                                        // Separates leading controls only, so
+                                        // the time aligns with the answer text.
+                                        if (reportedIssue != null ||
+                                            ((request.status == 'queued' ||
+                                                    request.status ==
+                                                        'running') &&
+                                                onCancelRun != null))
+                                          const SizedBox(width: 8),
+                                        if (timeLabel.isNotEmpty)
+                                          Tooltip(
+                                            message: _chatTimestamp(timestamp!),
+                                            child: Text(
+                                              timeLabel,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: metaColor,
+                                              ),
+                                            ),
+                                          ),
+                                        if (responseActions.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          _TimelineActionsMenu(
+                                              actions: responseActions,
+                                              color: metaColor),
+                                        ],
+                                      ],
+                                    )),
+                                if (reportedIssue != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Thanks — sanitized technical diagnostics were sent.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: metaColor,
+                                    ),
+                                  ),
+                                ],
+                                if (issueReportError != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    "Couldn't send the report. Try again.",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: colors.error,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            );
+                          }),
+                        ],
                       ),
                     ),
                   ),
@@ -1922,307 +2317,6 @@ class _WorkTimelineCard extends StatelessWidget {
               },
             ),
           ),
-          const SizedBox(height: 4),
-        ],
-        // AI Execution & response bubble
-        _MessageHover(
-          builder: (context, showMeta) => LayoutBuilder(
-            builder: (context, constraints) {
-              final maxBubbleWidth =
-                  math.min(680.0, constraints.maxWidth * 0.9);
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(0, 6, 14, 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          // The answer anchor sits on the sender line so a
-                          // held answer is revealed with its sender visible.
-                          key: responseAnchorKey,
-                          spacing: 6,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            senderAvatar,
-                            Text(
-                              senderName,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: metaColor,
-                              ),
-                            ),
-                            if (isWorkerResponse &&
-                                workerOwnerName?.isNotEmpty == true) ...[
-                              Tooltip(
-                                message: 'Worker owned by $workerOwnerName',
-                                child: Text(
-                                  "· $workerOwnerName's Worker",
-                                  key: const ValueKey('worker-owner-label'),
-                                  style:
-                                      TextStyle(fontSize: 12, color: metaColor),
-                                ),
-                              ),
-                            ],
-                            if (isWorkerResponse) ...[
-                              Text(
-                                '· $effortLabel',
-                                key: const ValueKey('response-effort-label'),
-                                style:
-                                    TextStyle(fontSize: 12, color: metaColor),
-                              ),
-                            ],
-                            if (hasMetadata) ...[
-                              AxLiveTicker(
-                                active: progress.isTicking &&
-                                    realtimeStatus !=
-                                        AxWorkRealtimeStatus.checking,
-                                builder: (context, now) => Text(
-                                  metadataAt(now),
-                                  overflow: TextOverflow.ellipsis,
-                                  style:
-                                      TextStyle(fontSize: 12, color: metaColor),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        // The trail is the only place that shows live progress;
-                        // it goes away once the request has finished.
-                        // A streamed answer or error also retires it, so the
-                        // text never lands inside the trail before it hides.
-                        if (!progress.isTerminal &&
-                            response?.isNotEmpty != true &&
-                            error?.isNotEmpty != true &&
-                            (activities.isNotEmpty ||
-                                progress.currentAction != null)) ...[
-                          const SizedBox(height: 8),
-                          _WorkActivityTrail(
-                            activities: activities,
-                            fallbackAction: progress.currentAction,
-                            color: metaColor,
-                            accentColor: colors.primary,
-                          ),
-                        ],
-                        const SizedBox(height: 6),
-                        Builder(builder: (context) {
-                          // The body shows the Worker's live status while the
-                          // request is unfinished and the real outcome at the end.
-                          final String? message = error?.isNotEmpty == true
-                              ? error
-                              : response?.isNotEmpty == true
-                                  ? response
-                                  : request.status == 'cancelled'
-                                      ? 'Request cancelled.'
-                                      : (progress.isExecuting
-                                              ? null
-                                              : progressText) ??
-                                          switch (request.status) {
-                                            'completed' => 'Request completed.',
-                                            'failed' =>
-                                              'Your request could not be completed.',
-                                            'timed_out' =>
-                                              'The worker took too long to respond. Send a new message to try again.',
-                                            'lost' =>
-                                              'The connection to the worker was lost. Send a new message to try again.',
-                                            _ => null,
-                                          };
-                          final isError = error?.isNotEmpty == true;
-                          final platform = Theme.of(context).platform;
-                          final touch = platform == TargetPlatform.iOS ||
-                              platform == TargetPlatform.android;
-                          final actionSize = touch ? 48.0 : 32.0;
-                          Widget compactAction({
-                            required String tooltip,
-                            required IconData icon,
-                            required VoidCallback? onPressed,
-                          }) =>
-                              SizedBox.square(
-                                dimension: actionSize,
-                                child: IconButton(
-                                  tooltip: tooltip,
-                                  constraints: BoxConstraints.tightFor(
-                                    width: actionSize,
-                                    height: actionSize,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  icon: Icon(icon, size: 16, color: metaColor),
-                                  onPressed: onPressed,
-                                ),
-                              );
-                          final responseActions = <_TimelineAction>[
-                            if (onReply != null &&
-                                request.status == 'completed' &&
-                                response?.isNotEmpty == true)
-                              _TimelineAction(
-                                  tooltip: 'Reply',
-                                  icon: Icons.reply_rounded,
-                                  onTap: () => onReply!(AxReplyReference(
-                                        kind: 'response',
-                                        id: request.id,
-                                        authorName: senderName,
-                                        excerpt: replyExcerpt(response!),
-                                      ))),
-                            if (response?.isNotEmpty == true ||
-                                error?.isNotEmpty == true)
-                              _TimelineAction(
-                                  tooltip: 'Copy',
-                                  icon: Icons.copy_outlined,
-                                  onTap: () => Clipboard.setData(ClipboardData(
-                                      text: isError ? error! : response!))),
-                            if (request.status == 'failed' &&
-                                failedStep != null &&
-                                failedStep.retryAllowed &&
-                                onRetryStep != null)
-                              _TimelineAction(
-                                  tooltip: failedStep.errorCode ==
-                                          'space_folder_exists'
-                                      ? 'Use the existing folder and retry'
-                                      : failedStep.retryRequiresConfirmation
-                                          ? 'Retry anyway'
-                                          : 'Retry',
-                                  icon: Icons.refresh_rounded,
-                                  onTap: () =>
-                                      onRetryStep!(request.id, failedStep)),
-                            if (request.status == 'failed' &&
-                                onReportIssue != null &&
-                                reportedIssue == null)
-                              _TimelineAction(
-                                  tooltip: reportingIssue
-                                      ? 'Sending issue report'
-                                      : 'Report issue',
-                                  icon: Icons.flag_outlined,
-                                  onTap: reportingIssue
-                                      ? null
-                                      : () => onReportIssue!(request.id)),
-                          ];
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (message != null) ...[
-                                isError
-                                    ? SelectableText(
-                                        message,
-                                        style:
-                                            SyntilaMessageTypography.fromTheme(
-                                                    Theme.of(context))
-                                                .copyWith(color: colors.error),
-                                      )
-                                    : _MemoizedWorkMarkdown(
-                                        key: ValueKey((request.id, message)),
-                                        data: message,
-                                      ),
-                              ],
-                              AnimatedOpacity(
-                                  // Terminal footers reveal on hover/focus;
-                                  // active and failed controls remain available.
-                                  opacity: showMeta ||
-                                          !const {'completed', 'cancelled'}
-                                              .contains(request.status)
-                                      ? 1
-                                      : 0,
-                                  duration: const Duration(milliseconds: 120),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      if ((request.status == 'queued' ||
-                                              request.status == 'running') &&
-                                          onCancelRun != null)
-                                        compactAction(
-                                          tooltip: 'Cancel request',
-                                          icon: Icons.cancel_outlined,
-                                          onPressed: () =>
-                                              onCancelRun!(request.id),
-                                        ),
-                                      // Cloud accepted it; shown until a
-                                      // Worker starts, then progress takes over.
-                                      if (request.status == 'queued') ...[
-                                        Tooltip(
-                                          message:
-                                              'Received by Syntila, waiting for a Worker',
-                                          child: ActionStatusChip(
-                                            key: ValueKey(
-                                                'work-request-status-${request.id}'),
-                                            status: axWorkRequestStatus(
-                                                request.status),
-                                            kind: AxActionKind.workRequest,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      if (reportedIssue != null)
-                                        Text('Reported',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: colors.primary)),
-                                      // Separates leading controls only, so
-                                      // the time aligns with the answer text.
-                                      if (reportedIssue != null ||
-                                          ((request.status == 'queued' ||
-                                                  request.status ==
-                                                      'running') &&
-                                              onCancelRun != null))
-                                        const SizedBox(width: 8),
-                                      if (timeLabel.isNotEmpty)
-                                        Tooltip(
-                                          message: _chatTimestamp(timestamp!),
-                                          child: Text(
-                                            timeLabel,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: metaColor,
-                                            ),
-                                          ),
-                                        ),
-                                      if (responseActions.isNotEmpty) ...[
-                                        const SizedBox(width: 8),
-                                        _TimelineActionsMenu(
-                                            actions: responseActions,
-                                            color: metaColor),
-                                      ],
-                                    ],
-                                  )),
-                              if (reportedIssue != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Thanks — sanitized technical diagnostics were sent.',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: metaColor,
-                                  ),
-                                ),
-                              ],
-                              if (issueReportError != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  "Couldn't send the report. Try again.",
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: colors.error,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
       ],
     );
   }

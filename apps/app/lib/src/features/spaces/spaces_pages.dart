@@ -12,6 +12,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
