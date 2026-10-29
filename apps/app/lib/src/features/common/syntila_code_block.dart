@@ -72,17 +72,10 @@ class SyntilaSyntaxHighlighter extends SyntaxHighlighter {
           'selector-tag' ||
           'tag' =>
             SyntilaColors.syntaxKeyword(dark),
-          'string' ||
-          'attr' ||
-          'attribute' =>
-            SyntilaColors.syntaxString(dark),
-          'number' ||
-          'literal' =>
-            SyntilaColors.syntaxNumber(dark),
+          'string' || 'attr' || 'attribute' => SyntilaColors.syntaxString(dark),
+          'number' || 'literal' => SyntilaColors.syntaxNumber(dark),
           'comment' => theme.colorScheme.onSurfaceVariant,
-          'title' ||
-          'built_in' =>
-            SyntilaColors.syntaxTitle(dark),
+          'title' || 'built_in' => SyntilaColors.syntaxTitle(dark),
           _ => null,
         };
     TextSpan span(hl.Node node) => TextSpan(
