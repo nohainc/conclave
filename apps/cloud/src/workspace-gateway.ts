@@ -2071,6 +2071,12 @@ export class WorkspaceGateway implements DurableObject {
     message: WorkspaceRuntimeMessage,
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
+    const diagnostic = (stage: string) => {
+      if ((this.env as unknown as { REALTIME_DIAGNOSTICS?: string }).REALTIME_DIAGNOSTICS === "1") {
+        console.log(JSON.stringify({ diagnostic: "terminal_ack", stage, assignmentId: message.assignmentId, at: new Date().toISOString() }));
+      }
+    };
+    diagnostic("read_start");
     const row = message.assignmentId
       ? await this.env.SYNTILA_DB.prepare(
           "SELECT status FROM worker_assignments WHERE id = ?1",
@@ -2078,6 +2084,7 @@ export class WorkspaceGateway implements DurableObject {
           .bind(message.assignmentId)
           .first<{ status: string }>()
       : null;
+    diagnostic("read_done");
     // Local Worker Protocol 4.x acknowledges timeout as a failed terminal
     // delivery; Cloud retains the more precise timed_out assignment outcome.
     const authoritativeStatus =
@@ -2103,6 +2110,7 @@ export class WorkspaceGateway implements DurableObject {
       retryable: false,
       context: { status: authoritativeStatus },
     });
+    diagnostic("ack_send_start");
     await this.send({
       protocol: WORKSPACE_RUNTIME_PROTOCOL_NAME,
       protocolVersion: WORKSPACE_RUNTIME_PROTOCOL_VERSION,
@@ -2124,11 +2132,14 @@ export class WorkspaceGateway implements DurableObject {
         status: authoritativeStatus,
       },
     });
+    diagnostic("ack_send_done");
     // Notify the Workflow only after the result is durable and acknowledged.
     // A failed signal is recovered by the outbox sweep and the waiter's own
     // reconciliation; it must never delay or fail the acknowledgement above.
     if (message.assignmentId) {
+      diagnostic("signal_start");
       await signalAssignmentTerminal(this.env, message.assignmentId);
+      diagnostic("signal_done");
     }
   }
 

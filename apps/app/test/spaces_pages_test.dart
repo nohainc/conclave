@@ -3327,6 +3327,23 @@ void main() {
     await tester.pumpAndSettle();
     await _openAiHistory(tester);
     expect(find.text('History before reconnect'), findsOneWidget);
+    final initialHistoryReads = dataSource.activeOnlyCalls.length;
+    events.add({
+      'type': 'thread.updated',
+      'threadId': 'thread-1',
+      'payload': {'threadId': 'thread-1'},
+    });
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(dataSource.activeOnlyCalls.length, initialHistoryReads);
+    events.add({
+      'type': 'thread.work_cleared',
+      'threadId': 'thread-1',
+      'payload': {'threadId': 'thread-1'},
+    });
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(dataSource.activeOnlyCalls.length, greaterThan(initialHistoryReads));
     dataSource.requests = [
       const AxWorkRequest(
         id: 'request-1',

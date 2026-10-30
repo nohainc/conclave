@@ -549,7 +549,7 @@ void main() {
       'spaceId': a.id,
       'threadId': '${a.id}-stream'
     });
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('A cached'), findsOneWidget);
     expect(find.text('B cached'), findsOneWidget);
     expect(source.requests[b.id], hasLength(1));

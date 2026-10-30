@@ -1214,6 +1214,21 @@ export async function routeWorkerRequest(
       );
     }
   } catch (error) {
+    if (!(error instanceof deps.HttpError)) {
+      // Unexpected failures are reported as 400; keep their cause visible.
+      console.error(
+        JSON.stringify({
+          level: "error",
+          message: "http.unhandled_error",
+          details: {
+            method: request.method,
+            path: url.pathname,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          },
+        }),
+      );
+    }
     return deps.json(
       { error: deps.errorMessage(error) },
       {

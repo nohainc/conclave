@@ -148,6 +148,24 @@ export function providerExecutionOverrun(
   );
 }
 
+/** Temporary local diagnostics (REALTIME_DIAGNOSTICS=1 in .dev.vars). */
+function workflowDiagnostic(
+  env: unknown,
+  stage: string,
+  data: Record<string, unknown> = {},
+): void {
+  if ((env as { REALTIME_DIAGNOSTICS?: string }).REALTIME_DIAGNOSTICS !== "1")
+    return;
+  console.log(
+    JSON.stringify({
+      diagnostic: "workflow_terminal",
+      stage,
+      ...data,
+      at: new Date().toISOString(),
+    }),
+  );
+}
+
 /**
  * Suspends the Workflow until an `assignment-terminal` event arrives or
  * [timeoutMs] passes. Both outcomes are the same to the caller: it re-reads
@@ -850,17 +868,25 @@ export class SyntilaRunWorkflow extends WorkflowEntrypoint<
           ...markWorkflowTaskResult(tasks, result.task.id, resultStatus),
         ];
         const persistedTask = tasks.find((task) => task.id === result.task.id)!;
+        workflowDiagnostic(this.env, "task_state_start", {
+          runId: params.runId,
+          status: resultStatus,
+        });
         await this.persistWorkflowTaskState(
           persistedTask,
           result.output,
           result.error,
         );
+        workflowDiagnostic(this.env, "task_state_done", { runId: params.runId });
         if (resultStatus === "completed" || resultStatus === "failed") {
           await this.publishWorkEvent(
             params,
             resultStatus === "completed" ? "step.completed" : "step.failed",
             { stepKind: result.task.step.kind, status: resultStatus },
           );
+          workflowDiagnostic(this.env, "step_event_published", {
+            runId: params.runId,
+          });
         }
         if (resultStatus === "failed" || resultStatus === "cancelled") {
           const failed = tasks.find(
@@ -894,11 +920,19 @@ export class SyntilaRunWorkflow extends WorkflowEntrypoint<
         }
       }
     }
+    workflowDiagnostic(this.env, "terminal_run_start", { runId: params.runId });
     await this.persistTerminalRun(params.runId, "completed");
+    workflowDiagnostic(this.env, "finish_request_start", {
+      runId: params.runId,
+    });
     await this.finishWorkRequest(params, "completed", step);
+    workflowDiagnostic(this.env, "completed_event_start", {
+      runId: params.runId,
+    });
     await this.publishWorkEvent(params, "work_request.completed", {
       status: "completed",
     });
+    workflowDiagnostic(this.env, "run_returning", { runId: params.runId });
     return { ...started, stage: "completed", status: "completed" };
   }
 
@@ -1182,6 +1216,10 @@ export class SyntilaRunWorkflow extends WorkflowEntrypoint<
                 ? { durationMs: Math.max(0, Date.now() - persistedAt) }
                 : {}),
               context: { status: terminal.status },
+            });
+            workflowDiagnostic(this.env, "observed_terminal", {
+              runId: params.runId,
+              status: terminal.status,
             });
             break;
           }

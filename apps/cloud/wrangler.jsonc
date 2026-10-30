@@ -27,6 +27,8 @@
     "SYNTILA_AUTH_GITHUB_CLIENT_SECRET": "",
     "SYNTILA_AUTH_GOOGLE_CLIENT_ID": "",
     "SYNTILA_AUTH_GOOGLE_CLIENT_SECRET": "",
+    // Temporary local diagnostics; set REALTIME_DIAGNOSTICS=1 in .dev.vars.
+    "REALTIME_DIAGNOSTICS": "",
   },
   "secrets": {
     "required": [

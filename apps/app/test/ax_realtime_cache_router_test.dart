@@ -290,12 +290,58 @@ void main() {
   });
   test('user recovery leaves unobserved Space data for stale navigation',
       () async {
+    router =
+        AxRealtimeCacheRouter(engine, initialReadyFreshness: Duration.zero);
     final q = query(['space', 'A']);
     await engine.ensure(q);
     await router.handle({'type': 'realtime.ready'});
     expect(loads.values.single, 1);
     expect(engine.peek(q).data, 1);
     expect(engine.peek(q).isStale, isTrue);
+  });
+  test('first realtime.ready keeps just-loaded bootstrap data', () async {
+    final fresh = query(['space', 'A', 'threads']);
+    await engine.ensure(fresh);
+    final pending = Completer<int>();
+    var slowCalls = 0;
+    final slow = AxQuery<int>(
+        key: AxQueryKey(['space', 'B', 'threads']),
+        load: () {
+          slowCalls++;
+          return pending.future;
+        });
+    final read = engine.ensure(slow);
+    engine.watch(fresh, (_) {}, fireImmediately: false);
+    engine.watch(slow, (_) {}, fireImmediately: false);
+
+    await Future.wait([
+      router.handle({'type': 'realtime.ready'}),
+      Future<void>(() => pending.complete(1)),
+    ]);
+    await read;
+
+    expect(loads['space:A:threads'], 1);
+    expect(engine.peek(fresh).isStale, isFalse);
+    expect(slowCalls, 1);
+    expect(engine.peek(slow).data, 1);
+
+    // Later ready signals are reconnects and still recover everything.
+    await router.handle({'type': 'realtime.ready'});
+    expect(loads['space:A:threads'], 2);
+    expect(slowCalls, 2);
+  });
+  test('Thread metadata bursts share one trailing list refresh', () async {
+    final threads = query(['space', 'A', 'threads']);
+    final spaces = query(['spaces']);
+    await engine.ensure(threads);
+    await engine.ensure(spaces);
+    await Future.wait([
+      for (var i = 0; i < 3; i++)
+        router.handle(
+            {'type': 'thread.updated', 'spaceId': 'A', 'threadId': 'W'}),
+    ]);
+    expect(loads['space:A:threads'], 2);
+    expect(loads['spaces'], 1);
   });
   test('reconnect retains data while only the matching query loads', () async {
     final delayed = Completer<int>();
@@ -429,6 +475,7 @@ void main() {
     engine.watch(q, (_) {});
     final ids = <String>[];
     router = AxRealtimeCacheRouter(engine,
+        initialReadyFreshness: Duration.zero,
         discussionObserved: (_) => false,
         discussionResynchronize: (id) async {
           ids.add(id);

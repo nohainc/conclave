@@ -95,8 +95,14 @@ extension _AxAppController on _AxAppStateMixin {
       final accountSecurityLoad = navigation.kind == AxRouteKind.profileSecurity
           ? _loadAccountSecurity()
           : null;
-      await _loadWorkspaces();
-      await _loadBootstrapState(showSpinner: !hydrated);
+      // Bootstrap already reads the Workspace list; reuse it instead of a
+      // separate list request, and fetch only if bootstrap did not complete.
+      final bootstrapped = await _loadBootstrapState(showSpinner: !hydrated);
+      if (mounted && store.auth.session?.authenticated == true) {
+        if (mounted && store.auth.session?.authenticated == true) {
+          await _loadWorkspaces(fetch: !bootstrapped);
+        }
+      }
       if (accountSecurityLoad != null) await accountSecurityLoad;
     } catch (_) {
       if (mounted) {
@@ -368,9 +374,9 @@ extension _AxAppController on _AxAppStateMixin {
     );
   }
 
-  Future<void> _loadWorkspaces() async {
+  Future<void> _loadWorkspaces({bool fetch = true}) async {
     try {
-      await store.workspaces.list();
+      if (fetch) await store.workspaces.list();
       if (!mounted) return;
       try {
         await store.catalogs.ensureWorkers();
@@ -427,7 +433,12 @@ extension _AxAppController on _AxAppStateMixin {
     if (type == 'realtime.ready') {
       _realtimeTransportConnected = true;
       unawaited(_syncNotificationFeed());
-      unawaited(_refreshRealtimeFeatures('space.updated'));
+      // The first ready follows sign-in, whose bootstrap already loads Spaces
+      // and invitations; only reconnects need the catch-up refresh.
+      if (realtimeReadyOnce) {
+        unawaited(_refreshRealtimeFeatures('space.updated'));
+      }
+      realtimeReadyOnce = true;
       _updateLiveState(() => realtimeStale = false);
       return;
     }
@@ -544,9 +555,14 @@ extension _AxAppController on _AxAppStateMixin {
           type.startsWith('workspace.invitation.') ||
           type.startsWith('space.') ||
           type == 'space_workspace_grant.updated') {
+        // AxRealtimeCacheRouter already revalidates Spaces and invitations
+        // for Space-scoped events; superseding its read would repeat them.
+        final routed = (type.startsWith('space.') ||
+                type.startsWith('invitation.')) &&
+            _eventSpaceId(event) != null;
         await Future.wait([
-          store.spaces.refresh(),
-          store.invitations.refresh(),
+          if (!routed) store.spaces.refresh(),
+          if (!routed) store.invitations.refresh(),
           store.refreshWorkspaceInvitations(),
         ]);
         if (!mounted) return;
@@ -557,6 +573,16 @@ extension _AxAppController on _AxAppStateMixin {
     } catch (error) {
       _reportRefreshFailure(error);
     }
+  }
+
+  /// The Space the cache router keys Space and invitation events by.
+  String? _eventSpaceId(Map<String, dynamic>? event) {
+    if (event == null) return null;
+    final payload = event['payload'];
+    String? id(Object? value) =>
+        value is String && value.isNotEmpty ? value : null;
+    return id(event['spaceId']) ??
+        (payload is Map ? id(payload['spaceId']) ?? id(payload['entityId']) : null);
   }
 
   /// Merges the durable Cloud feed so notifications survive reloads and
@@ -1497,9 +1523,11 @@ extension _AxAppController on _AxAppStateMixin {
     }
   }
 
-  Future<void> _loadBootstrapState(
+  /// Returns true when the bootstrap snapshot (Spaces, Workspaces, viewer)
+  /// was loaded and applied.
+  Future<bool> _loadBootstrapState(
       {String? spaceId, String? workspaceId, bool showSpinner = true}) async {
-    if (store.auth.session?.authenticated != true) return;
+    if (store.auth.session?.authenticated != true) return false;
     final resolvedSpaceId = spaceId;
     if (showSpinner) {
       final reconnecting = !isLoading && store.spaces.items.isNotEmpty;
@@ -1512,7 +1540,7 @@ extension _AxAppController on _AxAppStateMixin {
     try {
       final loaded = await store.loadBootstrapState(
           spaceId: resolvedSpaceId, workspaceId: workspaceId);
-      if (!mounted) return;
+      if (!mounted) return false;
       unawaited(store.people
           .ensure()
           .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
@@ -1535,15 +1563,16 @@ extension _AxAppController on _AxAppStateMixin {
         });
       }
       _ensureNavigationResources(navigation);
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       if (error is AxApiException && error.statusCode == 401) {
         _enterUnauthenticatedState();
-        return;
+        return false;
       }
       if (!showSpinner) {
         _showSnackBar(error.toString(), type: ToastType.error);
-        return;
+        return false;
       }
       _updateState(() {
         isLoading = false;
@@ -1551,6 +1580,7 @@ extension _AxAppController on _AxAppStateMixin {
         loadError = error.toString();
       });
     }
+    return false;
   }
 
   Future<void> _verifySessionAfterDisconnect() {
@@ -1598,8 +1628,12 @@ extension _AxAppController on _AxAppStateMixin {
             _applySpaceNavigation();
           });
         }
-        await _loadWorkspaces();
-        await _loadBootstrapState(showSpinner: !hydrated);
+        final bootstrapped = await _loadBootstrapState(showSpinner: !hydrated);
+        if (mounted && store.auth.session?.authenticated == true) {
+        if (mounted && store.auth.session?.authenticated == true) {
+          await _loadWorkspaces(fetch: !bootstrapped);
+        }
+      }
       }
     } catch (_) {
       // The normal load/error path will explain an unavailable auth service.

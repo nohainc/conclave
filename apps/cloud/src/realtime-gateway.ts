@@ -5,6 +5,7 @@ import {
   realtimeStreamKey,
   RealtimeStreamSchema,
   type RealtimeEventEnvelope,
+  type RealtimeStream,
 } from "@syntila/protocol";
 import { realtimeEventFromRow } from "./event-publisher.js";
 import {
@@ -784,6 +785,11 @@ export class RealtimeGateway implements DurableObject {
     scope: RealtimeScope,
     until?: RealtimeEventEnvelope,
   ): Promise<void> {
+    // A connection without a cursor for a stream has nothing to catch up on:
+    // the client reads current state over HTTP and then follows live events.
+    // Replaying the oldest retained events instead is bounded noise that ends
+    // in a replay_limit or gap signal, and a full recovery on the client.
+    if (!until) await this.seedMissingCursors(connected, scope);
     const rows = await this.loadReplayRows(
       connected.identity.userId,
       scope,
@@ -826,6 +832,9 @@ export class RealtimeGateway implements DurableObject {
       ) {
         continue;
       }
+      if ((this.env as unknown as { REALTIME_DIAGNOSTICS?: string }).REALTIME_DIAGNOSTICS === "1") {
+        console.log(JSON.stringify({ diagnostic: "realtime_replay", scope, eventId: event.eventId, sequence: event.sequence, type: event.type }));
+      }
       const result = this.enqueueEvent(connected, event);
       this.recordQueueResult(result);
       if (result === "resync-required") continue;
@@ -855,59 +864,116 @@ export class RealtimeGateway implements DurableObject {
     }
   }
 
-  private async loadReplayRows(
+  /** The streams a Scope covers for this user, as SQL over realtime_events e. */
+  private replayAudience(
     userId: string,
     scope: RealtimeScope,
-    cursors: ReadonlyMap<string, number>,
-  ): Promise<Record<string, unknown>[]> {
-    let query = `
-      SELECT e.*
-      FROM realtime_events e`;
-    const conditions = ["1 = 1"];
-    const bindings: string[] = [];
+  ): { join: string; where: string; bindings: string[] } | null {
     if (scope.kind === "execution_workspace" && scope.executionWorkspaceId) {
-      conditions.push(
-        "e.stream_kind = 'execution_workspace' AND COALESCE(e.stream_id, e.workspace_id) = ?",
-      );
-      bindings.push(scope.executionWorkspaceId);
-    } else if (scope.kind === "space" && scope.spaceId) {
-      conditions.push("e.stream_kind = 'space' AND e.stream_id = ?");
-      bindings.push(scope.spaceId);
-    } else if (scope.kind === "user") {
-      query += " LEFT JOIN execution_workspaces w ON w.id = e.workspace_id";
-      conditions.push(
-        `(e.stream_kind = 'user' AND e.stream_id = ?) OR
+      return {
+        join: "",
+        where:
+          "e.stream_kind = 'execution_workspace' AND COALESCE(e.stream_id, e.workspace_id) = ?",
+        bindings: [scope.executionWorkspaceId],
+      };
+    }
+    if (scope.kind === "space" && scope.spaceId) {
+      return {
+        join: "",
+        where: "e.stream_kind = 'space' AND e.stream_id = ?",
+        bindings: [scope.spaceId],
+      };
+    }
+    if (scope.kind === "user") {
+      return {
+        join: " LEFT JOIN execution_workspaces w ON w.id = e.workspace_id",
+        where: `(e.stream_kind = 'user' AND e.stream_id = ?) OR
          (e.stream_kind = 'execution_workspace' AND w.owner_user_id = ?) OR
          (e.stream_kind = 'space' AND EXISTS (
            SELECT 1 FROM space_memberships m
            WHERE m.space_id = e.stream_id AND m.user_id = ?
          ))`,
-      );
-      bindings.push(userId, userId, userId);
-    } else if (scope.kind === "run" && scope.runId) {
-      conditions.push("e.run_id = ?");
-      bindings.push(scope.runId);
-    } else if (scope.kind === "thread" && scope.threadId) {
-      conditions.push("e.thread_id = ?");
-      bindings.push(scope.threadId);
-    } else if (scope.workspaceId) {
-      conditions.push(
-        "e.stream_kind = 'execution_workspace' AND COALESCE(e.stream_id, e.workspace_id) = ?",
-      );
-      bindings.push(scope.workspaceId);
-    } else {
-      return [];
+        bindings: [userId, userId, userId],
+      };
     }
-    // One JSON binding avoids a SQL parameter per cursor. Unknown streams
-    // have no matching entry and replay from the beginning. Keep the audience
+    if (scope.kind === "run" && scope.runId) {
+      return { join: "", where: "e.run_id = ?", bindings: [scope.runId] };
+    }
+    if (scope.kind === "thread" && scope.threadId) {
+      return {
+        join: "",
+        where: "e.thread_id = ?",
+        bindings: [scope.threadId],
+      };
+    }
+    if (scope.workspaceId) {
+      return {
+        join: "",
+        where:
+          "e.stream_kind = 'execution_workspace' AND COALESCE(e.stream_id, e.workspace_id) = ?",
+        bindings: [scope.workspaceId],
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Starts every stream the Scope covers, and the connection has no cursor
+   * for, at its newest event.
+   */
+  private async seedMissingCursors(
+    connected: ConnectedClient,
+    scope: RealtimeScope,
+  ): Promise<void> {
+    const audience = this.replayAudience(connected.identity.userId, scope);
+    if (!audience) return;
+    const result = await this.env.SYNTILA_DB.prepare(
+      `SELECT s.stream_kind AS streamKind, s.stream_id AS streamId,
+              (SELECT MAX(x.sequence) FROM realtime_events x
+                WHERE x.stream_kind = s.stream_kind
+                  AND COALESCE(x.stream_id, x.workspace_id) = s.stream_id) AS head
+       FROM (
+         SELECT DISTINCT e.stream_kind AS stream_kind,
+                COALESCE(e.stream_id, e.workspace_id) AS stream_id
+         FROM realtime_events e${audience.join}
+         WHERE (${audience.where})
+       ) s`,
+    )
+      .bind(...audience.bindings)
+      .all<{ streamKind: string; streamId: string | null; head: number }>();
+    for (const row of result.results ?? []) {
+      if (!row.streamId) continue;
+      const key = realtimeStreamKey({
+        kind: row.streamKind as RealtimeStream["kind"],
+        id: row.streamId,
+      });
+      if (!connected.lastDurableSequences.has(key)) {
+        connected.lastDurableSequences.set(key, Number(row.head));
+      }
+    }
+  }
+
+  private async loadReplayRows(
+    userId: string,
+    scope: RealtimeScope,
+    cursors: ReadonlyMap<string, number>,
+  ): Promise<Record<string, unknown>[]> {
+    const audience = this.replayAudience(userId, scope);
+    if (!audience) return [];
+    const query = `
+      SELECT e.*
+      FROM realtime_events e${audience.join}`;
+    const bindings = [...audience.bindings];
+    // One JSON binding avoids a SQL parameter per cursor. Keep the audience
     // predicate grouped so user-scope OR branches cannot bypass cursor filtering.
-    const audience = conditions.join(" AND ");
-    conditions.splice(0, conditions.length, `(${audience})`);
-    conditions.push(`NOT EXISTS (
+    const conditions = [
+      `(${audience.where})`,
+      `NOT EXISTS (
       SELECT 1 FROM json_each(?) cursor
       WHERE cursor.key = json_array(e.stream_kind, COALESCE(e.stream_id, e.workspace_id))
         AND e.sequence <= cursor.value
-    )`);
+    )`,
+    ];
     bindings.push(JSON.stringify(Object.fromEntries(cursors)));
     const result = await this.env.SYNTILA_DB.prepare(
       `${query}
@@ -927,6 +993,21 @@ export class RealtimeGateway implements DurableObject {
     lastSequence: number,
   ): void {
     const streamKey = realtimeStreamKey(realtimeEventStream(event));
+    if (
+      (this.env as unknown as { REALTIME_DIAGNOSTICS?: string })
+        .REALTIME_DIAGNOSTICS === "1"
+    ) {
+      console.log(
+        JSON.stringify({
+          diagnostic: "realtime_gap",
+          scope,
+          streamKey,
+          lastSequence,
+          nextSequence: event.sequence,
+          eventType: event.type,
+        }),
+      );
+    }
     connected.lastDurableSequences.set(
       streamKey,
       Math.max(

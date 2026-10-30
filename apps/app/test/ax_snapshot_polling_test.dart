@@ -93,6 +93,16 @@ void main() {
     expect(source.broadCounts, counts);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('startup reuses the bootstrap Workspace list', (tester) async {
+    final source = PollingSource();
+    final realtime = TestRealtime();
+    await mount(tester, source, realtime);
+    expect(source.bootstraps, 1);
+    // The bootstrap snapshot carries Workspaces; no separate list read.
+    expect(source.workspaces, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('execution events reconcile one Work Request without broad reads',
       (tester) async {
     final source = PollingSource();

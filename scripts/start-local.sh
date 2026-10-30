@@ -7,6 +7,12 @@
 #   2. AX web app: Flutter run with Hot Reload ('r'/'R') + Google Chrome
 #
 # Prints 2 concise status lines on the main terminal and exits immediately.
+#
+# Optional environment:
+#   EXTRA_DART_DEFINES  Space-separated KEY=VALUE pairs passed to Flutter as
+#                       extra --dart-define flags.
+#   LOCAL_LOG_DIR       Also save each window's output to api.log and web.log
+#                       in this folder (relative paths are from the repo root).
 # ==============================================================================
 
 set -euo pipefail
@@ -98,6 +104,22 @@ while [[ $# -gt 0 ]]; do
 done
 
 API_URL="http://${API_HOST}:${PORT}"
+EXTRA_DART_DEFINE_FLAGS=""
+for define in ${EXTRA_DART_DEFINES:-}; do
+  if [[ "${define}" != *=* ]]; then
+    echo "Error: EXTRA_DART_DEFINES entries must be KEY=VALUE (got '${define}')." >&2
+    exit 2
+  fi
+  EXTRA_DART_DEFINE_FLAGS+=" --dart-define=${define}"
+done
+API_LOG_PIPE=""
+WEB_LOG_PIPE=""
+if [[ -n "${LOCAL_LOG_DIR:-}" ]]; then
+  [[ "${LOCAL_LOG_DIR}" == /* ]] || LOCAL_LOG_DIR="${ROOT_DIR}/${LOCAL_LOG_DIR}"
+  mkdir -p "${LOCAL_LOG_DIR}"
+  API_LOG_PIPE=" 2>&1 | tee \"${LOCAL_LOG_DIR}/api.log\""
+  WEB_LOG_PIPE=" 2>&1 | tee \"${LOCAL_LOG_DIR}/web.log\""
+fi
 WEB_URL="http://localhost:${WEB_PORT}"
 FLUTTER_BIN="${FLUTTER_BIN:-$(command -v flutter || true)}"
 if [[ -z "${FLUTTER_BIN}" && -x "/Users/${USER}/development/flutter/bin/flutter" ]]; then
@@ -131,13 +153,13 @@ cat << EOF > "${RUNNER_API}"
 set -euo pipefail
 cd "${ROOT_DIR}"
 echo -e "\033[1m\033[0;34m[Syntila API Backend Logs]\033[0m ${API_MODE} | Base: ${API_URL}\n"
-exec pnpm exec wrangler dev \\
+pnpm exec wrangler dev \\
   --config "${API_CONFIG}" \\
   --port "${PORT}" \\
   --ip "${IP}" \\
   --var "BETTER_AUTH_URL:${API_URL}" \\
   --var "SYNTILA_APP_URL:${WEB_URL}" \\
-  --var "BETTER_AUTH_TRUSTED_ORIGINS:${API_URL},${WEB_URL},http://localhost:${PORT},http://127.0.0.1:${PORT},https://syntila.app"
+  --var "BETTER_AUTH_TRUSTED_ORIGINS:${API_URL},${WEB_URL},http://localhost:${PORT},http://127.0.0.1:${PORT},https://syntila.app"${API_LOG_PIPE}
 EOF
 chmod +x "${RUNNER_API}"
 
@@ -164,7 +186,7 @@ set -euo pipefail
 cd "${ROOT_DIR}/apps/app"
 echo -e "\033[1m\033[0;32m[Syntila Flutter Web]\033[0m ${WEB_CONTROLS}\n"
 export FLUTTER_PREBUILT_ENGINE_VERSION="${FLUTTER_ENGINE_VERSION}"
-exec "${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" ${WEB_BROWSER_FLAGS} --dart-define="SYNTILA_API_URL=${API_URL}/api"
+"${FLUTTER_BIN}" run --${WEB_BUILD_MODE} -d "${DEVICE}" --web-port="${WEB_PORT}" ${WEB_BROWSER_FLAGS} --dart-define="SYNTILA_API_URL=${API_URL}/api"${EXTRA_DART_DEFINE_FLAGS}${WEB_LOG_PIPE}
 EOF
 chmod +x "${RUNNER_FLUTTER}"
 

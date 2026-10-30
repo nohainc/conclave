@@ -103,6 +103,7 @@ describe("cursor-aware SQL replay", () => {
     it(`${name}: a full replay page reports possible truncation`, async () => {
       const f = harness();
       f.insert(kind, id, 257);
+      f.cursors.set(JSON.stringify([kind, id]), 0);
       await f.replay(scope);
       expect(f.frames.filter((frame) => frame.type === "event")).toHaveLength(
         256,
@@ -114,12 +115,14 @@ describe("cursor-aware SQL replay", () => {
       });
       expect(f.cursors.get(JSON.stringify([kind, id]))).toBe(256);
     });
-    it(`${name}: an unknown stream starts from its first event`, async () => {
+    it(`${name}: an unknown stream starts at its newest event without replaying history`, async () => {
       const f = harness();
-      f.insert(kind, id, 2, "discussion.deleted");
+      f.insert(kind, id, 300, "discussion.deleted");
       f.cursors.set('["space","unrelated"]', 900);
       await f.replay(scope);
-      expect(f.frames.map((frame) => frame.event?.sequence)).toEqual([1, 2]);
+      expect(f.frames).toEqual([]);
+      expect(f.cursors.get(JSON.stringify([kind, id]))).toBe(300);
+      expect(f.cursors.get('["space","unrelated"]')).toBe(900);
     });
   }
   it("user scope filters every audience branch and excludes unauthorized streams", async () => {
@@ -142,6 +145,7 @@ describe("cursor-aware SQL replay", () => {
   it("exactly 256 rows conservatively signals a gap", async () => {
     const f = harness();
     f.insert("space", "S", 256);
+    f.cursors.set(JSON.stringify(["space", "S"]), 0);
     await f.replay({ kind: "space", spaceId: "S" });
     expect(f.frames.at(-1)?.reason).toBe("replay_limit");
   });

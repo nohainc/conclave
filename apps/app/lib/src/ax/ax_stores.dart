@@ -218,7 +218,14 @@ class AxStore {
   /// so open sharing views reload without a page refresh.
   final ValueNotifier<int> workspaceInvitationRevision = ValueNotifier(0);
 
-  Future<void> refreshWorkspaceInvitations() async {
+  Future<void>? _workspaceInvitationsFlight;
+
+  /// Concurrent callers (bootstrap, realtime catch-up) share one request.
+  Future<void> refreshWorkspaceInvitations() =>
+      _workspaceInvitationsFlight ??= _loadWorkspaceInvitations()
+          .whenComplete(() => _workspaceInvitationsFlight = null);
+
+  Future<void> _loadWorkspaceInvitations() async {
     final AxDataSource raw = dataSource;
     if (raw is! AxWorkspaceSharingDataSource) return;
     final source = raw as AxWorkspaceSharingDataSource;
@@ -670,6 +677,7 @@ class WorkspaceStore extends ValueNotifier<List<AxWorkspace>> {
   bool _disposed = false;
   void clear() {
     _generation++;
+    _listFlight = null;
     engine.remove(query.key);
   }
 
@@ -690,7 +698,13 @@ class WorkspaceStore extends ValueNotifier<List<AxWorkspace>> {
     }
   }
 
-  Future<List<AxWorkspace>> list() async {
+  Future<List<AxWorkspace>>? _listFlight;
+
+  /// Concurrent callers share one in-flight request.
+  Future<List<AxWorkspace>> list() =>
+      _listFlight ??= _list().whenComplete(() => _listFlight = null);
+
+  Future<List<AxWorkspace>> _list() async {
     final generation = ++_generation;
     final value = await source.loadWorkspaces();
     if (!_disposed && generation == _generation) replace(value);

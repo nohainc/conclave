@@ -1795,7 +1795,8 @@ class _ThreadPageState extends State<ThreadPage>
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
           unawaited(_refreshWorkTimeline()
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));
-        } else if (type == 'thread.updated' || type == 'thread.work_cleared') {
+        } else if (type == 'thread.work_cleared') {
+          // Metadata and read-state updates do not change conversation history.
           unawaited(_discussionCache
               .synchronize(widget.thread.id)
               .then<void>((_) {}, onError: (Object _, StackTrace __) {}));

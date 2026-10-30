@@ -7,6 +7,7 @@ import 'dart:math' as math;
 
 import 'package:syntila_protocol/syntila_protocol.dart';
 
+import '../ax/ax_render_diagnostics.dart';
 import 'realtime_client_stub.dart';
 import 'realtime_health.dart';
 import 'realtime_cursors.dart';
@@ -82,6 +83,9 @@ class _BrowserRealtimeClient implements RealtimeClient {
     if (_closed || endpoint == null) return;
     final socket = html.WebSocket(endpoint.toString());
     _socket = socket;
+    // Cloud sends realtime.ready on accept and again after hello; both mean
+    // the same connection is live, and each one triggers a full recovery.
+    var readyForwarded = false;
     socket.onOpen.listen((_) {
       if (_closed || !identical(_socket, socket)) return;
       _attempt = 0;
@@ -105,6 +109,8 @@ class _BrowserRealtimeClient implements RealtimeClient {
         if (message['type'] == 'realtime.pong') {
           _health.acknowledge();
         } else if (message['type'] == 'realtime.ready') {
+          if (readyForwarded) return;
+          readyForwarded = true;
           _events.add(message);
         } else if (message['type'] == 'event' && message['event'] is Map) {
           final eventValue = Map<String, dynamic>.from(message['event'] as Map);
@@ -160,6 +166,13 @@ class _BrowserRealtimeClient implements RealtimeClient {
 
   void _send(Map<String, dynamic> message) {
     final socket = _socket;
+    if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS') &&
+        (message['type'] == 'subscribe' || message['type'] == 'unsubscribe')) {
+      AxRenderDiagnostics.instance.record('realtime.subscription',
+          operation: message['type'] as String,
+          contextData: {'scope': message['scope'],
+            'socketOpen': socket?.readyState == html.WebSocket.OPEN});
+    }
     if (socket?.readyState == html.WebSocket.OPEN) {
       socket!.send(jsonEncode(message));
     }

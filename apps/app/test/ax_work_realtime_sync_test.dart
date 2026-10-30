@@ -283,9 +283,6 @@ void main() {
     'work_request.completed',
     'work_request.failed',
     'work_request.cancelled',
-    'step.completed',
-    'step.failed',
-    'step.cancelled'
   ]) {
     test('$type reconciles one request rather than history', () async {
       await seed();
@@ -295,6 +292,46 @@ void main() {
       expect(cache.request('w', 'r')!.finalText, '# Result');
     });
   }
+  for (final (type, status) in [
+    ('step.completed', 'completed'),
+    ('step.failed', 'failed'),
+    ('step.cancelled', 'cancelled'),
+  ]) {
+    test('$type on the last Step waits for the request terminal read',
+        () async {
+      await seed();
+      await sync.handle(event(type, status: status));
+      expect(source.gets, isEmpty);
+      expect(cache.request('w', 'r')!.status, 'running');
+      expect(cache.request('w', 'r')!.steps.single.status, status);
+      await sync.handle(event('work_request.$status', status: status));
+      expect(source.gets, ['r']);
+      expect(cache.request('w', 'r')!.finalText, '# Result');
+    });
+  }
+  test('a terminal event for an earlier Step still re-reads', () async {
+    source.records = [
+      work('r').copyWith(steps: const [
+        AxWorkRequestStep(kind: 'implement', status: 'running'),
+        AxWorkRequestStep(kind: 'review', status: 'queued'),
+      ])
+    ];
+    await seed();
+    await sync.handle(event('step.completed'));
+    expect(source.gets, ['r']);
+  });
+  test('first phase of a step read before assignment adopts it', () async {
+    source.records = [work('r')];
+    await seed();
+    await sync.handle(phaseEvent('r', 'starting', assignment: 'asg-new'));
+    expect(source.gets, isEmpty);
+    final step = cache.request('w', 'r')!.steps.single;
+    expect(step.assignmentId, 'asg-new');
+    expect(step.effectivePhase, 'starting');
+    await sync.handle(phaseEvent('r', 'running', assignment: 'asg-new'));
+    expect(source.gets, isEmpty);
+    expect(cache.request('w', 'r')!.steps.single.effectivePhase, 'running');
+  });
   test('unknown created request is inserted from its single detail', () async {
     await seed();
     await sync
@@ -337,7 +374,7 @@ void main() {
     final old = Completer<AxWorkRequestStatus>(),
         latest = Completer<AxWorkRequestStatus>();
     source.queuedDetails.addAll([old, latest]);
-    final first = sync.handle(event('step.completed', sequence: 1));
+    final first = sync.handle(event('work_request.completed', sequence: 1));
     final next = sync
         .handle(event('work_request.failed', status: 'failed', sequence: 2));
     expect(source.gets, ['r']);

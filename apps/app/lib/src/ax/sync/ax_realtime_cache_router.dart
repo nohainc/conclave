@@ -12,12 +12,17 @@ class AxRealtimeCacheRouter {
       this.discussionFullResynchronize,
       this.discussionObserved,
       this.viewedThreadActivity,
-      this.activityDebounce = const Duration(milliseconds: 400)});
+      this.activityDebounce = const Duration(milliseconds: 400),
+      this.initialReadyFreshness = const Duration(seconds: 2)});
 
   /// Returns true when the Thread is open in a visible tab. Such activity is
   /// read on arrival. Ordering still needs to refresh for this activity.
   final bool Function(String threadId)? viewedThreadActivity;
   final Duration activityDebounce;
+
+  /// The first realtime.ready of a scope follows the bootstrap reads that
+  /// populated the cache. Reads that are loading or this recent are kept.
+  final Duration initialReadyFreshness;
   final Future<void> Function(String threadId, String type, String entityId)?
       discussionChanged;
   final Future<void> Function(String threadId)? discussionResynchronize;
@@ -26,35 +31,52 @@ class AxRealtimeCacheRouter {
   final AxSyncEngine engine;
   final _eventIds = <String>{};
   final _recoveries = <(String, String?), Future<void>>{};
+  final _readyScopes = <(String, String?)>{};
 
   Timer? _activityTimer;
   final _activitySpaces = <String>{};
   final _activityThreads = <String>{};
+  bool _activitySpacesList = false;
+  Completer<void>? _activityFlush;
 
   void reset() {
     _eventIds.clear();
     _recoveries.clear();
+    _readyScopes.clear();
+    _activitySpacesList = false;
     _activityTimer?.cancel();
     _activityTimer = null;
+    final flush = _activityFlush;
+    _activityFlush = null;
+    if (flush != null && !flush.isCompleted) flush.complete();
     _activitySpaces.clear();
     _activityThreads.clear();
   }
 
   /// Sidebar indicators come from the Space and Thread lists. A burst of
-  /// Discussion and Work events shares one trailing refresh of both.
+  /// Discussion, Work and Thread metadata events shares one trailing refresh.
+  /// With [awaitRefresh] the returned future completes after that refresh.
   Future<void> _activityChanged(
     String threadId,
-    String? spaceId,
-  ) {
-    viewedThreadActivity?.call(threadId);
+    String? spaceId, {
+    bool spacesList = true,
+    bool viewed = true,
+    bool awaitRefresh = false,
+  }) {
+    if (viewed) viewedThreadActivity?.call(threadId);
     _activityThreads.add(threadId);
     if (spaceId != null) _activitySpaces.add(spaceId);
+    _activitySpacesList |= spacesList;
+    final flush = _activityFlush ??= Completer<void>();
     _activityTimer ??= Timer(activityDebounce, () {
       _activityTimer = null;
+      _activityFlush = null;
       final threads = Set.of(_activityThreads);
       final spaces = Set.of(_activitySpaces);
+      final includeSpacesList = _activitySpacesList;
       _activityThreads.clear();
       _activitySpaces.clear();
+      _activitySpacesList = false;
       for (final collection in engine.cachedValues<List<AxThread>>().entries) {
         final parts = collection.key.parts;
         if (parts.length == 3 &&
@@ -64,16 +86,19 @@ class AxRealtimeCacheRouter {
           spaces.add(parts[1]);
         }
       }
-      unawaited(engine
+      engine
           .revalidateWhere((key) =>
-              key == AxQueryKey(['spaces']) ||
+              (includeSpacesList && key == AxQueryKey(['spaces'])) ||
               (key.parts.length == 3 &&
                   key.parts[0] == 'space' &&
                   key.parts[2] == 'threads' &&
                   spaces.contains(key.parts[1])))
-          .catchError((Object _) {}));
+          .catchError((Object _) {})
+          .whenComplete(() {
+        if (!flush.isCompleted) flush.complete();
+      });
     });
-    return Future.value();
+    return awaitRefresh ? flush.future : Future.value();
   }
 
   Future<void> handle(Map<String, dynamic> event) async {
@@ -98,8 +123,11 @@ class AxRealtimeCacheRouter {
       late final Future<void> recovery;
       // Replay is bounded and may omit older edits without reporting a gap.
       // Reconcile retained history on every ready signal until replay is complete.
-      recovery =
-          _recover(scope, fullDiscussionReconciliation: true).whenComplete(() {
+      final initial = type == 'realtime.ready' && _readyScopes.add(key);
+      recovery = _recover(scope,
+              fullDiscussionReconciliation: true,
+              keepFresh: initial ? initialReadyFreshness : null)
+          .whenComplete(() {
         if (identical(_recoveries[key], recovery)) _recoveries.remove(key);
       });
       _recoveries[key] = recovery;
@@ -172,6 +200,11 @@ class AxRealtimeCacheRouter {
           key == AxQueryKey(['spaces']) ||
           key == AxQueryKey(['archived-spaces']) ||
           key == AxQueryKey(['me', 'invitations']));
+    } else if (type == 'thread.updated' && threadId != null) {
+      // Metadata, read and activity changes arrive in bursts (open, read,
+      // submit, complete). One trailing refresh of the parent list suffices.
+      await _activityChanged(threadId, spaceId,
+          spacesList: false, viewed: false, awaitRefresh: true);
     } else if (type.startsWith('thread.')) {
       final affectedThread = threadId ?? id(payload['entityId']);
       final parents = <String>{if (spaceId != null) spaceId};
@@ -200,8 +233,8 @@ class AxRealtimeCacheRouter {
   }
 
   Future<void> _recover(AxSyncScope scope,
-      {required bool fullDiscussionReconciliation}) async {
-    engine.invalidateScope(scope);
+      {required bool fullDiscussionReconciliation, Duration? keepFresh}) async {
+    engine.invalidateScope(scope, keepFresh: keepFresh);
     final discussions = engine.relevantKeys
         .where((key) =>
             scope.matches(key) &&

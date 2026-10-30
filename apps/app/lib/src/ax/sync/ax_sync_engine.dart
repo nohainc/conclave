@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../ax_render_diagnostics.dart';
 import 'ax_cache_policy.dart';
 import 'ax_mutation.dart';
 import 'ax_query.dart';
@@ -338,6 +339,21 @@ class AxSyncEngine {
     final entry = _entry(query);
     entry.accessed = _clock();
     if (!supersede && entry.flight != null) return entry.flight!;
+    if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS')) {
+      AxRenderDiagnostics.instance.record('realtime.revalidate',
+          operation: 'refresh',
+          contextData: {
+            'query': query.key.toString(),
+            'supersede': supersede,
+            'invalidated': entry.invalidated,
+            'caller': StackTrace.current
+                .toString()
+                .split('\n')
+                .skip(1)
+                .take(6)
+                .join(' | '),
+          });
+    }
     final generation = ++entry.generation;
     final completer = Completer<T>();
     entry.flight = completer.future;
@@ -399,11 +415,23 @@ class AxSyncEngine {
   }
 
   /// Scope invalidation keeps cached data and immutable cursor pages intact.
-  void invalidateScope(AxSyncScope scope) {
+  ///
+  /// With [keepFresh], entries that are loading or were loaded within that
+  /// window are left alone: their read already overlaps the new connection,
+  /// so detaching and repeating it would only duplicate the request.
+  void invalidateScope(AxSyncScope scope, {Duration? keepFresh}) {
+    final now = _clock();
     for (final item in _entries.entries.toList()) {
-      if (scope.matches(item.key)) {
-        invalidate(item.key);
+      if (!scope.matches(item.key)) continue;
+      final entry = item.value;
+      if (keepFresh != null &&
+          (entry.flight != null ||
+              (!entry.invalidated &&
+                  entry.fetched != null &&
+                  now.difference(entry.fetched!) < keepFresh))) {
+        continue;
       }
+      invalidate(item.key);
     }
   }
 
@@ -467,6 +495,12 @@ class AxSyncEngine {
                 item.value.listeners.isNotEmpty))
         .toList();
     await Future.wait(entries.map((item) {
+      if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS')) {
+        AxRenderDiagnostics.instance.record('realtime.revalidate',
+          contextData: {'query': item.key.toString(),
+            'inFlight': item.value.flight != null,
+            'caller': StackTrace.current.toString().split('\n').skip(1).take(4).join(' | ')});
+      }
       invalidate(item.key);
       return item.value.revalidate();
     }));

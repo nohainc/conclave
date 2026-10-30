@@ -498,6 +498,15 @@ class AxWorkRequestStep {
         executionPhaseDetail: AxExecutionPhase.detail(phase),
       );
 
+  /// Adopts the first assignment Cloud reports for a step that was read
+  /// before its assignment existed, together with that assignment's phase.
+  AxWorkRequestStep withAssignedPhase(String assignment, String phase) => _copy(
+        status: status,
+        executionPhase: phase,
+        executionPhaseDetail: AxExecutionPhase.detail(phase),
+        assignment: assignment,
+      );
+
   /// A terminal status always carries its terminal phase, so a step moved to
   /// `completed` can never keep rendering a stale `running` phase.
   AxWorkRequestStep withStatus(String value) => _copy(
@@ -512,6 +521,7 @@ class AxWorkRequestStep {
     required String status,
     required String? executionPhase,
     required String? executionPhaseDetail,
+    String? assignment,
   }) =>
       AxWorkRequestStep(
           kind: kind,
@@ -534,7 +544,7 @@ class AxWorkRequestStep {
           elapsedMs: elapsedMs,
           completedAt: completedAt,
           resultText: resultText,
-          assignmentId: assignmentId,
+          assignmentId: assignment ?? assignmentId,
           sessionPolicy: sessionPolicy,
           errorCode: errorCode,
           errorMessage: errorMessage,

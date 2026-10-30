@@ -438,6 +438,23 @@ class AxWorkRealtimeSync extends ChangeNotifier {
             status != AxExecutionPhase.uncertain) {
           return;
         }
+        // The step was read before Cloud created its assignment. The first
+        // forward phase names that assignment; adopt it rather than re-read.
+        if (step != null &&
+            step.assignmentId == null &&
+            eventAssignment is String &&
+            eventAssignment.isNotEmpty &&
+            AxExecutionPhase.advances(step.effectivePhase, status)) {
+          cache.patchRequest(
+              threadId,
+              current.copyWith(steps: [
+                for (final s in current.steps)
+                  s.kind == kind
+                      ? s.withAssignedPhase(eventAssignment, status)
+                      : s
+              ]));
+          return;
+        }
         if (step != null &&
             sameAssignment &&
             AxExecutionPhase.advances(step.effectivePhase, status)) {
@@ -465,6 +482,24 @@ class AxWorkRealtimeSync extends ChangeNotifier {
         return;
       }
     }
+    // The last Step's terminal event is always followed by the request's own
+    // terminal event, which re-reads the request. Mark the Step finished now
+    // and let that single read carry the result, instead of reading twice.
+    if (current != null &&
+        kindIsLastStep(current, payload['stepKind']) &&
+        !AxExecutionPhase.isTerminal(current.status) &&
+        ((type == 'step.completed' && status == 'completed') ||
+            (type == 'step.failed' && status == 'failed') ||
+            (type == 'step.cancelled' && status == 'cancelled'))) {
+      final kind = payload['stepKind'] as String;
+      cache.patchRequest(
+          threadId,
+          current.copyWith(steps: [
+            for (final step in current.steps)
+              step.kind == kind ? step.withStatus(status as String) : step
+          ]));
+      return;
+    }
     // Terminal and incomplete events need result/error/Step details.
     try {
       await cache.refreshRequest(threadId, id, supersede: true);
@@ -474,6 +509,11 @@ class AxWorkRealtimeSync extends ChangeNotifier {
       rethrow;
     }
   }
+
+  static bool kindIsLastStep(AxWorkRequest request, Object? kind) =>
+      kind is String &&
+      request.steps.isNotEmpty &&
+      request.steps.last.kind == kind;
 
   void reset() {
     ++_generation;

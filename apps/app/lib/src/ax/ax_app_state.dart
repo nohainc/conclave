@@ -45,6 +45,7 @@ mixin _AxAppStateMixin on State<SyntilaAppShell> {
   late final RealtimeClient realtimeClient;
   StreamSubscription<Map<String, dynamic>>? realtimeSubscription;
   bool realtimeStarted = false;
+  bool realtimeReadyOnce = false;
   void Function()? _cancelWorkRealtime;
 
   bool authRequired = false;

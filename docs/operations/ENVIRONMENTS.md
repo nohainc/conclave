@@ -14,7 +14,7 @@ The Workspace environment is chosen at build time (`SYNTILA_WORKSPACE_ENVIRONMEN
 
 ## Local stack
 
-1. `pnpm db:migrate:local` once, and after pulling new migrations.
+1. Stop the local API, then run `pnpm db:migrate:local` once and after pulling new migrations. Migration 0093 updates legacy `conclave.*` desktop authentication audiences to `syntila.*` while retaining local accounts and desktop session records.
 2. `pnpm start:local` opens two terminals: the API (local D1) and the web app.
 3. Workspace, pick one:
    - `pnpm workspace:run:local` runs the service from Dart source.

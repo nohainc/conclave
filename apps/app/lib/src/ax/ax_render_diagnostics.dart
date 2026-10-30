@@ -117,7 +117,12 @@ class AxRenderDiagnostics {
           _stringValue(payloadMap['requestId']),
       component: 'realtime',
     );
-    record('realtime.event');
+    record('realtime.event', contextData: {
+      'eventId': event['eventId'],
+      'sequence': event['sequence'],
+      'spaceId': event['spaceId'],
+      'scope': event['scope'],
+    });
   }
 
   void cacheMutation({
@@ -198,6 +203,11 @@ class AxRenderDiagnostics {
       _recent.add(Map.unmodifiable(record));
       if (_recent.length > 256) _recent.removeAt(0);
       sink?.call(record);
+      if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS') &&
+          (event == 'realtime.event' || event == 'realtime.subscription' ||
+              event == 'realtime.revalidate')) {
+        debugPrint('[AX realtime] $record', wrapWidth: 4096);
+      }
       if (kDebugMode && event == 'exception') {
         debugPrint('[AX render] ${record['category']}: ${record['error']}');
       }
