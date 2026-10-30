@@ -35,10 +35,10 @@
   <h2>Install</h2>
   <p>Add this signed repository once:</p>
   <pre>
-curl --fail --location https://nohainc.github.io/conclave/syntila-archive-keyring.gpg -o /tmp/syntila-archive-keyring.gpg
+curl --fail --location https://nohainc.github.io/syntila/syntila-archive-keyring.gpg -o /tmp/syntila-archive-keyring.gpg
 gpg --show-keys --with-fingerprint /tmp/syntila-archive-keyring.gpg
 sudo install -D -m 644 /tmp/syntila-archive-keyring.gpg /etc/apt/keyrings/syntila-archive-keyring.gpg
-printf 'Types: deb\nURIs: https://nohainc.github.io/conclave\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/syntila-archive-keyring.gpg\n' | sudo tee /etc/apt/sources.list.d/syntila.sources
+printf 'Types: deb\nURIs: https://nohainc.github.io/syntila\nSuites: stable\nComponents: main\nSigned-By: /etc/apt/keyrings/syntila-archive-keyring.gpg\n' | sudo tee /etc/apt/sources.list.d/syntila.sources
 sudo apt update
 sudo apt install syntila</pre>
   <p>
@@ -78,9 +78,6 @@ syntila status</pre>
       >Operator guide</a
     >
     · <a href="dists/stable/Release">Repository metadata</a> ·
-    <a
-      href="pool/main/c/syntila/syntila_1.0.9_amd64.deb"
-      >amd64 package</a
-    >
+    <a href="pool/main/c/syntila/syntila_1.0.10_amd64.deb">amd64 package</a>
   </p>
 </html>
