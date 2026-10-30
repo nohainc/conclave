@@ -68,6 +68,8 @@ class ToolProfileCatalogClient {
   final ToolProfileCandidateValidator? candidateValidator;
   final ToolProfileRevocationHandler? onRevocationsApplied;
   final HttpClient _client;
+  Future<void>? _passTrustRefresh;
+  int _passDepth = 0;
   List<WorkerDescriptor> _workers = const [];
   bool _catalogPersisted = false;
   List<WorkerDescriptor> get workers => _workers;
@@ -229,13 +231,35 @@ class ToolProfileCatalogClient {
 
   void close() => _client.close(force: true);
 
+  /// Runs [body] as one sync pass: every [syncWorkerProfiles] call inside it
+  /// shares a single release-trust refresh instead of fetching it per Worker.
+  Future<T> withSharedTrustRefresh<T>(Future<T> Function() body) async {
+    _passDepth++;
+    try {
+      return await body();
+    } finally {
+      if (--_passDepth == 0) _passTrustRefresh = null;
+    }
+  }
+
+  Future<void> _trustRefreshForSync() {
+    final refresh = trustRefresher ?? _refreshTrustState;
+    if (_passDepth == 0) return refresh();
+    final shared = _passTrustRefresh ??= refresh();
+    // A failed refresh is retried by the next Worker in the pass.
+    shared.catchError((Object _) {
+      if (identical(_passTrustRefresh, shared)) _passTrustRefresh = null;
+    });
+    return shared;
+  }
+
   /// Fetches, verifies, validates and activates the one current Profile.
   /// No channel or multi-release lookup is involved in V9 activation.
   Future<List<ToolProfileCandidate>> syncWorkerProfiles(
       String workerTypeId) async {
     _validateWorkerTypeId(workerTypeId);
     await store.restoreRevocations();
-    await (trustRefresher ?? _refreshTrustState)();
+    await _trustRefreshForSync();
     await store.restoreRevocations(force: true);
     await store.persistRevocations();
     final affectedWorkerTypeIds = await store.reconcileRevocations();

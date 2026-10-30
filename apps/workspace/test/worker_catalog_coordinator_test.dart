@@ -258,7 +258,7 @@ void main() {
       order,
       [
         'catalog',
-        'trust',
+        // Both Workers in one pass share a single release-trust refresh.
         'trust',
         'readiness',
       ],

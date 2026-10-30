@@ -461,11 +461,12 @@ class WorkerCatalogCoordinator extends WorkspaceNotifier
   Future<void> _syncAndResolveProfiles(
     List<WorkerDescriptor> workers,
     int generation,
-  ) async {
-    for (final worker in workers) {
-      await _syncAndResolveWorker(worker, generation);
-    }
-  }
+  ) =>
+      catalog.withSharedTrustRefresh(() async {
+        for (final worker in workers) {
+          await _syncAndResolveWorker(worker, generation);
+        }
+      });
 
   Future<void> _syncAndResolveWorker(
     WorkerDescriptor worker,
