@@ -287,6 +287,7 @@ Future<WorkspaceRuntime> buildWorkspaceRuntime(
             authToken: inputToken,
           ),
           staging: inputStaging,
+          pushConnected: () => connection?.isConnected ?? false,
         );
   late final WorkerAssignmentHandler workerHandler;
   workerHandler = WorkerAssignmentHandler(

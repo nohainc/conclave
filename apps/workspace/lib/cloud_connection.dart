@@ -498,8 +498,10 @@ class WorkspaceCloudConnection {
   static const startPermitCapability = 'assignment.start_permit.v1';
   static const _startPermitTimeout = Duration(seconds: 15);
   static const _startPermitResendInterval = Duration(seconds: 3);
-  final _pendingStartPermits = <String, Completer<bool>>{};
+  static const _prefetchedStartPermitRetention = Duration(minutes: 2);
+  final _pendingStartPermits = <String, Completer<DateTime?>>{};
   final _startPermitContexts = <String, WorkspaceAssignmentContext>{};
+  final _prefetchedStartPermits = <String, _PrefetchedStartPermit>{};
   final _pendingAssignmentsDuringSync = <Map<String, dynamic>>[];
   static const _maxPendingActivityEvents = 256;
   final _pendingActivityEvents = <_PendingWorkerActivity>[];
@@ -902,6 +904,61 @@ class WorkspaceCloudConnection {
   Future<bool> requestStartPermit(WorkspaceAssignmentContext context) async {
     final startPermit = context.payload['startPermit'];
     if (startPermit is! Map || startPermit['required'] != true) return true;
+    // A permit requested at admission saves the round trip here, but only
+    // while it is still valid by Cloud's clock; otherwise ask again.
+    final prefetched = _prefetchedStartPermits.remove(context.assignmentId);
+    if (prefetched != null && prefetched.matches(context)) {
+      final expiresAt = await prefetched.expiresAt;
+      if (_startPermitStillValid(expiresAt)) return true;
+    }
+    final expiresAt = await _requestStartPermitExpiry(context);
+    final granted = _startPermitStillValid(expiresAt);
+    if (!granted) {
+      await recordAssignmentDiagnostic(
+        context,
+        event: 'assignment.start_permit_denied',
+        stage: 'startup',
+        severity: 'warning',
+        errorCode: 'start_permit_denied',
+        retryable: false,
+      );
+    }
+    return granted;
+  }
+
+  /// Requests the start permit right after admission so the grant overlaps
+  /// local preparation instead of following it. Fencing is unchanged: the
+  /// Engine still launches only after [requestStartPermit] sees a valid grant.
+  void prefetchStartPermit(WorkspaceAssignmentContext context) {
+    final startPermit = context.payload['startPermit'];
+    if (startPermit is! Map || startPermit['required'] != true) return;
+    final expiresAt = _requestStartPermitExpiry(context);
+    _prefetchedStartPermits[context.assignmentId] =
+        _PrefetchedStartPermit(context, expiresAt);
+    // The entry is consumed by [requestStartPermit]; drop it if the
+    // assignment ends before launch so it cannot outlive the attempt.
+    unawaited(expiresAt.then((_) {
+      Timer(WorkspaceCloudConnection._prefetchedStartPermitRetention, () {
+        final current = _prefetchedStartPermits[context.assignmentId];
+        if (identical(current?.expiresAt, expiresAt)) {
+          _prefetchedStartPermits.remove(context.assignmentId);
+        }
+      });
+    }));
+  }
+
+  bool _startPermitStillValid(DateTime? expiresAt) {
+    final latestCloudNow = startPermitClock.latestServerTime;
+    return expiresAt != null &&
+        latestCloudNow != null &&
+        expiresAt.isAfter(latestCloudNow);
+  }
+
+  /// Sends the permit request and resolves to the grant's expiry, or null
+  /// when Cloud denies it, does not answer in time or the connection drops.
+  Future<DateTime?> _requestStartPermitExpiry(
+    WorkspaceAssignmentContext context,
+  ) async {
     final assignmentId = context.assignmentId;
     final existing = _pendingStartPermits[assignmentId];
     if (existing != null) {
@@ -909,11 +966,11 @@ class WorkspaceCloudConnection {
       if (pending?.attemptId != context.attemptId ||
           pending?.workspaceRuntimeId != context.workspaceRuntimeId ||
           pending?.idempotencyKey != context.idempotencyKey) {
-        return false;
+        return null;
       }
       return existing.future;
     }
-    final completer = Completer<bool>();
+    final completer = Completer<DateTime?>();
     _pendingStartPermits[assignmentId] = completer;
     _startPermitContexts[assignmentId] = context;
     final deadline = DateTime.now().add(_startPermitTimeout);
@@ -935,21 +992,10 @@ class WorkspaceCloudConnection {
         if (DateTime.now().isAfter(deadline)) return;
         send();
       });
-      final granted = await completer.future.timeout(
+      return await completer.future.timeout(
         _startPermitTimeout,
-        onTimeout: () => false,
+        onTimeout: () => null,
       );
-      if (!granted) {
-        await recordAssignmentDiagnostic(
-          context,
-          event: 'assignment.start_permit_denied',
-          stage: 'startup',
-          severity: 'warning',
-          errorCode: 'start_permit_denied',
-          retryable: false,
-        );
-      }
-      return granted;
     } finally {
       resend?.cancel();
       _pendingStartPermits.remove(assignmentId);
@@ -982,13 +1028,12 @@ class WorkspaceCloudConnection {
     final expiry = payload['expiresAt'];
     final expiresAt = expiry is String ? DateTime.tryParse(expiry) : null;
     final permitId = payload['permitId'];
-    final latestCloudNow = startPermitClock.latestServerTime;
     completer.complete(payload['granted'] == true &&
-        permitId is String &&
-        permitId.isNotEmpty &&
-        expiresAt != null &&
-        latestCloudNow != null &&
-        expiresAt.isAfter(latestCloudNow));
+            permitId is String &&
+            permitId.isNotEmpty &&
+            _startPermitStillValid(expiresAt)
+        ? expiresAt
+        : null);
   }
 
   /// Records and reports the first evidence that the Engine and provider
@@ -2431,4 +2476,17 @@ class WorkspaceCloudConnection {
     lastHelloSentAt = null;
     connectionStage = WorkspaceConnectionStage.offline;
   }
+}
+
+/// A start permit requested at admission, bound to the exact attempt.
+class _PrefetchedStartPermit {
+  _PrefetchedStartPermit(this.context, this.expiresAt);
+
+  final WorkspaceAssignmentContext context;
+  final Future<DateTime?> expiresAt;
+
+  bool matches(WorkspaceAssignmentContext other) =>
+      context.attemptId == other.attemptId &&
+      context.workspaceRuntimeId == other.workspaceRuntimeId &&
+      context.idempotencyKey == other.idempotencyKey;
 }

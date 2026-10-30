@@ -33,6 +33,7 @@ class FakeDeliveryCloud implements InputDeliveryCloud {
   int failuresBeforeSuccess = 0;
   Completer<void>? holdDownloads;
   int activeDownloads = 0, maxActiveDownloads = 0;
+  int listCalls = 0;
 
   PendingWorkRequestInput input(String fileId, {String? digest}) =>
       PendingWorkRequestInput(
@@ -44,10 +45,13 @@ class FakeDeliveryCloud implements InputDeliveryCloud {
       );
 
   @override
-  Future<List<PendingWorkRequestInput>> listPending() async => [
-        for (final item in pending)
-          if (!delivered.contains(item.fileId)) item
-      ];
+  Future<List<PendingWorkRequestInput>> listPending() async {
+    listCalls += 1;
+    return [
+      for (final item in pending)
+        if (!delivered.contains(item.fileId)) item
+    ];
+  }
 
   @override
   Future<Stream<List<int>>> download(String fileId) async {
@@ -211,6 +215,28 @@ void main() {
       await _until(() => cloud.delivered.length == 2);
       expect(cloud.delivered.toSet(), {_fileA, _fileB});
       expect(cloud.downloads.where((id) => id == _fileA), hasLength(1));
+    });
+
+    test('relies on input.available instead of the idle poll while connected',
+        () async {
+      final cloud = FakeDeliveryCloud({_fileA: utf8.encode('content')});
+      final delivery = InputDeliveryAgent(
+        cloud: cloud,
+        staging: staging,
+        activePollInterval: const Duration(milliseconds: 10),
+        idlePollInterval: const Duration(milliseconds: 10),
+        pushIdlePollInterval: const Duration(minutes: 5),
+        retryDelay: Duration.zero,
+        pushConnected: () => true,
+      );
+      addTearDown(delivery.stop);
+      delivery.start();
+      await _until(() => cloud.listCalls == 1);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(cloud.listCalls, 1);
+      cloud.pending.add(cloud.input(_fileA));
+      delivery.wake();
+      await _until(() => cloud.delivered.contains(_fileA));
     });
 
     test('restarts a failed file from scratch and reports the attempt',

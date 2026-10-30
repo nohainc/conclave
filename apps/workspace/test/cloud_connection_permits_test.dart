@@ -119,6 +119,55 @@ void main() {
       await connection.close();
     });
 
+    test(
+        'a permit prefetched at admission authorizes launch without a '
+        'second request', () async {
+      final (connection, socket) = await connected();
+      final context = contextFor('assignment-prefetch');
+      connection.prefetchStartPermit(context);
+      await waitFor(() =>
+          sentOfType(socket, 'assignment.start.permit.request').isNotEmpty);
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'assignment-prefetch',
+        {
+          'granted': true,
+          'permitId': 'permit-1',
+          'expiresAt': DateTime.now()
+              .toUtc()
+              .add(const Duration(seconds: 30))
+              .toIso8601String(),
+        },
+      )));
+      expect(await connection.requestStartPermit(context), isTrue);
+      expect(
+          sentOfType(socket, 'assignment.start.permit.request'), hasLength(1));
+      await connection.close();
+    });
+
+    test('a denied prefetched permit asks Cloud again at launch', () async {
+      final (connection, socket) = await connected();
+      final context = contextFor('assignment-prefetch-denied');
+      connection.prefetchStartPermit(context);
+      await waitFor(() =>
+          sentOfType(socket, 'assignment.start.permit.request').isNotEmpty);
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'assignment-prefetch-denied',
+        {'granted': false, 'reason': 'revoked'},
+      )));
+      final result = connection.requestStartPermit(context);
+      await waitFor(() =>
+          sentOfType(socket, 'assignment.start.permit.request').length == 2);
+      socket.controller.add(jsonEncode(envelope(
+        'assignment.start.permit.grant',
+        'assignment-prefetch-denied',
+        {'granted': false, 'reason': 'revoked'},
+      )));
+      expect(await result, isFalse);
+      await connection.close();
+    });
+
     test('a denied permit blocks launch', () async {
       final (connection, socket) = await connected();
       final result = connection.requestStartPermit(contextFor('revoked-one'));

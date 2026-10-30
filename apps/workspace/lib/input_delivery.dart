@@ -164,7 +164,9 @@ class InputDeliveryAgent {
     this.maxAttempts = 3,
     this.activePollInterval = const Duration(seconds: 2),
     this.idlePollInterval = const Duration(seconds: 30),
+    this.pushIdlePollInterval = const Duration(minutes: 5),
     this.retryDelay = const Duration(seconds: 2),
+    this.pushConnected,
   });
 
   final InputDeliveryCloud cloud;
@@ -173,7 +175,14 @@ class InputDeliveryAgent {
   final int maxAttempts;
   final Duration activePollInterval;
   final Duration idlePollInterval;
+
+  /// Idle interval while a Cloud session is up: `input.available` wakes the
+  /// agent, so the poll is only a safety net for a lost announcement.
+  final Duration pushIdlePollInterval;
   final Duration retryDelay;
+
+  /// Whether a Cloud session that delivers `input.available` is connected.
+  final bool Function()? pushConnected;
 
   final _inFlight = <String, Future<void>>{};
   final _waiting = <PendingWorkRequestInput>[];
@@ -231,9 +240,10 @@ class InputDeliveryAgent {
       unawaited(_poll());
       return;
     }
-    _timer = Timer(
-        found || _inFlight.isNotEmpty ? activePollInterval : idlePollInterval,
-        wake);
+    final idle =
+        pushConnected?.call() == true ? pushIdlePollInterval : idlePollInterval;
+    _timer =
+        Timer(found || _inFlight.isNotEmpty ? activePollInterval : idle, wake);
   }
 
   void _drain() {

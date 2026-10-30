@@ -258,6 +258,7 @@ extension _WorkspaceAssignmentHandlers on WorkspaceCloudConnection {
     )));
     // T6: admission acknowledgement written to the transport.
     traceAssignmentStage(context, 'service_accepted');
+    prefetchStartPermit(context);
     await recordAssignmentDiagnostic(
       context,
       event: 'assignment.launching',
