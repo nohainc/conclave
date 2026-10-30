@@ -65,6 +65,7 @@ describe("production Workspace Gateway smoke schema gate", () => {
       "0016_workflow_step_runs.sql",
       "0070_workspace_parallel_slots.sql",
       "0079_ai_history_cutoff.sql",
+      "0092_read_receipt_privacy.sql",
     ]) {
       database.exec(
         readFileSync(

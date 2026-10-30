@@ -128,6 +128,7 @@ export const requiredProductionSmokeColumns = Object.freeze({
     "updated_at",
     "avatar_url",
     "email_verified",
+    "share_read_receipts",
   ],
   execution_workspaces: [
     "id",
@@ -491,7 +492,10 @@ export function productionSmokeSchemaIssues(
 
     const normalize = (definition) => {
       const normalized = normalizeTableDefinition(definition);
-      return table === "mutation_receipts" || table === "execution_workspaces"
+      return table === "mutation_receipts" ||
+        table === "execution_workspaces" ||
+        table === "desktop_auth_intents" ||
+        table === "desktop_human_sessions"
         ? normalized.replace(/\s*([(),])\s*/g, "$1")
         : normalized;
     };
