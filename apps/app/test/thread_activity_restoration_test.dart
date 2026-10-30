@@ -5,6 +5,7 @@ import 'package:syntila_app/src/ax/ax_models.dart';
 import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:syntila_design/syntila_design.dart';
 
 import 'ax_fixture_data.dart';
 
@@ -111,8 +112,22 @@ void main() {
     final prompt = find.descendant(
         of: conversation,
         matching: find.textContaining('Work in a', findRichText: true));
-    expect(tester.getRect(prompt.first).right,
-        greaterThan(tester.getRect(conversation).center.dx));
+    // Own requests sit in a right-aligned bubble; the text inside it reads
+    // left to right.
+    final bubble = find
+        .ancestor(
+            of: prompt.first,
+            matching: find.byWidgetPredicate((widget) =>
+                widget is DecoratedBox &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration as BoxDecoration).color ==
+                    SyntilaColors.ownMessageBackground(false)))
+        .first;
+    final bubbleRect = tester.getRect(bubble);
+    final conversationRect = tester.getRect(conversation);
+    expect(bubbleRect.right, greaterThan(conversationRect.center.dx));
+    expect(conversationRect.right - bubbleRect.right,
+        lessThan(bubbleRect.left - conversationRect.left));
     await tester.pumpWidget(const SizedBox());
   });
 

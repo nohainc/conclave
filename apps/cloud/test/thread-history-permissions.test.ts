@@ -82,7 +82,7 @@ async function fixture() {
   const notices = () =>
     sqlite
       .prepare(
-        "SELECT event_type, body FROM discussion_messages WHERE thread_id = ? ORDER BY created_at, id",
+        "SELECT event_type, body FROM discussion_messages WHERE thread_id = ? ORDER BY created_at, rowid",
       )
       .all(thread.id);
   return { sqlite, env, request, id: thread.id, send, notices };

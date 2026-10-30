@@ -760,9 +760,10 @@ void main() {
     source.server = [message('1', 'Original Chat')];
     await tester.pumpWidget(page('w'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Message actions').last);
+    // Tapping a message reveals its actions on touch platforms.
+    await tester.tap(find.text('Original Chat'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Edit').last);
+    await tester.tap(find.byTooltip('Edit'));
     await tester.pumpAndSettle();
     await tester.enterText(
         find.widgetWithText(TextField, 'Original Chat'), 'Optimistic edit');

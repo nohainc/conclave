@@ -79,10 +79,11 @@ void main() {
       (tester) async {
     final source = _HistorySource();
     await show(tester, source: source);
-    await tester.tap(find.byTooltip('Message actions'));
+    // Tapping a message reveals its actions on touch platforms.
+    await tester.tap(find.text('Shared message'));
     await tester.pumpAndSettle();
-    expect(find.text('Edit'), findsNothing);
-    await tester.tap(find.text('Delete'));
+    expect(find.byTooltip('Edit'), findsNothing);
+    await tester.tap(find.byTooltip('Delete'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -90,7 +91,10 @@ void main() {
     expect(find.textContaining('Maya ·'), findsOneWidget);
     expect(find.textContaining('Message removed by Alex · Space owner'),
         findsOneWidget);
-    expect(find.byTooltip('Message actions'), findsNothing);
+    // The protected notice offers no message actions.
+    for (final tooltip in ['Reply', 'Copy', 'Edit', 'Delete']) {
+      expect(find.byTooltip(tooltip), findsNothing);
+    }
   });
   testWidgets('viewer can reset context with AI History hidden',
       (tester) async {

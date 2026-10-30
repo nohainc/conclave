@@ -25,6 +25,7 @@ describe("Worker Profile V9 cleanup migration", () => {
             .join("\n") +
           "\nSELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('worker_catalog', 'worker_profiles', 'worker_profile_history', 'tool_profile_definitions', 'tool_profile_releases', 'tool_profile_channel_pointers', 'workspace_tool_profile_channels') ORDER BY name;",
         encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
       }),
     ) as Array<{ name: string }>;
     expect(rows.map((row) => row.name)).toEqual([
@@ -46,6 +47,7 @@ describe("Worker Profile V9 cleanup migration", () => {
             .map(migration)
             .join("\n") + "\nPRAGMA table_info(worker_profiles);",
         encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
       }),
     ) as Array<{ name: string }>;
     expect(columns.map((column) => column.name)).toEqual(

@@ -25,6 +25,7 @@ function apply(sql: string): unknown[] {
     execFileSync("sqlite3", ["-bail", "-json", ":memory:"], {
       input: `${baseMigration}\n${beforeMigration}\n${v9Migration}\n${afterMigration}`,
       encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
     }) || "[]",
   ) as unknown[];
 }

@@ -342,11 +342,17 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      // Reply and Copy share the request's actions menu.
-      for (final tooltip in ['Cancel request', 'Message actions']) {
+      // Cancel keeps the Work card's action size; the message actions beside
+      // the prompt are slightly smaller.
+      final messageTargetSize = targetSize == 48.0 ? 40.0 : 28.0;
+      for (final (tooltip, size) in [
+        ('Cancel request', targetSize),
+        ('Reply', messageTargetSize),
+        ('Copy', messageTargetSize),
+      ]) {
         final action = find.byTooltip(tooltip);
         expect(action, findsOneWidget);
-        expect(tester.getSize(action), Size.square(targetSize));
+        expect(tester.getSize(action), Size.square(size));
         final icon = tester.widget<Icon>(
           find.descendant(of: action, matching: find.byType(Icon)),
         );
@@ -2302,10 +2308,11 @@ void main() {
     expect(top('Research auth'), lessThan(top('Use passkeys')));
     expect(top('Use passkeys'), lessThan(top('After AI')));
     expect(find.byKey(const ValueKey('work-history-scroll')), findsNothing);
-    // The live request is not a Chat message: no edit or delete.
-    expect(find.byTooltip('Message actions'), findsWidgets);
-    expect(find.byTooltip('Edit'), findsNothing);
-    expect(find.byTooltip('Delete'), findsNothing);
+    // The live request is not a Chat message: only the two Chat messages
+    // can be edited or deleted.
+    expect(find.byTooltip('Copy'), findsWidgets);
+    expect(find.byTooltip('Edit'), findsNWidgets(2));
+    expect(find.byTooltip('Delete'), findsNWidgets(2));
 
     await _askAi(tester);
     await tester.enterText(find.byType(TextField).last, 'Next request');
@@ -2433,8 +2440,9 @@ void main() {
     // Archived AI entries are history: neither the request nor the answer
     // may be edited.
     expect(find.byTooltip('Edit'), findsNothing);
-    // Reply and Copy share one actions menu per entry.
-    expect(find.byTooltip('Message actions'), findsNWidgets(2));
+    // Each entry offers Reply and Copy.
+    expect(find.byTooltip('Reply'), findsNWidgets(2));
+    expect(find.byTooltip('Copy'), findsNWidgets(2));
   });
   testWidgets('Chat create edit and copy preserve raw Markdown',
       (tester) async {
@@ -2486,7 +2494,7 @@ void main() {
         widget is Text && widget.data?.startsWith('2026-10-06 ·') == true);
     expect(timestamp, findsOneWidget);
     expect(tester.getTopLeft(timestamp).dx,
-        lessThan(tester.getTopLeft(find.byTooltip('Message actions')).dx));
+        lessThan(tester.getTopLeft(find.byTooltip('Reply')).dx));
     await _chooseMessageAction(tester, 'Edit');
     await tester.pumpAndSettle();
     expect(
@@ -2550,7 +2558,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('reply-composer-banner')), findsNothing);
 
-    await _chooseMessageAction(tester, 'Reply');
+    // The quote jumped back to the first message; the latest one sits under
+    // the composer.
+    await _chooseMessageAction(tester, 'Reply',
+        action: find.byTooltip('Reply').first);
     await tester.tap(find.byKey(const ValueKey('reply-clear')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('reply-composer-banner')), findsNothing);
@@ -2614,20 +2625,20 @@ void main() {
       ),
     ))));
     await tester.pumpAndSettle();
-    final menus = find.byTooltip('Message actions');
-    expect(menus, findsNWidgets(2));
-    final platform = Theme.of(tester.element(menus.first)).platform;
+    final copies = find.byTooltip('Copy');
+    expect(copies, findsNWidgets(2));
+    expect(find.byTooltip('Edit'), findsNothing);
+    expect(find.byTooltip('Delete'), findsNothing);
+    final platform = Theme.of(tester.element(copies.first)).platform;
     final side =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android
-            ? 48.0
-            : 32.0;
-    expect(tester.getSize(menus.first), Size.square(side));
-    await _chooseMessageAction(tester, 'Copy', menu: menus.first);
+            ? 40.0
+            : 28.0;
+    expect(tester.getSize(copies.first), Size.square(side));
+    await _chooseMessageAction(tester, 'Copy', action: copies.first);
     expect(copied, prompt);
-    expect(find.text('Edit'), findsNothing);
-    expect(find.text('Delete'), findsNothing);
     expect(find.text('Prompt copied to clipboard'), findsNothing);
-    await _chooseMessageAction(tester, 'Copy', menu: menus.last);
+    await _chooseMessageAction(tester, 'Copy', action: copies.last);
     expect(copied, response);
     final timestamps = find.byWidgetPredicate((widget) =>
         widget is Text && widget.data?.startsWith('2026-10-01 ·') == true);
@@ -3439,26 +3450,26 @@ void main() {
       of: find.text('The login failure reproduces on a fresh checkout.'),
       matching: find.byWidgetPredicate(
         (widget) =>
-            widget is Container &&
+            widget is DecoratedBox &&
             widget.decoration is BoxDecoration &&
-            (widget.decoration! as BoxDecoration).color ==
+            (widget.decoration as BoxDecoration).color ==
                 SyntilaColors.ownMessageBackground(false),
       ),
     );
     expect(ownMessageBubble, findsOneWidget);
+    // The actions are laid over the bubble's bottom-right corner.
     final bubbleRight = tester.getTopRight(ownMessageBubble).dx;
-    final actionsRight =
-        tester.getTopRight(find.byTooltip('Message actions')).dx;
-    expect(bubbleRight - actionsRight, closeTo(8, 0.1));
+    final actionsRight = tester.getTopRight(find.byTooltip('Copy')).dx;
+    expect(bubbleRight - actionsRight, closeTo(14, 0.1));
 
     // Verify copy message button exists and triggers
-    expect(find.byTooltip('Message actions'), findsOneWidget);
+    expect(find.byTooltip('Copy'), findsOneWidget);
     await _chooseMessageAction(tester, 'Copy');
     await tester.pumpAndSettle();
     expect(find.text('Message copied to clipboard'), findsNothing);
 
     // Verify edit message button allows editing in-place
-    expect(find.byTooltip('Message actions'), findsOneWidget);
+    expect(find.byTooltip('Copy'), findsOneWidget);
     await _chooseMessageAction(tester, 'Edit');
     await tester.pumpAndSettle();
     expect(find.text('Save'), findsOneWidget);
@@ -3476,7 +3487,7 @@ void main() {
         findsOneWidget);
 
     // Verify delete message button shows confirmation and removes message
-    expect(find.byTooltip('Message actions'), findsOneWidget);
+    expect(find.byTooltip('Copy'), findsOneWidget);
     await _chooseMessageAction(tester, 'Delete');
     await tester.pumpAndSettle();
     expect(find.text('Delete message?'), findsOneWidget);
@@ -3564,7 +3575,8 @@ void main() {
       );
       final date = find.byWidgetPredicate((widget) =>
           widget is Text && widget.data?.startsWith('2026-10-05 ·') == true);
-      final menuX = tester.getTopLeft(find.byTooltip('Message actions')).dx;
+      final reply = find.byTooltip('Reply');
+      final trigger = find.byTooltip('Copy');
       final dateX = tester.getTopLeft(date).dx;
       final bubbleFinder = find
           .ancestor(
@@ -3572,44 +3584,43 @@ void main() {
               matching: find.byType(Container))
           .first;
       final bubble = tester.widget<Container>(bubbleFinder);
-      // Date/time and actions sit below the bubble, not inside its background.
-      expect(tester.getTopLeft(find.byTooltip('Message actions')).dy,
-          tester.getBottomLeft(bubbleFinder).dy);
+      // The background sits on the wrapper that also carries the overlaid
+      // date/time and actions.
+      final background = find
+          .ancestor(
+              of: find.byType(SyntilaMarkdownBody).first,
+              matching: find.byWidgetPredicate((widget) =>
+                  widget is DecoratedBox &&
+                  widget.decoration is BoxDecoration &&
+                  (widget.decoration as BoxDecoration).color != null))
+          .first;
       final decoration = bubble.decoration as BoxDecoration;
       expect(decoration.border, isNull);
-      expect(decoration.color,
+      expect(
+          (tester.widget<DecoratedBox>(background).decoration as BoxDecoration)
+              .color,
           own ? SyntilaColors.ownMessageBackground(false) : Colors.transparent);
-      expect(dateX, lessThan(menuX));
-      final trigger = find.byTooltip('Message actions');
-      expect(tester.getSize(trigger), Size(touch ? 48 : 32, touch ? 48 : 32));
-      final popup = find.ancestor(
-          of: trigger, matching: find.byType(PopupMenuButton<int>));
-      expect(tester.widget<PopupMenuButton<int>>(popup).borderRadius,
-          BorderRadius.circular(touch ? 24 : 16));
-      final dots =
-          find.descendant(of: trigger, matching: find.byIcon(Icons.more_horiz));
+      expect(tester.getRect(background).contains(tester.getCenter(trigger)),
+          isTrue);
+      expect(dateX, lessThan(tester.getTopLeft(reply).dx));
+      expect(tester.getSize(trigger), Size.square(touch ? 40 : 28));
       expect(tester.getCenter(date).dy,
-          closeTo(tester.getCenter(trigger).dy, 0.01));
-      expect(tester.getCenter(dots).dy,
           closeTo(tester.getCenter(trigger).dy, 0.01));
       final opacity = find
           .ancestor(of: trigger, matching: find.byType(AnimatedOpacity))
           .first;
-      if (!touch) {
+      expect(tester.widget<AnimatedOpacity>(opacity).opacity, 0);
+      if (touch) {
+        // Touch has no hover: tapping the message reveals its actions.
+        await tester.tap(bubbleFinder, warnIfMissed: false);
+      } else {
         // Keyboard focus reveals the same actions without needing a mouse.
-        final icon = find.descendant(
-            of: trigger, matching: find.byIcon(Icons.more_horiz));
-        Focus.of(tester.element(icon)).requestFocus();
-        await tester.pumpAndSettle();
+        Focus.of(tester.element(trigger)).requestFocus();
       }
+      await tester.pumpAndSettle();
       expect(tester.widget<AnimatedOpacity>(opacity).opacity, 1);
-      await tester.tap(trigger);
-      await tester.pumpAndSettle();
-      expect(find.text('Copy'), findsOneWidget);
-      expect(find.text('Edit'), own ? findsOneWidget : findsNothing);
-      expect(find.text('Delete'), own ? findsOneWidget : findsNothing);
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
+      expect(find.byTooltip('Edit'), own ? findsOneWidget : findsNothing);
+      expect(find.byTooltip('Delete'), own ? findsOneWidget : findsNothing);
       expect(tester.takeException(), isNull);
     }
   });
@@ -5264,13 +5275,21 @@ Future<void> _askAi(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Hovers the message that owns the [label] action icon so the
+/// hover-revealed actions become tappable, then taps the icon. [action]
+/// narrows the icon when several messages are on screen.
 Future<void> _chooseMessageAction(WidgetTester tester, String label,
-    {Finder? menu}) async {
-  final trigger = menu ?? find.byTooltip('Message actions').last;
-  await tester.ensureVisible(trigger);
-  await tester.tap(trigger);
+    {Finder? action}) async {
+  final target = (action ?? find.byTooltip(label)).last;
   await tester.pumpAndSettle();
-  await tester.tap(find.text(label).last);
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+  final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+  await mouse.addPointer(location: Offset.zero);
+  await mouse.moveTo(tester.getCenter(target));
+  await tester.pumpAndSettle();
+  await tester.tap(target);
+  await mouse.removePointer();
   await tester.pumpAndSettle();
 }
 
