@@ -630,78 +630,78 @@ export async function createWorkRequestForUser(
     run: { id: runId, spaceId, threadId, status: "created" },
   };
   const statements = (receipts: D1PreparedStatement[]) => [
-      ...receipts,
-      env.SYNTILA_DB.prepare(
-        `INSERT INTO work_requests
+    ...receipts,
+    env.SYNTILA_DB.prepare(
+      `INSERT INTO work_requests
        (id, thread_id, requested_by_user_id, mode, workflow_id, workflow_version, workflow_snapshot_json, snapshot_json, status, primary_workspace_id, input_json, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'queued', ?9, ?10, ?11, ?11)`,
-      ).bind(
-        workRequest.id,
-        threadId,
-        context.userId,
-        mode,
-        workflowId,
-        workflowVersion,
-        JSON.stringify(workflowSnapshot),
-        JSON.stringify(snapshot),
-        workRequest.primaryWorkspaceId,
-        JSON.stringify(workRequest.input),
-        now,
-      ),
-      ...(fileInputs
-        ? workRequestInputStatements(env.SYNTILA_DB, {
-            workRequestId: workRequest.id,
-            threadId,
-            workspaceId: workRequest.primaryWorkspaceId!,
-            userId: context.userId,
-            attachments: normalizedAttachments,
-            now,
-          })
-        : []),
-      // Sidebar ordering is based on these parent timestamps. A newly
-      // accepted request is Thread activity even before a Worker responds.
-      env.SYNTILA_DB.prepare(
-        "UPDATE threads SET updated_at = ?1 WHERE id = ?2",
-      ).bind(now, threadId),
-      env.SYNTILA_DB.prepare(
-        "UPDATE spaces SET updated_at = ?1 WHERE id = ?2",
-      ).bind(now, spaceId),
-      ...(conversationWorkflow
-        ? conversationSubmissionStatements(
-            env.SYNTILA_DB,
-            selectedConversationId!,
-            threadId,
-            conversationWorkflow,
-            workRequest.id,
-            now,
-          )
-        : []),
-      ...(conversationWorkflow
-        ? initialConversationTaskStatements(
-            env.SYNTILA_DB,
-            workflowSnapshot,
-            workRequest.id,
-            now,
-          )
-        : []),
-      env.SYNTILA_DB.prepare(
-        `INSERT INTO runs
+    ).bind(
+      workRequest.id,
+      threadId,
+      context.userId,
+      mode,
+      workflowId,
+      workflowVersion,
+      JSON.stringify(workflowSnapshot),
+      JSON.stringify(snapshot),
+      workRequest.primaryWorkspaceId,
+      JSON.stringify(workRequest.input),
+      now,
+    ),
+    ...(fileInputs
+      ? workRequestInputStatements(env.SYNTILA_DB, {
+          workRequestId: workRequest.id,
+          threadId,
+          workspaceId: workRequest.primaryWorkspaceId!,
+          userId: context.userId,
+          attachments: normalizedAttachments,
+          now,
+        })
+      : []),
+    // Sidebar ordering is based on these parent timestamps. A newly
+    // accepted request is Thread activity even before a Worker responds.
+    env.SYNTILA_DB.prepare(
+      "UPDATE threads SET updated_at = ?1 WHERE id = ?2",
+    ).bind(now, threadId),
+    env.SYNTILA_DB.prepare(
+      "UPDATE spaces SET updated_at = ?1 WHERE id = ?2",
+    ).bind(now, spaceId),
+    ...(conversationWorkflow
+      ? conversationSubmissionStatements(
+          env.SYNTILA_DB,
+          selectedConversationId!,
+          threadId,
+          conversationWorkflow,
+          workRequest.id,
+          now,
+        )
+      : []),
+    ...(conversationWorkflow
+      ? initialConversationTaskStatements(
+          env.SYNTILA_DB,
+          workflowSnapshot,
+          workRequest.id,
+          now,
+        )
+      : []),
+    env.SYNTILA_DB.prepare(
+      `INSERT INTO runs
        (id, space_id, thread_id, work_request_id, status, created_at, updated_at)
        VALUES (?1, ?2, ?3, ?4, 'created', ?5, ?5)`,
-      ).bind(runId, spaceId, threadId, workRequest.id, now),
-      env.SYNTILA_DB.prepare(
-        `INSERT INTO space_audit_log
+    ).bind(runId, spaceId, threadId, workRequest.id, now),
+    env.SYNTILA_DB.prepare(
+      `INSERT INTO space_audit_log
        (id, space_id, actor_type, actor_id, action, target_type, target_id, details_json, created_at)
        VALUES (?1, ?2, 'user', ?3, 'thread.work_requested', 'work_request', ?4, ?5, ?6)`,
-      ).bind(
-        `pa-${crypto.randomUUID()}`,
-        spaceId,
-        context.userId,
-        workRequest.id,
-        JSON.stringify({ threadId, runId, workflowId, workflowVersion }),
-        now,
-      ),
-    ];
+    ).bind(
+      `pa-${crypto.randomUUID()}`,
+      spaceId,
+      context.userId,
+      workRequest.id,
+      JSON.stringify({ threadId, runId, workflowId, workflowVersion }),
+      now,
+    ),
+  ];
   // The "received by Syntila" signal commits in the same D1 batch as the
   // request, so a saved request is never left unannounced.
   const created = {

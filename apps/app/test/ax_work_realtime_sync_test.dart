@@ -312,8 +312,9 @@ void main() {
   test('a terminal event for an earlier Step still re-reads', () async {
     source.records = [
       work('r').copyWith(steps: const [
-        AxWorkRequestStep(kind: 'implement', status: 'running'),
-        AxWorkRequestStep(kind: 'review', status: 'queued'),
+        AxWorkRequestStep(
+            kind: 'implement', status: 'running', workerId: 'worker'),
+        AxWorkRequestStep(kind: 'review', status: 'queued', workerId: 'worker'),
       ])
     ];
     await seed();

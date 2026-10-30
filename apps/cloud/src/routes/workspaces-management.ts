@@ -174,7 +174,12 @@ export async function handleUpdateWorkspace(
   }
   if (
     hasName &&
-    (await workspaceNameTaken(env.SYNTILA_DB, context.userId, name, workspaceId))
+    (await workspaceNameTaken(
+      env.SYNTILA_DB,
+      context.userId,
+      name,
+      workspaceId,
+    ))
   ) {
     throw new HttpError(409, `You already have a Workspace named "${name}"`);
   }

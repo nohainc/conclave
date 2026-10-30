@@ -244,8 +244,7 @@ class _WorkspacesPageState extends State<WorkspacesPage>
           _ParallelSlotsControl(
             key: ValueKey('parallel-slots-${workspace.id}'),
             slots: workspace.parallelSlots!,
-            onChanged: (slots) =>
-                widget.onSetParallelSlots!(workspace, slots),
+            onChanged: (slots) => widget.onSetParallelSlots!(workspace, slots),
           ),
         const SizedBox(height: 16),
         _WorkspaceCardBody(

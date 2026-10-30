@@ -145,8 +145,8 @@ class _PeoplePageState extends State<PeoplePage> {
         builder: (_) =>
             SpaceInvitationDialog(people: widget.people, personId: userId));
     if (sent == true && mounted) {
-      ScaffoldMessenger.of(context).showNotice(
-          const SnackBar(content: Text('Space invitation sent.')));
+      ScaffoldMessenger.of(context)
+          .showNotice(const SnackBar(content: Text('Space invitation sent.')));
     }
   }
 }

@@ -1919,8 +1919,7 @@ class _WorkTimelineCard extends StatelessWidget {
                       : Alignment.centerLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                        minWidth: maxBubbleWidth,
-                        maxWidth: maxBubbleWidth),
+                        minWidth: maxBubbleWidth, maxWidth: maxBubbleWidth),
                     child: _withMessageMeta(
                       own: isOwnRequest,
                       visible: showMeta,
@@ -2196,76 +2195,74 @@ class _WorkTimelineCard extends StatelessWidget {
                                         : () => onReportIssue!(request.id)),
                             ];
                             final footer = AnimatedOpacity(
-                                    // Terminal footers reveal on hover/focus;
-                                    // active and failed controls remain available.
-                                    opacity: showMeta ||
-                                            !const {'completed', 'cancelled'}
-                                                .contains(request.status)
-                                        ? 1
-                                        : 0,
-                                    duration: const Duration(milliseconds: 120),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        if ((request.status == 'queued' ||
+                                // Terminal footers reveal on hover/focus;
+                                // active and failed controls remain available.
+                                opacity: showMeta ||
+                                        !const {'completed', 'cancelled'}
+                                            .contains(request.status)
+                                    ? 1
+                                    : 0,
+                                duration: const Duration(milliseconds: 120),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if ((request.status == 'queued' ||
+                                            request.status == 'running') &&
+                                        onCancelRun != null)
+                                      compactAction(
+                                        tooltip: 'Cancel request',
+                                        icon: Icons.cancel_outlined,
+                                        onPressed: () =>
+                                            onCancelRun!(request.id),
+                                      ),
+                                    // Cloud accepted it; shown until a
+                                    // Worker starts, then progress takes over.
+                                    if (request.status == 'queued') ...[
+                                      Tooltip(
+                                        message:
+                                            'Received by Syntila, waiting for a Worker',
+                                        child: ActionStatusChip(
+                                          key: ValueKey(
+                                              'work-request-status-${request.id}'),
+                                          status: axWorkRequestStatus(
+                                              request.status),
+                                          kind: AxActionKind.workRequest,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    if (reportedIssue != null)
+                                      Text('Reported',
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: colors.primary)),
+                                    // Separates leading controls only, so
+                                    // the time aligns with the answer text.
+                                    if (reportedIssue != null ||
+                                        ((request.status == 'queued' ||
                                                 request.status == 'running') &&
-                                            onCancelRun != null)
-                                          compactAction(
-                                            tooltip: 'Cancel request',
-                                            icon: Icons.cancel_outlined,
-                                            onPressed: () =>
-                                                onCancelRun!(request.id),
+                                            onCancelRun != null))
+                                      const SizedBox(width: 8),
+                                    if (timeLabel.isNotEmpty)
+                                      Tooltip(
+                                        message: _chatTimestamp(timestamp!),
+                                        child: Text(
+                                          timeLabel,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: metaColor,
                                           ),
-                                        // Cloud accepted it; shown until a
-                                        // Worker starts, then progress takes over.
-                                        if (request.status == 'queued') ...[
-                                          Tooltip(
-                                            message:
-                                                'Received by Syntila, waiting for a Worker',
-                                            child: ActionStatusChip(
-                                              key: ValueKey(
-                                                  'work-request-status-${request.id}'),
-                                              status: axWorkRequestStatus(
-                                                  request.status),
-                                              kind: AxActionKind.workRequest,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                        ],
-                                        if (reportedIssue != null)
-                                          Text('Reported',
-                                              style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: colors.primary)),
-                                        // Separates leading controls only, so
-                                        // the time aligns with the answer text.
-                                        if (reportedIssue != null ||
-                                            ((request.status == 'queued' ||
-                                                    request.status ==
-                                                        'running') &&
-                                                onCancelRun != null))
-                                          const SizedBox(width: 8),
-                                        if (timeLabel.isNotEmpty)
-                                          Tooltip(
-                                            message: _chatTimestamp(timestamp!),
-                                            child: Text(
-                                              timeLabel,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: metaColor,
-                                              ),
-                                            ),
-                                          ),
-                                        if (responseActions.isNotEmpty) ...[
-                                          const SizedBox(width: 8),
-                                          _TimelineActionsMenu(
-                                              actions: responseActions,
-                                              color: metaColor),
-                                        ],
-                                      ],
-                                    ));
+                                        ),
+                                      ),
+                                    if (responseActions.isNotEmpty) ...[
+                                      const SizedBox(width: 8),
+                                      _TimelineActionsMenu(
+                                          actions: responseActions,
+                                          color: metaColor),
+                                    ],
+                                  ],
+                                ));
                             // Finished answers carry their time and actions
                             // over the last text row; live ones stay in flow.
                             final overlayFooter = message != null &&
@@ -2650,8 +2647,7 @@ bool _isOwnWorkRequest(
   String? currentUserName,
 ) {
   final rawRequesterName = request.requestedByName.trim();
-  final effectiveRequesterName =
-      (rawRequesterName.isEmpty ||
+  final effectiveRequesterName = (rawRequesterName.isEmpty ||
           rawRequesterName == request.requestedByUserId ||
           rawRequesterName.startsWith('usr_'))
       ? 'Team member'
@@ -2847,46 +2843,44 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         ),
         const SizedBox(width: 8),
       ],
-      _TimelineActionsMenu(
+      _TimelineActionsMenu(color: metaColor, actions: [
+        if (widget.onReply != null && !widget.item.id.startsWith('temp-'))
+          _TimelineAction(
+            tooltip: 'Reply',
+            icon: Icons.reply_rounded,
+            color: metaColor,
+            onTap: widget.onReply,
+          ),
+        if (widget.item.aiKind == null &&
+            widget.onDelete != null &&
+            !widget.item.id.startsWith('temp-')) ...[
+          _TimelineAction(
+            tooltip: 'Delete',
+            icon: Icons.delete_outline_rounded,
+            color: metaColor,
+            onTap: () => _confirmDelete(context),
+          ),
+        ],
+        if (isMe &&
+            !widget.item.id.startsWith('temp-') &&
+            widget.item.aiKind == null) ...[
+          _TimelineAction(
+            tooltip: 'Edit',
+            icon: Icons.edit_outlined,
+            color: metaColor,
+            onTap: () {
+              _editController.text = widget.item.text;
+              _setEditing(true);
+            },
+          ),
+        ],
+        _TimelineAction(
+          tooltip: 'Copy',
+          icon: Icons.copy_rounded,
           color: metaColor,
-          actions: [
-            if (widget.onReply != null && !widget.item.id.startsWith('temp-'))
-              _TimelineAction(
-                tooltip: 'Reply',
-                icon: Icons.reply_rounded,
-                color: metaColor,
-                onTap: widget.onReply,
-              ),
-            if (widget.item.aiKind == null &&
-                widget.onDelete != null &&
-                !widget.item.id.startsWith('temp-')) ...[
-              _TimelineAction(
-                tooltip: 'Delete',
-                icon: Icons.delete_outline_rounded,
-                color: metaColor,
-                onTap: () => _confirmDelete(context),
-              ),
-            ],
-            if (isMe &&
-                !widget.item.id.startsWith('temp-') &&
-                widget.item.aiKind == null) ...[
-              _TimelineAction(
-                tooltip: 'Edit',
-                icon: Icons.edit_outlined,
-                color: metaColor,
-                onTap: () {
-                  _editController.text = widget.item.text;
-                  _setEditing(true);
-                },
-              ),
-            ],
-            _TimelineAction(
-              tooltip: 'Copy',
-              icon: Icons.copy_rounded,
-              color: metaColor,
-              onTap: widget.onCopy,
-            ),
-          ]),
+          onTap: widget.onCopy,
+        ),
+      ]),
     ];
     return _MessageHover(
         builder: (context, showMeta) => LayoutBuilder(
@@ -2898,8 +2892,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                       isMe ? Alignment.centerRight : Alignment.centerLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                        minWidth: maxBubbleWidth,
-                        maxWidth: maxBubbleWidth),
+                        minWidth: maxBubbleWidth, maxWidth: maxBubbleWidth),
                     child: _withMessageMeta(
                       own: isMe,
                       visible: showMeta && !_isEditing,
@@ -3022,12 +3015,7 @@ class _MessageHover extends StatefulWidget {
 class _MessageHoverState extends State<_MessageHover> {
   bool _hovered = false;
   bool _focused = false;
-  bool _menuOpen = false;
   bool _tapped = false;
-
-  void _menuOpenChanged(bool open) {
-    if (mounted && _menuOpen != open) setState(() => _menuOpen = open);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -3043,11 +3031,7 @@ class _MessageHoverState extends State<_MessageHover> {
         child: Focus(
           onFocusChange: (focused) => setState(() => _focused = focused),
           child: widget.builder(
-              context,
-              _hovered ||
-                  _focused ||
-                  _menuOpen ||
-                  (touch && _tapped)),
+              context, _hovered || _focused || (touch && _tapped)),
         ),
       ),
     );

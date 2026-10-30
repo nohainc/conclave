@@ -204,7 +204,8 @@ class AxRenderDiagnostics {
       if (_recent.length > 256) _recent.removeAt(0);
       sink?.call(record);
       if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS') &&
-          (event == 'realtime.event' || event == 'realtime.subscription' ||
+          (event == 'realtime.event' ||
+              event == 'realtime.subscription' ||
               event == 'realtime.revalidate')) {
         debugPrint('[AX realtime] $record', wrapWidth: 4096);
       }

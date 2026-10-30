@@ -4,8 +4,8 @@ import 'package:syntila_app/src/ax/ax_action_status.dart';
 void main() {
   test('invitations map onto the shared lifecycle', () {
     expect(axInvitationStatus('pending'), AxActionStatus.accepted);
-    expect(axInvitationStatus('pending').label(AxActionKind.invitation),
-        'Sent');
+    expect(
+        axInvitationStatus('pending').label(AxActionKind.invitation), 'Sent');
     expect(axInvitationStatus('accepted'), AxActionStatus.responded);
     expect(axInvitationStatus('declined'), AxActionStatus.responded);
     expect(axInvitationStatus('expired').finished, isTrue);

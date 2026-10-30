@@ -429,9 +429,8 @@ void main() {
 
       final file = WorkspaceSettingsStore(state).file;
       file.writeAsStringSync(
-        file
-            .readAsStringSync()
-            .replaceFirst(RegExp(r'connect_on_start \w+'), 'connect_on_start maybe'),
+        file.readAsStringSync().replaceFirst(
+            RegExp(r'connect_on_start \w+'), 'connect_on_start maybe'),
       );
       result = await runDown(['status']);
       expect(result.$1, 0);
@@ -569,9 +568,8 @@ void main() {
       await WorkspaceSettingsStore(root).ensureDefaults();
       final file = WorkspaceSettingsStore(root).file;
       file.writeAsStringSync(
-        file
-            .readAsStringSync()
-            .replaceFirst(RegExp(r'connect_on_start \w+'), 'connect_on_start maybe'),
+        file.readAsStringSync().replaceFirst(
+            RegExp(r'connect_on_start \w+'), 'connect_on_start maybe'),
       );
       expect((await config(['validate'])).$1, 65);
     });

@@ -832,8 +832,19 @@ export class RealtimeGateway implements DurableObject {
       ) {
         continue;
       }
-      if ((this.env as unknown as { REALTIME_DIAGNOSTICS?: string }).REALTIME_DIAGNOSTICS === "1") {
-        console.log(JSON.stringify({ diagnostic: "realtime_replay", scope, eventId: event.eventId, sequence: event.sequence, type: event.type }));
+      if (
+        (this.env as unknown as { REALTIME_DIAGNOSTICS?: string })
+          .REALTIME_DIAGNOSTICS === "1"
+      ) {
+        console.log(
+          JSON.stringify({
+            diagnostic: "realtime_replay",
+            scope,
+            eventId: event.eventId,
+            sequence: event.sequence,
+            type: event.type,
+          }),
+        );
       }
       const result = this.enqueueEvent(connected, event);
       this.recordQueueResult(result);

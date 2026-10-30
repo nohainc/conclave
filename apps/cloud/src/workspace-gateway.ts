@@ -2072,8 +2072,18 @@ export class WorkspaceGateway implements DurableObject {
     status: "completed" | "failed" | "cancelled",
   ): Promise<void> {
     const diagnostic = (stage: string) => {
-      if ((this.env as unknown as { REALTIME_DIAGNOSTICS?: string }).REALTIME_DIAGNOSTICS === "1") {
-        console.log(JSON.stringify({ diagnostic: "terminal_ack", stage, assignmentId: message.assignmentId, at: new Date().toISOString() }));
+      if (
+        (this.env as unknown as { REALTIME_DIAGNOSTICS?: string })
+          .REALTIME_DIAGNOSTICS === "1"
+      ) {
+        console.log(
+          JSON.stringify({
+            diagnostic: "terminal_ack",
+            stage,
+            assignmentId: message.assignmentId,
+            at: new Date().toISOString(),
+          }),
+        );
       }
     };
     diagnostic("read_start");

@@ -204,7 +204,11 @@ export async function handleReadReceiptPrivacy(
     await env.SYNTILA_DB.prepare(
       "UPDATE users SET share_read_receipts = ?1, updated_at = ?2 WHERE id = ?3",
     )
-      .bind(body.shareReadReceipts ? 1 : 0, new Date().toISOString(), context.userId)
+      .bind(
+        body.shareReadReceipts ? 1 : 0,
+        new Date().toISOString(),
+        context.userId,
+      )
       .run();
     return json({ shareReadReceipts: body.shareReadReceipts });
   }

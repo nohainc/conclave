@@ -745,30 +745,30 @@ export async function handleCreateSpaceInvitation(
     // The stored replay omits the secret token; it is shown only once.
     const write = (receipts: D1PreparedStatement[]) =>
       env.SYNTILA_DB.batch([
-      ...receipts,
-      env.SYNTILA_DB.prepare(
-        `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at, invitee_user_id)
+        ...receipts,
+        env.SYNTILA_DB.prepare(
+          `INSERT INTO space_invitations (id, space_id, email, role, token_hash, invited_by_user_id, status, expires_at, created_at, updated_at, invitee_user_id)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'pending', ?7, ?8, ?8, ?9)`,
-      ).bind(
-        id,
-        spaceId,
-        email,
-        role,
-        tokenHash,
-        context.userId,
-        new Date(now.getTime() + 7 * 86400000).toISOString(),
-        now.toISOString(),
-        inviteeUserId,
-      ),
-      env.SYNTILA_DB.prepare(
-        "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
-      ).bind(
-        permissionJsonPath("invitationPermissions", id),
-        JSON.stringify(permissions),
-        now.toISOString(),
-        spaceId,
-      ),
-    ]);
+        ).bind(
+          id,
+          spaceId,
+          email,
+          role,
+          tokenHash,
+          context.userId,
+          new Date(now.getTime() + 7 * 86400000).toISOString(),
+          now.toISOString(),
+          inviteeUserId,
+        ),
+        env.SYNTILA_DB.prepare(
+          "UPDATE spaces SET settings_json = json_set(settings_json, ?1, json(?2)), updated_at = ?3 WHERE id = ?4",
+        ).bind(
+          permissionJsonPath("invitationPermissions", id),
+          JSON.stringify(permissions),
+          now.toISOString(),
+          spaceId,
+        ),
+      ]);
     const concurrentReplay = receipt
       ? await receipt.commit({ invitation }, 201, write)
       : (await write([]), null);

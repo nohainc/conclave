@@ -557,9 +557,9 @@ extension _AxAppController on _AxAppStateMixin {
           type == 'space_workspace_grant.updated') {
         // AxRealtimeCacheRouter already revalidates Spaces and invitations
         // for Space-scoped events; superseding its read would repeat them.
-        final routed = (type.startsWith('space.') ||
-                type.startsWith('invitation.')) &&
-            _eventSpaceId(event) != null;
+        final routed =
+            (type.startsWith('space.') || type.startsWith('invitation.')) &&
+                _eventSpaceId(event) != null;
         await Future.wait([
           if (!routed) store.spaces.refresh(),
           if (!routed) store.invitations.refresh(),
@@ -582,7 +582,9 @@ extension _AxAppController on _AxAppStateMixin {
     String? id(Object? value) =>
         value is String && value.isNotEmpty ? value : null;
     return id(event['spaceId']) ??
-        (payload is Map ? id(payload['spaceId']) ?? id(payload['entityId']) : null);
+        (payload is Map
+            ? id(payload['spaceId']) ?? id(payload['entityId'])
+            : null);
   }
 
   /// Merges the durable Cloud feed so notifications survive reloads and
@@ -1630,10 +1632,10 @@ extension _AxAppController on _AxAppStateMixin {
         }
         final bootstrapped = await _loadBootstrapState(showSpinner: !hydrated);
         if (mounted && store.auth.session?.authenticated == true) {
-        if (mounted && store.auth.session?.authenticated == true) {
-          await _loadWorkspaces(fetch: !bootstrapped);
+          if (mounted && store.auth.session?.authenticated == true) {
+            await _loadWorkspaces(fetch: !bootstrapped);
+          }
         }
-      }
       }
     } catch (_) {
       // The normal load/error path will explain an unavailable auth service.

@@ -117,7 +117,8 @@ class _SpaceWorkspaceSelectorState extends State<_SpaceWorkspaceSelector> {
                 Row(mainAxisSize: MainAxisSize.min, children: [
                   SizedBox(
                       width: _settingLabelWidth,
-                      child: Text('Workspace', style: _settingLabelStyle(theme))),
+                      child:
+                          Text('Workspace', style: _settingLabelStyle(theme))),
                   // Same compact list selector as the Work composer and
                   // workflow model pickers.
                   PopupMenuButton<String>(

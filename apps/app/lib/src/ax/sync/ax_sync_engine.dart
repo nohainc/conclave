@@ -340,19 +340,18 @@ class AxSyncEngine {
     entry.accessed = _clock();
     if (!supersede && entry.flight != null) return entry.flight!;
     if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS')) {
-      AxRenderDiagnostics.instance.record('realtime.revalidate',
-          operation: 'refresh',
-          contextData: {
-            'query': query.key.toString(),
-            'supersede': supersede,
-            'invalidated': entry.invalidated,
-            'caller': StackTrace.current
-                .toString()
-                .split('\n')
-                .skip(1)
-                .take(6)
-                .join(' | '),
-          });
+      AxRenderDiagnostics.instance
+          .record('realtime.revalidate', operation: 'refresh', contextData: {
+        'query': query.key.toString(),
+        'supersede': supersede,
+        'invalidated': entry.invalidated,
+        'caller': StackTrace.current
+            .toString()
+            .split('\n')
+            .skip(1)
+            .take(6)
+            .join(' | '),
+      });
     }
     final generation = ++entry.generation;
     final completer = Completer<T>();
@@ -496,10 +495,17 @@ class AxSyncEngine {
         .toList();
     await Future.wait(entries.map((item) {
       if (const bool.fromEnvironment('SYNTILA_REALTIME_DIAGNOSTICS')) {
-        AxRenderDiagnostics.instance.record('realtime.revalidate',
-          contextData: {'query': item.key.toString(),
-            'inFlight': item.value.flight != null,
-            'caller': StackTrace.current.toString().split('\n').skip(1).take(4).join(' | ')});
+        AxRenderDiagnostics.instance
+            .record('realtime.revalidate', contextData: {
+          'query': item.key.toString(),
+          'inFlight': item.value.flight != null,
+          'caller': StackTrace.current
+              .toString()
+              .split('\n')
+              .skip(1)
+              .take(4)
+              .join(' | ')
+        });
       }
       invalidate(item.key);
       return item.value.revalidate();

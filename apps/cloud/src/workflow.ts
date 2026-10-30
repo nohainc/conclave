@@ -877,7 +877,9 @@ export class SyntilaRunWorkflow extends WorkflowEntrypoint<
           result.output,
           result.error,
         );
-        workflowDiagnostic(this.env, "task_state_done", { runId: params.runId });
+        workflowDiagnostic(this.env, "task_state_done", {
+          runId: params.runId,
+        });
         if (resultStatus === "completed" || resultStatus === "failed") {
           await this.publishWorkEvent(
             params,

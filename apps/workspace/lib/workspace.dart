@@ -58,6 +58,7 @@ class WorkspaceConfig {
   final String? workRootPath;
   final bool serviceEnabled;
   final bool connectOnStart;
+
   /// See [WorkspaceSettings.legacyParallelSlots]; Cloud owns slots.
   final int? legacyParallelSlots;
   final Map<String, String> folders;

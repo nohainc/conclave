@@ -170,8 +170,10 @@ class _BrowserRealtimeClient implements RealtimeClient {
         (message['type'] == 'subscribe' || message['type'] == 'unsubscribe')) {
       AxRenderDiagnostics.instance.record('realtime.subscription',
           operation: message['type'] as String,
-          contextData: {'scope': message['scope'],
-            'socketOpen': socket?.readyState == html.WebSocket.OPEN});
+          contextData: {
+            'scope': message['scope'],
+            'socketOpen': socket?.readyState == html.WebSocket.OPEN
+          });
     }
     if (socket?.readyState == html.WebSocket.OPEN) {
       socket!.send(jsonEncode(message));
