@@ -2,13 +2,13 @@ Origin: Syntila
 Label: Syntila Workspace
 Suite: stable
 Codename: stable
-Date: Fri, 30 Oct 2026 19:34:11 GMT
+Date: Fri, 30 Oct 2026 21:55:08 GMT
 Architectures: amd64 arm64
 Components: main
 Acquire-By-Hash: yes
 Description: Syntila Workspace packages
 SHA256:
- 71eb6933d3bfbbca0a9462dc371aba2d61097550dca35d6342a2d3f53fe88368 1972 main/binary-amd64/Packages
- c280840714e47dfaa44947e117bc5470f87611dec89745604a06dee668c46153 601 main/binary-amd64/Packages.gz
- 613ec4280c2c9056f7e40dc4a4b8a86838854383a408a8e6937b48936e309b60 1972 main/binary-arm64/Packages
- 813ced7e5e76ef62141eef603928a880b05400674de9313ee10160b8b3988388 600 main/binary-arm64/Packages.gz
+ e19f381c7322f7a1470541fa837d1359900c4aa723a670a6cc91d1ac0fd4c236 2630 main/binary-amd64/Packages
+ 05fb7a2dc45cc4dba6be42d736a6042f79db1de3a6d2b3819eb2c82a03480acf 663 main/binary-amd64/Packages.gz
+ 28b384d015abf1d216fb5c6d43775847787f41d3aa92f2a65471761ebbf48bbd 2630 main/binary-arm64/Packages
+ 4fba5e8b54267db96f45f527df7b658fc4b1c0a28e9a7ebfb8eaed0d89a0ed0d 658 main/binary-arm64/Packages.gz
