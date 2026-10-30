@@ -55,18 +55,25 @@ class _BrowserRealtimeClient implements RealtimeClient {
     String? runId,
     String? executionWorkspaceId,
   }) async {
-    final previous = _currentScopes();
-    if (_socket?.readyState == html.WebSocket.OPEN) {
-      for (final scope in previous) {
-        _send({'type': 'unsubscribe', 'scope': scope});
-      }
-    }
+    String key(Map<String, dynamic> scope) => jsonEncode(scope);
+    final previous = {for (final scope in _currentScopes()) key(scope): scope};
     _spaceId = spaceId;
     _threadId = threadId;
     _runId = runId;
     _executionWorkspaceId = executionWorkspaceId;
-    if (_socket?.readyState == html.WebSocket.OPEN) {
-      _subscribeCurrentScopes();
+    final next = {for (final scope in _currentScopes()) key(scope): scope};
+    if (_socket?.readyState != html.WebSocket.OPEN) return;
+    // Only changed scopes are touched: every subscribe makes Cloud send
+    // realtime.ready, which triggers a full recovery of that scope.
+    for (final entry in previous.entries) {
+      if (!next.containsKey(entry.key)) {
+        _send({'type': 'unsubscribe', 'scope': entry.value});
+      }
+    }
+    for (final entry in next.entries) {
+      if (!previous.containsKey(entry.key)) {
+        _send({'type': 'subscribe', 'scope': entry.value});
+      }
     }
   }
 
