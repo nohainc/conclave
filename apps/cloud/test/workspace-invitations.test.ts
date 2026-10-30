@@ -108,7 +108,10 @@ it("accept creates only a grant (no people relationship), once, for the invited 
     expect(
       sqlite.prepare("SELECT COUNT(*) n FROM people_relationships").get(),
     ).toEqual({ n: 0 });
-    await expect(accept("guest", id)).rejects.toMatchObject({ status: 404 });
+    // Retried accept returns the original successful result instead of failing
+    const repeated = await accept("guest", id);
+    expect(repeated.status).toBe(200);
+    expect(await repeated.json()).toMatchObject({ status: "active" });
     await expect(
       manage("POST", "owner", { email: "guest@test" }),
     ).rejects.toMatchObject({ status: 409 });
