@@ -212,8 +212,9 @@ class AxWorkRealtimeSync extends ChangeNotifier {
                     : await cache.discoverActive(id))
                 : <String>{};
             if (epoch != _sessionEpoch || _disposed) break;
-            await Future.wait(ids.difference(found).map((requestId) => cache
-                .refreshRequest(id, requestId, reconcileMissing: discover)));
+            await Future.wait(ids
+                .difference(found)
+                .map((requestId) => cache.refreshRequest(id, requestId)));
           }
           if (epoch == _sessionEpoch &&
               generation == _generation &&

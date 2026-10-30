@@ -20,14 +20,6 @@ void main() {
         previousConfirmed: previousConfirmed,
       );
 
-  test('same-author spacing stays tight even when time breaks grouping', () {
-    expect(grouped(date: start.add(const Duration(minutes: 30))), isFalse);
-    expect(messageAuthorSpacing('a', 'a'), 2);
-    expect(messageAuthorSpacing('b', 'a'), 20);
-    expect(messageAuthorSpacing(null, null), 20);
-    expect(messageAuthorSpacing('', ''), 20);
-  });
-
   test('adjacent same-author messages group up to ten minutes', () {
     expect(grouped(), isTrue);
     expect(grouped(date: start), isTrue);

@@ -1694,8 +1694,15 @@ class _WorkTimelineCard extends StatelessWidget {
             .join()
             .toUpperCase()
         : 'U';
-    final isOwnRequest =
-        _isOwnWorkRequest(request, currentUserId, currentUserName);
+    final normalizedRequesterName = effectiveRequesterName.trim().toLowerCase();
+    final normalizedCurrentName = currentUserName?.trim().toLowerCase();
+    final isOwnRequest = (currentUserId != null &&
+            currentUserId!.isNotEmpty &&
+            request.requestedByUserId == currentUserId) ||
+        (normalizedCurrentName != null &&
+            normalizedCurrentName.isNotEmpty &&
+            (normalizedRequesterName == normalizedCurrentName ||
+                rawRequesterName.toLowerCase() == normalizedCurrentName));
     final showRequesterIdentity = !isOwnRequest;
 
     final failedStep =
@@ -1918,23 +1925,24 @@ class _WorkTimelineCard extends StatelessWidget {
                       ? Alignment.centerRight
                       : Alignment.centerLeft,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                        minWidth: maxBubbleWidth, maxWidth: maxBubbleWidth),
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
                     child: _withMessageMeta(
                       own: isOwnRequest,
                       visible: showMeta,
                       meta: requestMeta,
-                      background: isOwnRequest
-                          ? SyntilaColors.ownMessageBackground(isDark)
-                          : Colors.transparent,
                       bubble: _tappablePrompt(Container(
                         decoration: BoxDecoration(
+                          color: isOwnRequest
+                              ? SyntilaColors.ownMessageBackground(isDark)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         padding: EdgeInsets.fromLTRB(
                             isOwnRequest ? 14 : 0, 8, 14, 8),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: isOwnRequest
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (showRequesterIdentity) ...[
@@ -1976,7 +1984,9 @@ class _WorkTimelineCard extends StatelessWidget {
                               data: request.prompt,
                               enabled: isOwnRequest,
                               toggleColor: metaColor,
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment: isOwnRequest
+                                  ? CrossAxisAlignment.end
+                                  : CrossAxisAlignment.start,
                               child: _MemoizedWorkMarkdown(
                                 data: request.prompt,
                                 fitContent: true,
@@ -2002,7 +2012,7 @@ class _WorkTimelineCard extends StatelessWidget {
               },
             ),
           ),
-          if (showResponse) const SizedBox(height: 20),
+          if (showResponse) const SizedBox(height: 4),
         ],
         // AI Execution & response bubble
         if (showResponse)
@@ -2014,8 +2024,7 @@ class _WorkTimelineCard extends StatelessWidget {
                 return Align(
                   alignment: Alignment.centerLeft,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                        minWidth: maxBubbleWidth, maxWidth: maxBubbleWidth),
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.transparent,
@@ -2137,10 +2146,6 @@ class _WorkTimelineCard extends StatelessWidget {
                                       height: actionSize,
                                     ),
                                     padding: EdgeInsets.zero,
-                                    style: IconButton.styleFrom(
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(6))),
                                     icon:
                                         Icon(icon, size: 16, color: metaColor),
                                     onPressed: onPressed,
@@ -2194,81 +2199,7 @@ class _WorkTimelineCard extends StatelessWidget {
                                         ? null
                                         : () => onReportIssue!(request.id)),
                             ];
-                            final footer = AnimatedOpacity(
-                                // Terminal footers reveal on hover/focus;
-                                // active and failed controls remain available.
-                                opacity: showMeta ||
-                                        !const {'completed', 'cancelled'}
-                                            .contains(request.status)
-                                    ? 1
-                                    : 0,
-                                duration: const Duration(milliseconds: 120),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if ((request.status == 'queued' ||
-                                            request.status == 'running') &&
-                                        onCancelRun != null)
-                                      compactAction(
-                                        tooltip: 'Cancel request',
-                                        icon: Icons.cancel_outlined,
-                                        onPressed: () =>
-                                            onCancelRun!(request.id),
-                                      ),
-                                    // Cloud accepted it; shown until a
-                                    // Worker starts, then progress takes over.
-                                    if (request.status == 'queued') ...[
-                                      Tooltip(
-                                        message:
-                                            'Received by Syntila, waiting for a Worker',
-                                        child: ActionStatusChip(
-                                          key: ValueKey(
-                                              'work-request-status-${request.id}'),
-                                          status: axWorkRequestStatus(
-                                              request.status),
-                                          kind: AxActionKind.workRequest,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                    ],
-                                    if (reportedIssue != null)
-                                      Text('Reported',
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: colors.primary)),
-                                    // Separates leading controls only, so
-                                    // the time aligns with the answer text.
-                                    if (reportedIssue != null ||
-                                        ((request.status == 'queued' ||
-                                                request.status == 'running') &&
-                                            onCancelRun != null))
-                                      const SizedBox(width: 8),
-                                    if (timeLabel.isNotEmpty)
-                                      Tooltip(
-                                        message: _chatTimestamp(timestamp!),
-                                        child: Text(
-                                          timeLabel,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: metaColor,
-                                          ),
-                                        ),
-                                      ),
-                                    if (responseActions.isNotEmpty) ...[
-                                      const SizedBox(width: 8),
-                                      _TimelineActionsMenu(
-                                          actions: responseActions,
-                                          color: metaColor),
-                                    ],
-                                  ],
-                                ));
-                            // Finished answers carry their time and actions
-                            // over the last text row; live ones stay in flow.
-                            final overlayFooter = message != null &&
-                                const {'completed', 'cancelled'}
-                                    .contains(request.status);
-                            final body = Column(
+                            return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 if (message != null) ...[
@@ -2284,7 +2215,77 @@ class _WorkTimelineCard extends StatelessWidget {
                                           data: message,
                                         ),
                                 ],
-                                if (!overlayFooter) footer,
+                                AnimatedOpacity(
+                                    // Terminal footers reveal on hover/focus;
+                                    // active and failed controls remain available.
+                                    opacity: showMeta ||
+                                            !const {'completed', 'cancelled'}
+                                                .contains(request.status)
+                                        ? 1
+                                        : 0,
+                                    duration: const Duration(milliseconds: 120),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if ((request.status == 'queued' ||
+                                                request.status == 'running') &&
+                                            onCancelRun != null)
+                                          compactAction(
+                                            tooltip: 'Cancel request',
+                                            icon: Icons.cancel_outlined,
+                                            onPressed: () =>
+                                                onCancelRun!(request.id),
+                                          ),
+                                        // Cloud accepted it; shown until a
+                                        // Worker starts, then progress takes over.
+                                        if (request.status == 'queued') ...[
+                                          Tooltip(
+                                            message:
+                                                'Received by Syntila, waiting for a Worker',
+                                            child: ActionStatusChip(
+                                              key: ValueKey(
+                                                  'work-request-status-${request.id}'),
+                                              status: axWorkRequestStatus(
+                                                  request.status),
+                                              kind: AxActionKind.workRequest,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        if (reportedIssue != null)
+                                          Text('Reported',
+                                              style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: colors.primary)),
+                                        // Separates leading controls only, so
+                                        // the time aligns with the answer text.
+                                        if (reportedIssue != null ||
+                                            ((request.status == 'queued' ||
+                                                    request.status ==
+                                                        'running') &&
+                                                onCancelRun != null))
+                                          const SizedBox(width: 8),
+                                        if (timeLabel.isNotEmpty)
+                                          Tooltip(
+                                            message: _chatTimestamp(timestamp!),
+                                            child: Text(
+                                              timeLabel,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: metaColor,
+                                              ),
+                                            ),
+                                          ),
+                                        if (responseActions.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          _TimelineActionsMenu(
+                                              actions: responseActions,
+                                              color: metaColor),
+                                        ],
+                                      ],
+                                    )),
                                 if (reportedIssue != null) ...[
                                   const SizedBox(height: 4),
                                   Text(
@@ -2306,13 +2307,6 @@ class _WorkTimelineCard extends StatelessWidget {
                                   ),
                                 ],
                               ],
-                            );
-                            if (!overlayFooter) return body;
-                            return _withMessageMeta(
-                              bubble: body,
-                              own: false,
-                              visible: showMeta,
-                              meta: [footer],
                             );
                           }),
                         ],
@@ -2587,7 +2581,7 @@ bool _continuesDiscussionGroup(List<_DiscussionItem> items, int index,
   final previous = items[index - 1];
   return continuesMessageGroup(
     authorId: item.authorId,
-    previousAuthorId: previous.trailingAuthorId,
+    previousAuthorId: previous.authorId,
     sentAt: item.date,
     previousSentAt: previous.date,
     confirmed: !item.id.startsWith('temp-'),
@@ -2618,11 +2612,6 @@ class _DiscussionItem {
   final String id;
   final String author;
   final String? authorId;
-
-  // Live Work cards contain a human prompt followed by a Worker response.
-  // Their leading and trailing authors differ when comparing adjacent rows.
-  String? get trailingAuthorId =>
-      workRequest == null ? authorId : 'ai:${workRequest!.id}';
   final DateTime? date;
   final String text;
   final String? sentAt;
@@ -2641,38 +2630,12 @@ class _DiscussionItem {
   final List<Map<String, dynamic>> attachments;
 }
 
-bool _isOwnWorkRequest(
-  AxWorkRequest request,
-  String? currentUserId,
-  String? currentUserName,
-) {
-  final rawRequesterName = request.requestedByName.trim();
-  final effectiveRequesterName = (rawRequesterName.isEmpty ||
-          rawRequesterName == request.requestedByUserId ||
-          rawRequesterName.startsWith('usr_'))
-      ? 'Team member'
-      : rawRequesterName;
-  final normalizedRequesterName = effectiveRequesterName.trim().toLowerCase();
-  final normalizedCurrentName = currentUserName?.trim().toLowerCase();
-  return (currentUserId != null &&
-          currentUserId.isNotEmpty &&
-          request.requestedByUserId == currentUserId) ||
-      (normalizedCurrentName != null &&
-          normalizedCurrentName.isNotEmpty &&
-          (normalizedRequesterName == normalizedCurrentName ||
-              rawRequesterName.toLowerCase() == normalizedCurrentName));
-}
-
 /// A Work Request still in Work history, shown in the Conversation with its
 /// live Work card rather than as a Chat bubble.
-_DiscussionItem _workConversationItem(AxWorkRequest request,
-        {String? currentUserId, String? currentUserName}) =>
-    _DiscussionItem(
+_DiscussionItem _workConversationItem(AxWorkRequest request) => _DiscussionItem(
       id: 'work-${request.id}-request',
       author: request.requestedByName,
-      authorId: _isOwnWorkRequest(request, currentUserId, currentUserName)
-          ? currentUserId
-          : request.requestedByUserId,
+      authorId: 'work:${request.id}',
       date: DateTime.tryParse(request.createdAt)?.toLocal(),
       text: request.prompt,
       aiKind: 'ai_request',
@@ -2843,44 +2806,47 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
         ),
         const SizedBox(width: 8),
       ],
-      _TimelineActionsMenu(color: metaColor, actions: [
-        if (widget.onReply != null && !widget.item.id.startsWith('temp-'))
-          _TimelineAction(
-            tooltip: 'Reply',
-            icon: Icons.reply_rounded,
-            color: metaColor,
-            onTap: widget.onReply,
-          ),
-        if (widget.item.aiKind == null &&
-            widget.onDelete != null &&
-            !widget.item.id.startsWith('temp-')) ...[
-          _TimelineAction(
-            tooltip: 'Delete',
-            icon: Icons.delete_outline_rounded,
-            color: metaColor,
-            onTap: () => _confirmDelete(context),
-          ),
-        ],
-        if (isMe &&
-            !widget.item.id.startsWith('temp-') &&
-            widget.item.aiKind == null) ...[
-          _TimelineAction(
-            tooltip: 'Edit',
-            icon: Icons.edit_outlined,
-            color: metaColor,
-            onTap: () {
-              _editController.text = widget.item.text;
-              _setEditing(true);
-            },
-          ),
-        ],
-        _TimelineAction(
-          tooltip: 'Copy',
-          icon: Icons.copy_rounded,
+      _TimelineActionsMenu(
+          forceMenu: widget.item.aiKind == null,
           color: metaColor,
-          onTap: widget.onCopy,
-        ),
-      ]),
+          actions: [
+            if (widget.onReply != null && !widget.item.id.startsWith('temp-'))
+              _TimelineAction(
+                tooltip: 'Reply',
+                icon: Icons.reply_rounded,
+                color: metaColor,
+                onTap: widget.onReply,
+              ),
+            if (widget.item.aiKind == null &&
+                widget.onDelete != null &&
+                !widget.item.id.startsWith('temp-')) ...[
+              _TimelineAction(
+                tooltip: 'Delete',
+                icon: Icons.delete_outline_rounded,
+                color: metaColor,
+                onTap: () => _confirmDelete(context),
+              ),
+            ],
+            if (isMe &&
+                !widget.item.id.startsWith('temp-') &&
+                widget.item.aiKind == null) ...[
+              _TimelineAction(
+                tooltip: 'Edit',
+                icon: Icons.edit_outlined,
+                color: metaColor,
+                onTap: () {
+                  _editController.text = widget.item.text;
+                  _setEditing(true);
+                },
+              ),
+            ],
+            _TimelineAction(
+              tooltip: 'Copy',
+              icon: Icons.copy_rounded,
+              color: metaColor,
+              onTap: widget.onCopy,
+            ),
+          ]),
     ];
     return _MessageHover(
         builder: (context, showMeta) => LayoutBuilder(
@@ -2891,22 +2857,23 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                   alignment:
                       isMe ? Alignment.centerRight : Alignment.centerLeft,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                        minWidth: maxBubbleWidth, maxWidth: maxBubbleWidth),
+                    constraints: BoxConstraints(maxWidth: maxBubbleWidth),
                     child: _withMessageMeta(
                       own: isMe,
                       visible: showMeta && !_isEditing,
                       meta: meta,
-                      background: isMe
-                          ? SyntilaColors.ownMessageBackground(isDark)
-                          : Colors.transparent,
                       bubble: Container(
                         decoration: BoxDecoration(
+                          color: isMe
+                              ? SyntilaColors.ownMessageBackground(isDark)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         padding: EdgeInsets.fromLTRB(isMe ? 14 : 0, 8, 14, 8),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (!isMe && !widget.grouped) ...[
@@ -2983,7 +2950,9 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
                                 data: widget.item.text,
                                 enabled: isMe,
                                 toggleColor: metaColor,
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment: isMe
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
                                 child: _MemoizedWorkMarkdown(
                                   data: widget.item.text,
                                   fitContent: true,
@@ -3002,7 +2971,7 @@ class _DiscussionMessageBubbleState extends State<_DiscussionMessageBubble> {
 }
 
 /// Reveals a message's date/time and actions while the pointer is over it.
-/// Touch platforms have no hover, so a tap on the message toggles it.
+/// Touch platforms have no hover, so their meta line stays visible.
 class _MessageHover extends StatefulWidget {
   const _MessageHover({required this.builder});
 
@@ -3015,7 +2984,11 @@ class _MessageHover extends StatefulWidget {
 class _MessageHoverState extends State<_MessageHover> {
   bool _hovered = false;
   bool _focused = false;
-  bool _tapped = false;
+  bool _menuOpen = false;
+
+  void _menuOpenChanged(bool open) {
+    if (mounted && _menuOpen != open) setState(() => _menuOpen = open);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3025,14 +2998,10 @@ class _MessageHoverState extends State<_MessageHover> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: touch ? () => setState(() => _tapped = !_tapped) : null,
-        child: Focus(
-          onFocusChange: (focused) => setState(() => _focused = focused),
-          child: widget.builder(
-              context, _hovered || _focused || (touch && _tapped)),
-        ),
+      child: Focus(
+        onFocusChange: (focused) => setState(() => _focused = focused),
+        child:
+            widget.builder(context, _hovered || _focused || _menuOpen || touch),
       ),
     );
   }
@@ -3065,96 +3034,113 @@ class _TimelineAction {
   final VoidCallback? onTap;
 }
 
-/// Every action as its own icon button; no popup menu.
 class _TimelineActionsMenu extends StatelessWidget {
-  const _TimelineActionsMenu({required this.actions, required this.color});
+  const _TimelineActionsMenu(
+      {required this.actions, required this.color, this.forceMenu = false});
+
+  final bool forceMenu;
 
   final List<_TimelineAction> actions;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final platform = Theme.of(context).platform;
     final touch =
         platform == TargetPlatform.iOS || platform == TargetPlatform.android;
-    final buttonSize = touch ? 40.0 : 28.0;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      for (final action in actions)
-        SizedBox.square(
-          dimension: buttonSize,
-          child: IconButton(
-            tooltip: action.tooltip,
-            constraints:
-                BoxConstraints.tightFor(width: buttonSize, height: buttonSize),
-            padding: EdgeInsets.zero,
-            style: IconButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6))),
-            icon: Icon(action.icon, size: 16, color: action.color ?? color),
-            onPressed: action.onTap,
-          ),
+    void menuOpenChanged(bool open) => context
+        .findAncestorStateOfType<_MessageHoverState>()
+        ?._menuOpenChanged(open);
+    final buttonSize = touch ? 48.0 : 32.0;
+    if (actions.length == 1 && !forceMenu) {
+      final action = actions.single;
+      return SizedBox.square(
+        dimension: buttonSize,
+        child: IconButton(
+          tooltip: action.tooltip,
+          constraints:
+              BoxConstraints.tightFor(width: buttonSize, height: buttonSize),
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(shape: const CircleBorder()),
+          icon: Icon(action.icon, size: 16, color: action.color ?? color),
+          onPressed: action.onTap,
         ),
-    ]);
+      );
+    }
+    return PopupMenuButton<int>(
+      tooltip: 'Message actions',
+      borderRadius: BorderRadius.circular(buttonSize / 2),
+      splashRadius: buttonSize / 2,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 160, maxWidth: 340),
+      color: SyntilaMenuStyle.background(isDark),
+      surfaceTintColor: Colors.transparent,
+      shape: SyntilaMenuStyle.shape(isDark),
+      menuPadding: SyntilaMenuStyle.padding,
+      onOpened: () => menuOpenChanged(true),
+      onCanceled: () => menuOpenChanged(false),
+      onSelected: (index) {
+        menuOpenChanged(false);
+        actions[index].onTap?.call();
+      },
+      itemBuilder: (context) => [
+        for (var index = 0; index < actions.length; index++)
+          PopupMenuItem<int>(
+            value: index,
+            enabled: actions[index].onTap != null,
+            height: touch ? 48 : 36,
+            child: Row(children: [
+              Icon(actions[index].icon,
+                  size: 16, color: actions[index].color ?? color),
+              const SizedBox(width: 8),
+              Flexible(
+                  child: Text(actions[index].tooltip,
+                      style: SyntilaMenuStyle.textStyle)),
+            ]),
+          ),
+      ],
+      child: SizedBox(
+        width: buttonSize,
+        height: buttonSize,
+        child: Align(
+          alignment: Alignment.center,
+          child: Icon(Icons.more_horiz, size: 16, color: color),
+        ),
+      ),
+    );
   }
 }
 
-/// A message bubble with its date/time and action icons laid over the
-/// bottom-right corner, on the bubble's own background. A short last line
-/// leaves them beside the text; a long one is covered at its end. The row
-/// fades in on hover (or tap on touch) and takes no layout space.
+/// A message bubble with its date/time and actions below, outside the
+/// bubble so its background fits the message. The meta line fades in on hover;
+/// its space stays reserved so the timeline does not shift under the pointer.
 Widget _withMessageMeta({
   required Widget bubble,
   required bool own,
   required bool visible,
   required List<Widget> meta,
-  Color background = Colors.transparent,
 }) =>
-    Builder(builder: (context) {
-      final base = background.a == 0
-          ? Theme.of(context).scaffoldBackgroundColor
-          : background;
-      return DecoratedBox(
-        decoration: BoxDecoration(
-          color: background,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            bubble,
-            Positioned(
-              right: own ? 14 : 4,
-              bottom: own ? 2 : -4,
-              child: IgnorePointer(
-                ignoring: !visible,
-                child: AnimatedOpacity(
-                  opacity: visible ? 1 : 0,
-                  duration: const Duration(milliseconds: 120),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [
-                        base.withAlpha(0),
-                        base,
-                      ], stops: const [
-                        0,
-                        0.2
-                      ]),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 32),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: meta,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+    Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+          own ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        bubble,
+        // Inset own-message metadata from the scrollbar.
+        AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: const Duration(milliseconds: 120),
+          child: Padding(
+            padding: EdgeInsets.only(right: own ? 8 : 0),
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: meta,
             ),
-          ],
+          ),
         ),
-      );
-    });
+      ],
+    );
 
 /// Keyboard-driven list of earlier requests, opened with Arrow Up/Down in an
 /// empty composer. Enter copies the highlighted prompt into the composer.

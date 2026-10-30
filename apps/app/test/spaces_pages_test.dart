@@ -4,7 +4,6 @@ import 'dart:async';
 import 'package:syntila_design/syntila_design.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:syntila_app/src/features/common/attachment_cards.dart';
 import 'package:syntila_app/src/features/spaces/spaces_pages.dart';
@@ -2127,137 +2126,6 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     }
-  });
-  for (final missingRequesterId in [false, true]) {
-    testWidgets(
-        'conversation spaces Work by its visible authors and hides meta backgrounds${missingRequesterId ? ' without requester ID' : ''}',
-        (tester) async {
-      await tester.binding.setSurfaceSize(const Size(800, 1400));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(MaterialApp(
-          theme: ThemeData(platform: TargetPlatform.linux),
-          home: Scaffold(
-              body: ThreadPage(
-            space: const AxSpace(
-                id: 'space-1',
-                name: 'Space',
-                branch: '',
-                lastActivity: '',
-                role: 'owner'),
-            thread: const AxThread(
-                id: 'thread-1',
-                spaceId: 'space-1',
-                name: 'Stream',
-                lead: '',
-                status: 'active',
-                brief: '',
-                primaryWorkspace: '',
-                queueStatus: ''),
-            dataSource: _ConversationMixDataSource(
-                otherAfter: true, missingRequesterId: missingRequesterId),
-            currentUserId: 'user-owner',
-            currentUserName: 'Vitalii',
-            onBackToSpace: _noop,
-            onArchive: _noop,
-          ))));
-      await tester.pumpAndSettle();
-      final before = find.byKey(const ValueKey('m1'));
-      final work = find.byKey(const ValueKey('work-R-request'));
-      final after = find.byKey(const ValueKey('m2'));
-      // The Chat message and prompt share an author despite their hour-long gap.
-      expect(tester.getTopLeft(work).dy - tester.getBottomLeft(before).dy, 2);
-      // The card ends with a Worker, so the following human starts a new group.
-      expect(tester.getTopLeft(after).dy - tester.getBottomLeft(work).dy, 20);
-
-      final backgrounds = find.descendant(
-          of: work,
-          matching: find.byWidgetPredicate((widget) =>
-              widget is DecoratedBox &&
-              widget.decoration is BoxDecoration &&
-              (widget.decoration as BoxDecoration).gradient != null));
-      expect(backgrounds, findsNWidgets(2));
-      for (final background in backgrounds.evaluate()) {
-        final opacity = find
-            .ancestor(
-                of: find.byElementPredicate((element) => element == background),
-                matching: find.byType(AnimatedOpacity))
-            .first;
-        expect(tester.widget<AnimatedOpacity>(opacity).opacity, 0);
-      }
-      final otherBackground = find.descendant(
-          of: after,
-          matching: find.byWidgetPredicate((widget) =>
-              widget is DecoratedBox &&
-              widget.decoration is BoxDecoration &&
-              (widget.decoration as BoxDecoration).gradient != null));
-      expect(otherBackground, findsOneWidget);
-      final otherOpacity = find
-          .ancestor(of: otherBackground, matching: find.byType(AnimatedOpacity))
-          .first;
-      expect(tester.widget<AnimatedOpacity>(otherOpacity).opacity, 0);
-      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
-      await mouse.addPointer(location: const Offset(1, 1));
-      await mouse.moveTo(tester.getCenter(find.text('Use passkeys')));
-      await tester.pumpAndSettle();
-      final workerBackground = backgrounds.last;
-      final workerOpacity = find
-          .ancestor(
-              of: workerBackground, matching: find.byType(AnimatedOpacity))
-          .first;
-      expect(tester.widget<AnimatedOpacity>(workerOpacity).opacity, 1);
-      await mouse.moveTo(const Offset(1, 1));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(workerOpacity).opacity, 0);
-      await mouse.moveTo(tester.getCenter(find.text('After AI')));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(otherOpacity).opacity, 1);
-      await mouse.moveTo(const Offset(1, 1));
-      await tester.pumpAndSettle();
-      expect(tester.widget<AnimatedOpacity>(otherOpacity).opacity, 0);
-      await mouse.removePointer();
-      expect(tester.takeException(), isNull);
-    });
-  }
-  testWidgets('five consecutive own messages keep tight gaps after sending',
-      (tester) async {
-    await tester.binding.setSurfaceSize(const Size(800, 1400));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final source = _FiveOwnMessagesSource();
-    await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-            body: ThreadPage(
-      space: const AxSpace(
-          id: 'space-1',
-          name: 'Space',
-          branch: '',
-          lastActivity: '',
-          role: 'owner'),
-      thread: const AxThread(
-          id: 'thread-1',
-          spaceId: 'space-1',
-          name: 'Chat',
-          lead: '',
-          status: 'active',
-          brief: '',
-          primaryWorkspace: '',
-          queueStatus: ''),
-      dataSource: source,
-      currentUserId: 'user-owner',
-      onBackToSpace: _noop,
-      onArchive: _noop,
-    ))));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).last, 'Own message 5');
-    await tester.tap(find.byKey(const ValueKey('composer-send-Send message')));
-    await tester.pumpAndSettle();
-    for (var index = 2; index <= 5; index++) {
-      final row = find.byKey(ValueKey('own-$index'));
-      final previous = find.byKey(ValueKey('own-${index - 1}'));
-      expect(tester.getTopLeft(row).dy - tester.getBottomLeft(previous).dy,
-          closeTo(2, 0.01),
-          reason: 'gap before own message $index');
-    }
-    expect(tester.takeException(), isNull);
   });
   testWidgets('conversation interleaves Work with Chat and Ask AI runs Work',
       (tester) async {
@@ -4578,11 +4446,6 @@ class _MarkdownDiscussionDataSource extends AxFixtureDataSource {
 }
 
 class _ConversationMixDataSource extends _WorkFormDataSource {
-  _ConversationMixDataSource(
-      {this.otherAfter = false, this.missingRequesterId = false});
-  final bool missingRequesterId;
-  final bool otherAfter;
-
   @override
   Future<List<AxDiscussionMessage>> discussionRows({
     required String threadId,
@@ -4595,8 +4458,7 @@ class _ConversationMixDataSource extends _WorkFormDataSource {
           AxDiscussionMessage(
               id: id,
               threadId: threadId,
-              authorUserId:
-                  otherAfter && id == 'm2' ? 'user-other' : 'user-owner',
+              authorUserId: 'user-owner',
               body: body,
               createdAt: at,
               isMe: true),
@@ -4607,11 +4469,11 @@ class _ConversationMixDataSource extends _WorkFormDataSource {
     required String threadId,
     bool activeOnly = false,
   }) async =>
-      [
+      const [
         AxWorkRequest(
           id: 'R',
-          requestedByName: missingRequesterId ? 'Vitalii' : 'You',
-          requestedByUserId: missingRequesterId ? null : 'user-owner',
+          requestedByName: 'You',
+          requestedByUserId: 'user-owner',
           prompt: 'Research auth',
           workflowId: 'direct',
           workflowVersion: 2,
@@ -5272,41 +5134,4 @@ Future<void> _chooseMessageAction(WidgetTester tester, String label,
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
-}
-
-class _FiveOwnMessagesSource extends AxFixtureDataSource {
-  final messages = [
-    for (var i = 1; i <= 4; i++)
-      AxDiscussionMessage(
-          id: 'own-$i',
-          threadId: 'thread-1',
-          authorUserId: 'user-owner',
-          body: 'Own message $i',
-          createdAt: DateTime.now().toIso8601String(),
-          isMe: true)
-  ];
-
-  @override
-  Future<List<AxDiscussionMessage>> discussionRows(
-          {required String threadId}) async =>
-      List.of(messages);
-
-  @override
-  Future<AxDiscussionMessage> sendDiscussionMessage(
-      {required String threadId,
-      required String text,
-      List<String> references = const [],
-      List<Map<String, dynamic>> attachments = const [],
-      String? idempotencyKey,
-      Map<String, dynamic>? replyTo}) async {
-    final message = AxDiscussionMessage(
-        id: 'own-5',
-        threadId: threadId,
-        authorUserId: 'user-owner',
-        body: text,
-        createdAt: DateTime.now().toIso8601String(),
-        isMe: true);
-    messages.add(message);
-    return message;
-  }
 }

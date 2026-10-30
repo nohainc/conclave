@@ -2223,14 +2223,7 @@ class _ThreadPageState extends State<ThreadPage>
 
   // Rebuilt only when messages, Work requests or the viewer change, not on
   // every realtime activity tick or follow/reveal pass.
-  (
-    Object,
-    Object,
-    String?,
-    String?,
-    bool,
-    List<_DiscussionItem>
-  )? _conversationCache;
+  (Object, Object, String?, bool, List<_DiscussionItem>)? _conversationCache;
 
   List<_DiscussionItem> _conversationItems(
       ThreadChatPresentationSnapshot state) {
@@ -2240,9 +2233,8 @@ class _ThreadPageState extends State<ThreadPage>
         identical(cached.$1, state) &&
         identical(cached.$2, requests) &&
         cached.$3 == widget.currentUserId &&
-        cached.$4 == widget.currentUserName &&
-        cached.$5 == widget.isDraft) {
-      return cached.$6;
+        cached.$4 == widget.isDraft) {
+      return cached.$5;
     }
     final items = state.messages.map((message) {
       final isMe =
@@ -2280,14 +2272,8 @@ class _ThreadPageState extends State<ThreadPage>
           aiKind: message.isAiEntry ? message.kind : null);
     }).toList();
     if (!widget.isDraft) _mergeWorkIntoConversation(items);
-    _conversationCache = (
-      state,
-      requests,
-      widget.currentUserId,
-      widget.currentUserName,
-      widget.isDraft,
-      items
-    );
+    _conversationCache =
+        (state, requests, widget.currentUserId, widget.isDraft, items);
     return items;
   }
 
@@ -2446,10 +2432,10 @@ class _ThreadPageState extends State<ThreadPage>
                       itemId: (index) => messages[index].id,
                       empty: empty,
                       separatorBuilder: (_, index) => SizedBox(
-                        height: messageAuthorSpacing(
-                          messages[index + 1].authorId,
-                          messages[index].trailingAuthorId,
-                        ),
+                        height: _continuesDiscussionGroup(messages, index + 1,
+                                breakAt: _firstUnreadChatId)
+                            ? 2
+                            : 6,
                       ),
                       findChildIndexCallback: (key) {
                         if (key is! ValueKey<String>) return null;
@@ -2571,11 +2557,7 @@ class _ThreadPageState extends State<ThreadPage>
       for (final request in requests)
         (
           DateTime.tryParse(request.createdAt)?.toLocal(),
-          [
-            _workConversationItem(request,
-                currentUserId: widget.currentUserId,
-                currentUserName: widget.currentUserName)
-          ],
+          [_workConversationItem(request)],
         ),
     ];
     final indexed = groups.indexed.toList()..sort(_byConversationTime);

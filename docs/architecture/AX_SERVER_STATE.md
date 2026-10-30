@@ -305,12 +305,6 @@ the infinite query retains its on-demand cursor frontier. Successful restoration
 stops the fallback timer. Leaving a view releases its scope and stops polling
 when no visible scopes remain; its cached history stays available.
 
-During discovery, an absent retained request whose detail returns 404 is
-removed individually so recovery can finish. In-progress submissions remain
-available for retry, and a newer entity revision fences an outdated 404.
-Concurrent detail reads for the same request and session share the HTTP read,
-including reads from input delivery; a later read still fetches fresh state.
-
 The browser client sends the existing Cloud `ping` every twenty seconds and
 requires `realtime.pong` within ten seconds. A missing pong marks the connection
 stale and reconnects. An idle Thread with healthy pongs does not become stale.

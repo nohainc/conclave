@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 
 import 'package:syntila_app/src/ax/ax_data.dart';
@@ -52,29 +51,6 @@ class _ApiResponseClient extends http.BaseClient {
 }
 
 void main() {
-  test('overlapping request details share a read and later reads refresh',
-      () async {
-    var calls = 0;
-    final response = Completer<http.Response>();
-    final api = AxApiClient(
-        baseUrl: 'https://cloud.test',
-        client: MockClient((request) {
-          calls++;
-          return response.future;
-        }));
-    final first = api.loadWorkRequest(workRequestId: 'r');
-    final second = api.loadWorkRequest(workRequestId: 'r');
-    await Future<void>.delayed(Duration.zero);
-    expect(calls, 1);
-    response.complete(http.Response(
-        jsonEncode({
-          'workRequest': {'id': 'r', 'status': 'running'}
-        }),
-        200));
-    await Future.wait([first, second]);
-    await api.loadWorkRequest(workRequestId: 'r');
-    expect(calls, 2);
-  });
   test('retry sends side-effect confirmation only after explicit approval',
       () async {
     final client = _JsonClient({});

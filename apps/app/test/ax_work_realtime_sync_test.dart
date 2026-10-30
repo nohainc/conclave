@@ -560,46 +560,6 @@ void main() {
     expect(source.pageScopes, ['w']);
   });
 
-  testWidgets(
-      'recovery removes only a missing retained request and stops retrying it',
-      (tester) async {
-    source.records = [work('r'), work('keep', status: 'completed')];
-    await seed();
-    source.records = [];
-    final missing = Completer<AxWorkRequestStatus>();
-    source.queuedDetails.add(missing);
-    final release = sync.listen(null, threadId: 'w');
-    await sync
-        .handle({'type': 'realtime.connection', 'status': 'reconnecting'});
-    await tester.pump(const Duration(seconds: 15));
-    missing.completeError(const AxApiException('Not found', statusCode: 404));
-    await tester.pump();
-    expect(cache.request('w', 'r'), isNull);
-    expect(cache.request('w', 'keep'), isNotNull);
-    expect(cache.dirtyIds('w'), isEmpty);
-    expect(source.gets, ['r']);
-    await tester.pump(const Duration(seconds: 15));
-    await tester.pump();
-    expect(source.gets, ['r']);
-    await sync.handle({'type': 'realtime.connection', 'status': 'connected'});
-    expect(sync.healthy, isTrue);
-    expect(sync.polling, isFalse);
-    release();
-  });
-
-  test('a superseded 404 triggers the newer detail read', () async {
-    await seed();
-    final stale = Completer<AxWorkRequestStatus>();
-    source.queuedDetails.add(stale);
-    final first = cache.refreshRequest('w', 'r');
-    final newer = cache.refreshRequest('w', 'r', supersede: true);
-    stale.completeError(const AxApiException('Not found', statusCode: 404));
-    await Future.wait([first, newer]);
-    expect(source.gets, ['r', 'r']);
-    expect(cache.request('w', 'r')!.status, 'completed');
-    expect(cache.dirtyIds('w'), isEmpty);
-  });
-
   test('Step events notify only their own Thread', () async {
     await seed();
     var a = 0, b = 0;

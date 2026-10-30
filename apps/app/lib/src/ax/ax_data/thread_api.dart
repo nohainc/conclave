@@ -1,23 +1,6 @@
 part of '../ax_data.dart';
 
 mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
-  final _workRequestReads = <(String, int), Future<Map<String, dynamic>>>{};
-
-  Future<Map<String, dynamic>> _readWorkRequest(String id) async {
-    final key = (id, _readGeneration);
-    final pending = _workRequestReads[key];
-    if (pending != null) return pending;
-    final read = _getJson(Uri.parse('$baseUrl/work-requests/$id'));
-    _workRequestReads[key] = read;
-    try {
-      return await read;
-    } finally {
-      if (identical(_workRequestReads[key], read)) {
-        _workRequestReads.remove(key);
-      }
-    }
-  }
-
   @override
   Future<List<AxThread>> loadSpaceThreads({
     required String spaceId,
@@ -561,7 +544,7 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
         );
       },
       loadDelivery: () async {
-        final body = await _readWorkRequest(id);
+        final body = await _getJson(Uri.parse('$baseUrl/work-requests/$id'));
         final request = body['workRequest'];
         if (request is! Map) return null;
         final status = request['status'];
@@ -849,7 +832,8 @@ mixin _ThreadApi on _AxApiClientCore implements AxThreadReadDataSource {
   Future<AxWorkRequestStatus> loadWorkRequest({
     required String workRequestId,
   }) async {
-    final body = await _readWorkRequest(workRequestId);
+    final body =
+        await _getJson(Uri.parse('$baseUrl/work-requests/$workRequestId'));
     final request = body['workRequest'];
     final result = body['result'];
     final resultMap = result is Map

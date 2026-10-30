@@ -1,11 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Spacing follows authorship independently of time-based sender grouping.
-double messageAuthorSpacing(String? authorId, String? previousAuthorId) =>
-    authorId != null && authorId.isNotEmpty && authorId == previousAuthorId
-        ? 2
-        : 20;
-
 /// Group only adjacent, confirmed messages with a stable author identity.
 bool continuesMessageGroup({
   required String? authorId,

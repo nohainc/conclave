@@ -690,7 +690,7 @@ class AxWorkHistoryCache {
   }
 
   Future<void> refreshRequest(String id, String requestId,
-      {bool supersede = false, bool reconcileMissing = false}) {
+      {bool supersede = false}) {
     if (source == null || requestId.startsWith('local-')) return Future.value();
     final context = _context(id);
     final pending = context.details[requestId];
@@ -704,25 +704,13 @@ class AxWorkHistoryCache {
     final read = _RequestRead();
     context.details[requestId] = read;
     context.revisions[requestId] = (context.revisions[requestId] ?? 0) + 1;
-    int? attemptedRevision;
     () async {
       try {
         do {
           read.again = false;
           final revision = context.revisions[requestId];
-          attemptedRevision = revision;
-          late final AxWorkRequestStatus detail;
-          try {
-            detail = await source!.loadWorkRequest(workRequestId: requestId);
-          } catch (error) {
-            if (error is AxApiException &&
-                error.statusCode == 404 &&
-                revision != context.revisions[requestId]) {
-              if (read.again && identical(_contexts[id], context)) continue;
-              break;
-            }
-            rethrow;
-          }
+          final detail =
+              await source!.loadWorkRequest(workRequestId: requestId);
           if (!identical(_contexts[id], context)) break;
           if (revision != context.revisions[requestId]) continue;
           final previous = request(id, requestId);
@@ -780,44 +768,8 @@ class AxWorkHistoryCache {
         read.completer.complete();
       } catch (error, stack) {
         if (identical(_contexts[id], context)) {
-          final missing = error is AxApiException && error.statusCode == 404;
-          final pendingSubmission =
-              context.localProgress.containsKey(requestId) ||
-                  context.pendingSubmissions.values.contains(requestId);
-          if (missing && attemptedRevision != context.revisions[requestId]) {
-            // A newer event or read superseded this response.
-            read.completer.complete();
-            return;
-          }
-          if (missing &&
-              reconcileMissing &&
-              !pendingSubmission &&
-              attemptedRevision == context.revisions[requestId]) {
-            // The recovery list did not contain this retained ID and its
-            // authoritative detail is gone. Remove only this entry; a 404
-            // does not prove the rest of the conversation was cleared.
-            context.detailErrors.remove(requestId);
-            context.localProgress.remove(requestId);
-            context.revisions[requestId] =
-                (context.revisions[requestId] ?? 0) + 1;
-            engine.update(query(id), (state) {
-              final current = state.data ?? AxWorkHistory();
-              return AxWorkHistory(
-                  requests: current.requests.where((r) => r.id != requestId),
-                  olderCursor: current.olderCursor,
-                  initialLoaded: current.initialLoaded,
-                  newestPageRequest: current.newestPageRequest,
-                  gaps: current._gaps,
-                  confirmedIds:
-                      current.confirmedIds.where((v) => v != requestId));
-            }, fenceReads: false);
-            _emit(context);
-            read.completer.complete();
-            return;
-          }
           if (error is AxApiException &&
               error.statusCode == 404 &&
-              !pendingSubmission &&
               peek(id).confirmedIds.contains(requestId)) {
             // A request the server already returned no longer exists: another
             // session cleared the history while this one missed the realtime
